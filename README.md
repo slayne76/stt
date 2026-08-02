@@ -14,7 +14,8 @@ Local tool for tracking data and statistics for Star Trek Timelines.
 
 ## Refreshing the session cookie
 
-The cookie expires periodically. When the Overview page shows an
-"UPSTREAM_AUTH_FAILED" error, grab a fresh `_startrek_session` value and
-update `server/.env`, then restart the server (or hit Refresh once the new
-value is in place).
+The cookie expires periodically. When the Overview page shows an error about
+the session cookie (e.g. "STT_SESSION_COOKIE is not set in server/.env" or
+"STT API rejected the session cookie (HTTP 401/403)..."), grab a fresh
+`_startrek_session` value and update `server/.env`, then restart the server
+(or hit Refresh once the new value is in place).

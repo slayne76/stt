@@ -13,14 +13,16 @@ import {
 } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
+import type { PlayerIdentity } from '../types/player';
 
-const FIELD_LABELS: Record<string, string> = {
+const FIELD_LABELS: Record<keyof PlayerIdentity, string> = {
   playerId: 'Player ID',
   dbid: 'DBID',
 };
 
 function OverviewPage() {
   const { data, loading, error, refresh } = usePlayerData();
+  const identity = data ? extractPlayerIdentity(data) : null;
 
   return (
     <Stack spacing={2}>
@@ -34,16 +36,16 @@ function OverviewPage() {
       {loading && <CircularProgress />}
       {error && <Alert severity="error">{error}</Alert>}
 
-      {!loading && !error && data && (
+      {!loading && !error && identity && (
         <TableContainer component={Paper}>
           <Table>
             <TableBody>
-              {Object.entries(extractPlayerIdentity(data)).map(([field, value]) => (
+              {(Object.keys(FIELD_LABELS) as (keyof PlayerIdentity)[]).map((field) => (
                 <TableRow key={field}>
                   <TableCell component="th" scope="row">
                     {FIELD_LABELS[field]}
                   </TableCell>
-                  <TableCell align="right">{value ?? '—'}</TableCell>
+                  <TableCell align="right">{identity[field] ?? '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
