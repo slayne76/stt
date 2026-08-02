@@ -5,4 +5,5 @@ export interface CrewMember {
   short_name: string;
   rarity: number;
   max_rarity: number;
+  level: number;
 }

@@ -8,18 +8,21 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableHead,
   TableRow,
   Typography,
 } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList } from '../crew/getters';
 import { filterByRarity } from '../crew/filters';
-import { sortByName } from '../crew/sorters';
+import { sortByLevelThenName } from '../crew/sorters';
 
 function ThreeFourStarsCrewPage() {
   const { data, loading, error, refresh } = usePlayerData();
 
-  const crew = data ? sortByName(filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 })) : [];
+  const crew = data
+    ? sortByLevelThenName(filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 }))
+    : [];
 
   return (
     <Stack spacing={2}>
@@ -45,10 +48,17 @@ function ThreeFourStarsCrewPage() {
         ) : (
           <TableContainer component={Paper}>
             <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell align="right">Level</TableCell>
+                </TableRow>
+              </TableHead>
               <TableBody>
                 {crew.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>{c.name}</TableCell>
+                    <TableCell align="right">{c.level}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
