@@ -7,8 +7,12 @@ export function readPlayerCache(): unknown | null {
   if (!existsSync(CACHE_PATH)) {
     return null;
   }
-  const raw = readFileSync(CACHE_PATH, 'utf-8');
-  return JSON.parse(raw);
+  try {
+    const raw = readFileSync(CACHE_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export function writePlayerCache(data: unknown): void {
