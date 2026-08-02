@@ -3,7 +3,10 @@ import { Outlet, useNavigate } from 'react-router-dom';
 
 const DRAWER_WIDTH = 220;
 
-const NAV_ITEMS = [{ label: 'Overview', path: '/' }];
+const NAV_ITEMS = [
+  { label: 'Overview', path: '/' },
+  { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
+];
 
 function AppLayout() {
   const navigate = useNavigate();
