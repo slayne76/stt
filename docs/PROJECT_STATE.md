@@ -71,12 +71,15 @@ client/src/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
     crew.ts                    CrewMember interface (see below)
     item.ts                    OwnedItem interface (see below)
+    collection.ts              Collection interface (see "The collections membership logic")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering
     sorters.ts                 Composable comparators (see "Sorting design")
-    CrewTable.tsx               Shared table renderer (Name/Stars/Level/Items-to-equip)
+    CrewTable.tsx               Shared table renderer (#/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
+  collections/                  Crew-collection membership logic (mirrors crew/'s shape)
+    getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections, getCollectionCount
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -319,6 +322,114 @@ to fully immortalize" — the function name doesn't currently signal this
 distinction. Flagged in the final review as a Minor/naming concern, not
 yet acted on.
 
+## The collections membership logic
+
+The game groups crew into thematic "collections" (`cryo_collections` in
+the raw payload — 88 of them in the sample) that unlock buffs/rewards as
+you immortalize members. There is **no direct crew→collection reference**
+in the payload — this had to be reverse-engineered and verified against
+real data before implementing it.
+
+### `Collection` (deliberately narrow, same discipline as `CrewMember`/`OwnedItem`)
+
+```ts
+interface Collection {
+  id: number;
+  name: string;
+  traits: string[];
+  extra_crew: number[];   // archetype_ids, NOT owned-instance ids — see below
+}
+```
+
+Omits `image`, `description`, `progress`, `claimable_milestone_index`, and
+`milestone` — none are used by this feature or its planned successor (a
+future collections-eye-view page only needs `id`/`name` for display and
+`traits`/`extra_crew` for matching).
+
+### The membership rule
+
+A crew belongs to a collection if **either** condition holds, OR'd:
+
+1. **Trait overlap:** `collection.traits` intersects
+   `crew.traits ∪ crew.traits_hidden`.
+2. **Explicit inclusion:** `crew.archetype_id` appears in
+   `collection.extra_crew`.
+
+**This was not obvious from a single example.** The worked-out case was
+"Beach Day Ransom" (`archetype_id: 31595`), which the user had
+independently counted as belonging to 8 collections. A trait-only
+hypothesis found only 7 — the 8th, **"Perils in Paradise,"** has
+`traits: []` and only matched because `31595` is listed in its
+`extra_crew` array. That's what revealed rule 2 exists at all. Verified
+further across the full sample (88 collections × 597 crew):
+- 15 of the 88 collections have `traits: []` and rely **entirely** on
+  `extra_crew` (thematic non-trait sets like "The Wild West," "Sherwood
+  Forest," "Convergence Day").
+- `extra_crew` arrays list `archetype_id`s (the crew *type*, shared across
+  every player who owns that crew) — **never** the per-owned-instance
+  `id` (large, unique to this player's copy). Confirmed: of 525 total
+  `extra_crew` entries in the sample, only 110 matched an archetype this
+  player actually owns; the rest are crew this player doesn't have, which
+  is expected since the field describes the collection game-wide, not
+  this player's roster.
+- No collection has both `traits: []` and `extra_crew: []` (nothing
+  matches vacuously).
+- No crew×collection pair matched both rules simultaneously in the
+  sample (not structurally guaranteed, but doesn't matter — see dedup
+  below).
+- Two crew owned in duplicate (same `archetype_id`, two separate owned
+  copies) produced identical collection counts, as expected — the rule
+  depends only on `archetype_id`/traits, never per-instance data.
+- Full distribution across all 597 sample crew: 8 own zero collections,
+  up to a max of 11 (`0:8, 1:23, 2:76, 3:135, 4:155, 5:112, 6:56, 7:21,
+  8:9, 9:1, 11:1`).
+
+**`crewBelongsToCollection(crew, collection)`** (`collections/getters.ts`)
+is the single predicate implementing both conditions — everything else in
+the module is built on top of it:
+
+```ts
+export function crewBelongsToCollection(crew: CrewMember, collection: Collection): boolean {
+  const crewTraits = new Set([...(crew.traits ?? []), ...(crew.traits_hidden ?? [])]);
+  const collectionTraits = collection.traits ?? [];
+  const extraCrew = collection.extra_crew ?? [];
+  return collectionTraits.some((trait) => crewTraits.has(trait)) || extraCrew.includes(crew.archetype_id);
+}
+```
+
+`getCrewCollections(crew, collections)` filters the full list down to
+matches; `getCollectionCount(crew, collections)` is just that result's
+`.length` — the value shown in the "Collections" table column and used by
+the `byCollectionCountDesc` sort key.
+
+**Why the predicate is factored out on its own:** the app currently only
+needs the crew's-eye view ("which collections does this crew belong
+to?"), but a planned future page needs the reverse — for a given
+collection, which owned crew belong to it. That reduces to
+`crewList.filter((c) => crewBelongsToCollection(c, collection))`, reusing
+the *exact same* predicate with the arguments held the other way around.
+That page is **not built yet** — only the predicate is shaped so it costs
+nothing extra when it eventually is.
+
+**Dedup is a non-issue by construction:** membership is computed by
+filtering the single `collections` array with an OR'd predicate, not by
+merging two separately-collected result sets, so a collection cannot
+appear twice in a result regardless of which rule(s) matched.
+
+**Guards:** follows the same fail-closed convention as
+`getMissingEquipmentArchetypeIds`'s `equipment_slots` guard — every field
+read off an unvalidated cast (`collection.traits`, `collection.extra_crew`,
+`crew.traits`, `crew.traits_hidden`) gets `?? []`, so a malformed entry
+contributes zero matches rather than throwing. One asymmetry a final
+review flagged and explicitly ruled acceptable: `crew.archetype_id` (a
+scalar, not an array) has no `?? -1` fallback in the `extraCrew.includes(...)`
+check — `Array.prototype.includes(undefined)` returns `false` either way,
+so it fails closed regardless; the ruling was to leave it as-shipped
+rather than deviate from the approved plan for a purely stylistic gain.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-03-crew-collections-count-design.md`,
+`docs/superpowers/plans/2026-08-03-crew-collections-count-plan.md`.
+
 ## Sorting design
 
 Started as one named function per sort combination (`sortByName`, then
@@ -331,14 +442,29 @@ by the time it was noticed). Current design, entirely in
 ```ts
 type Comparator<T> = (a: T, b: T) => number;
 combineComparators<T>(...comparators): Comparator<T>   // short-circuits on first non-zero
-byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc    // single-key comparators
+byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc    // single-key comparators, self-contained on one CrewMember
+byCollectionCountDesc(collections): Comparator<CrewMember>  // factory — needs external context, see below
 sortCrew(crew, comparator): CrewMember[]                 // non-mutating apply
 ```
 
-Every page composes the same three-key order:
-`combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc)`
+Every page composes the same four-key order:
+`combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)`
 — level first (highest first), then equipment-completeness (closer to
-done first), then name (alphabetical) as the final tiebreaker.
+done first), then collection count (more collections first), then name
+(alphabetical) as the final tiebreaker.
+
+**`byCollectionCountDesc` is the first *factory* comparator in this file**
+— every other comparator is a plain `(a, b) => number` because level and
+equipment-slots are self-contained on a single `CrewMember`. Collection
+count needs the `collections` list as external context to compute (via
+`getCollectionCount`, see "The collections membership logic" above), so
+it's shaped as a function that takes that context and returns a
+comparator — the smallest change that fits the existing
+`combineComparators` composition model. Deliberately not backed by a
+precomputed `Map<archetype_id, count>`: at 597 crew × 88 collections,
+computing membership inline per comparison is fast enough (measured
+~12ms for a full-page sort at real page sizes during final review) that a
+lookup-map would be optimizing before it's needed.
 
 ## The shared rendering layer
 
@@ -354,9 +480,12 @@ page-level constant), so it renders correctly for any combination without
 modification.
 
 **Column set is intentionally fixed** (`#`, `Stars`, `Name`, `Level`,
-`Items to equip`) — no configurable-columns API was built, on the
-reasoning that with only 2-4 real consumers, a column-config system would
-be speculative generality nobody has asked for yet.
+`Items to equip`, `Collections`) — no configurable-columns API was built,
+on the reasoning that with only 2-4 real consumers, a column-config
+system would be speculative generality nobody has asked for yet.
+`CrewTable` takes a required `collections: Collection[]` prop (added
+alongside the `Collections` column) — the same "pass the extra data list
+as context" pattern `isReadyToImmortalize` already used for `items`.
 
 ## Feature history (chronological)
 
@@ -391,6 +520,13 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
    `OwnedItem` type, `isImmortalized`/`isReadyToImmortalize`/
    `filterReadyToImmortalize`/`filterNeedsWork`, two new pages
    ("4/4 Stars crew (ready)" and "4/4 Stars crew").
+9. **Crew collections count** (`2026-08-03-crew-collections-count`) — the
+   crew↔collection membership rule (deep-dive above), `Collection` type,
+   new `collections/getters.ts` module, a "Collections" column (last,
+   right-aligned) on all 4 crew pages, and a new `byCollectionCountDesc`
+   sort key inserted between equipment-slots and name. First feature to
+   add a new top-level module (`collections/`) alongside `crew/`, and the
+   first factory-shaped comparator in `sorters.ts`.
 
 ## Current routes / nav (in order)
 
@@ -418,11 +554,27 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
   substitute, since this project deliberately has no automated test
   framework yet, then fast-forward merge to `main`, then worktree/branch
   cleanup).
-- **`EnterWorktree` branches from stale `origin/main`** every time (no
-  remote push has happened), so after creating a worktree the immediate
-  next step is always `git merge main` inside it to pull in the real
-  local history, then `cp .../example-data.json .../worktree/` (it's
-  gitignored, so it never comes along on its own) before `npm install`.
+- **`EnterWorktree` branches from `origin/main`**, not local `main` — for
+  every feature through the Collections one, no remote push had ever
+  happened, so `origin/main` was permanently stale and the immediate next
+  step after creating a worktree was always `git merge main` inside it to
+  pull in the real local history. **As of the Collections feature, `main`
+  has been pushed to GitHub for the first time** (`git push origin main`,
+  42 commits, clean fast-forward), so `origin/main` is now current — but
+  the same staleness will return the moment local commits accumulate
+  again without a follow-up push. Keep doing the `git merge main` step in
+  new worktrees regardless; it's a no-op when `origin/main` is already
+  current and the safety net when it isn't. Also still `cp
+  .../example-data.json .../worktree/` (it's gitignored, so it never
+  comes along on its own) before `npm install`.
+- **Pushing to GitHub requires a fine-grained PAT with `Contents:
+  Read and write` explicitly granted** for this repo — fine-grained
+  tokens default to no access, unlike classic tokens' scope checkboxes.
+  A 403 "Permission ... denied" on push (after auth already succeeded)
+  means the token's repository permissions need fixing, not the
+  credentials themselves. If `credential.helper store` already cached a
+  bad token, clear it (`sed -i '/github.com/d' ~/.git-credentials`)
+  before retrying with a corrected token.
 - **`example-data.json`** (real personal game data, gitignored, lives at
   the repo root) is the ground-truth reference for every crew-related
   feature. Every non-trivial getter/filter has been verified against it —
@@ -455,10 +607,15 @@ doing:
   `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
   `FourFourStarsCrewPage` — 4 files now) repeat the same
   `usePlayerData()` + loading/error/empty-state/title scaffolding, differing
-  only in their filter composition and copy strings. Recommendation from
-  multiple reviews: extract a shared `RarityCrewPage`/`CrewListPage`
-  component or a `useRarityCrew(...)` hook **once a 5th such page
-  appears** — deliberately not done preemptively.
+  only in their filter composition and copy strings. The Collections
+  feature added a 4th repeated concern on top of the existing 3
+  (`getCollectionsList(data)` fetch + `collections` prop + sort-key
+  insertion, identically in all 4 files) — the final whole-branch review
+  explicitly called this "the clearest signal yet" that a shared
+  page-shell refactor is the next structural cleanup worth planning.
+  Recommendation from multiple reviews: extract a shared
+  `RarityCrewPage`/`CrewListPage` component or a `useRarityCrew(...)` hook
+  **once a 5th such page appears** — deliberately not done preemptively.
 - **Nav active-state:** the nav `ListItemButton`s don't show which page is
   currently selected (no `selected` prop / `useLocation` check). Cosmetic.
 - **`NAV_ITEMS` and `<Routes>` are hand-synced lists** in two different
@@ -497,10 +654,15 @@ doing:
 ## Likely next steps
 
 The user has been adding crew-classification factors one at a time
-("I'll list them step by step" was the original framing). Nothing is
-currently in flight. The natural next asks, based on the pattern so far,
-would be either: another classification factor (skills? traits? a
-different completion metric?), another rarity-bucket page reusing
-`CrewTable`, or finally tackling one of the deferred items above (most
-likely the page-shell duplication, once one more page makes it a clear
-pattern).
+("I'll list them step by step" was the original framing) — level,
+equipment slots, and now collections count. Nothing is currently in
+flight. The Collections feature deliberately built its predicate
+(`crewBelongsToCollection`) to be reused in the opposite direction, so
+the most natural next ask is the **collections-eye-view page** it was
+shaped for: for a given collection, which owned crew belong to it
+(`crewList.filter((c) => crewBelongsToCollection(c, collection))` — zero
+new matching logic needed, just a new page and a getter that binds the
+arguments the other way). Other plausible next asks: another
+classification factor (skills? a different completion metric?), another
+rarity-bucket page reusing `CrewTable`, or finally tackling the
+page-shell duplication (now flagged twice as ripe).
