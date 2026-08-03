@@ -7,4 +7,5 @@ export interface CrewMember {
   max_rarity: number;
   level: number;
   equipment: [number, number][];
+  equipment_slots: { level: number; archetype: number }[];
 }
