@@ -14,6 +14,7 @@ import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
 import { getCollectionCrew } from './getters';
 import { getCuratedRewards } from './rewards';
+import { isMaxedOut } from './sorters';
 import {
   byEquipmentSlotsRemainingDesc,
   byLevelDesc,
@@ -29,9 +30,10 @@ export interface CollectionsTableProps {
   collections: Collection[];
   crew: CrewMember[];
   items: OwnedItem[];
+  frozenArchetypeIds: Set<number>;
 }
 
-function CollectionsTable({ collections, crew, items }: CollectionsTableProps) {
+function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: CollectionsTableProps) {
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -48,7 +50,7 @@ function CollectionsTable({ collections, crew, items }: CollectionsTableProps) {
         <TableBody>
           {collections.map((collection, index) => {
             const qualifyingCrew = sortCrew(
-              getCollectionCrew(collection, crew, items),
+              getCollectionCrew(collection, crew, items, frozenArchetypeIds),
               combineComparators(
                 byTierAsc(items),
                 byMaxRarityDesc,
@@ -58,10 +60,9 @@ function CollectionsTable({ collections, crew, items }: CollectionsTableProps) {
               )
             );
             const rewards = getCuratedRewards(collection);
-            const progressDisplay =
-              collection.milestone.goal === 0
-                ? 'MAX'
-                : `${collection.progress}/${collection.milestone.goal}`;
+            const progressDisplay = isMaxedOut(collection)
+              ? 'MAX'
+              : `${collection.progress}/${collection.milestone.goal}`;
             return (
               <Fragment key={collection.id}>
                 <TableRow>

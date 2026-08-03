@@ -1,7 +1,13 @@
 import type { Collection } from '../types/collection';
 
+export function isMaxedOut(collection: Collection): boolean {
+  return collection.milestone.goal === 0;
+}
+
+const MAXED_OUT_RATIO = -1; // sorts maxed-out collections to the bottom, deliberately — see PROJECT_STATE.md
+
 export function getCollectionCompletionRatio(collection: Collection): number {
-  return collection.milestone.goal === 0 ? -1 : collection.progress / collection.milestone.goal;
+  return isMaxedOut(collection) ? MAXED_OUT_RATIO : collection.progress / collection.milestone.goal;
 }
 
 export function byCompletionThenNameAsc(a: Collection, b: Collection): number {

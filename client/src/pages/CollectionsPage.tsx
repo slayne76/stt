@@ -1,7 +1,7 @@
 import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
-import { getCollectionsList } from '../collections/getters';
+import { getCollectionsList, getFrozenCrewArchetypeIds } from '../collections/getters';
 import { byCompletionThenNameAsc } from '../collections/sorters';
 import CollectionsTable from '../collections/CollectionsTable';
 
@@ -13,6 +13,7 @@ function CollectionsPage() {
     : [];
   const crew = data ? getCrewList(data) : [];
   const items = data ? getOwnedItems(data) : [];
+  const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
 
   const loaded = !loading && !error && data;
 
@@ -38,7 +39,12 @@ function CollectionsPage() {
         collections.length === 0 ? (
           <Typography color="text.secondary">No collections found.</Typography>
         ) : (
-          <CollectionsTable collections={collections} crew={crew} items={items} />
+          <CollectionsTable
+            collections={collections}
+            crew={crew}
+            items={items}
+            frozenArchetypeIds={frozenArchetypeIds}
+          />
         )
       )}
     </Stack>

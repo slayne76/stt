@@ -2,6 +2,7 @@ import type { PlayerData } from '../types/player';
 import type { Collection } from '../types/collection';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
+import type { StoredImmortal } from '../types/storedImmortal';
 import { getCrewTier } from '../crew/getters';
 
 export function getCollectionsList(data: PlayerData): Collection[] {
@@ -26,8 +27,24 @@ export function getCollectionCount(crew: CrewMember, collections: Collection[]):
   return getCrewCollections(crew, collections).length;
 }
 
-export function getCollectionCrew(collection: Collection, crewList: CrewMember[], items: OwnedItem[]): CrewMember[] {
+export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
+  const player = data.player as Record<string, unknown> | undefined;
+  const character = player?.character as Record<string, unknown> | undefined;
+  const storedImmortals = character?.stored_immortals;
+  const list = Array.isArray(storedImmortals) ? (storedImmortals as StoredImmortal[]) : [];
+  return new Set(list.map((s) => s.id));
+}
+
+export function getCollectionCrew(
+  collection: Collection,
+  crewList: CrewMember[],
+  items: OwnedItem[],
+  frozenArchetypeIds: Set<number>
+): CrewMember[] {
   return crewList.filter(
-    (crew) => crewBelongsToCollection(crew, collection) && getCrewTier(crew, items) !== null
+    (crew) =>
+      crewBelongsToCollection(crew, collection) &&
+      getCrewTier(crew, items) !== null &&
+      !frozenArchetypeIds.has(crew.archetype_id)
   );
 }
