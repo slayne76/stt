@@ -27,9 +27,11 @@ function ThreeFourStarsCrewPage() {
       )
     : [];
 
+  const loaded = !loading && !error && data;
+
   return (
     <Stack spacing={2}>
-      <Typography variant="h4">3/4 Stars crew</Typography>
+      <Typography variant="h4">3/4 Stars crew{loaded ? ` (${crew.length})` : ''}</Typography>
 
       {loading && <CircularProgress />}
       {error && (
@@ -45,7 +47,7 @@ function ThreeFourStarsCrewPage() {
         </Alert>
       )}
 
-      {!loading && !error && data && (
+      {loaded && (
         crew.length === 0 ? (
           <Typography color="text.secondary">No crew at 3/4 stars.</Typography>
         ) : (
@@ -53,14 +55,16 @@ function ThreeFourStarsCrewPage() {
             <Table>
               <TableHead>
                 <TableRow>
+                  <TableCell>#</TableCell>
                   <TableCell>Name</TableCell>
                   <TableCell align="right">Level</TableCell>
                   <TableCell align="right">Items to equip</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {crew.map((c) => (
+                {crew.map((c, index) => (
                   <TableRow key={c.id}>
+                    <TableCell>{index + 1}</TableCell>
                     <TableCell>{c.name}</TableCell>
                     <TableCell align="right">{c.level}</TableCell>
                     <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
