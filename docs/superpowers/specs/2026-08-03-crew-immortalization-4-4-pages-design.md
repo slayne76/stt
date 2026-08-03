@@ -46,7 +46,13 @@ gitignored):
   this specific 4/4 bucket (131 crew are Immortalized across all
   max_rarity values, just none currently at 4/4 for this player).
 - This means, with the design below: **"4/4 Stars crew (ready)"** → 10
-  crew, **"4/4 Stars crew"** → 42 crew (52 − 10).
+  crew, **"4/4 Stars crew"** → 42 crew (52 − 10). Re-confirmed after
+  generalizing "ready" to any missing-slot count (not just `-1`, see
+  below): all 11 level-100 crew at 4/4 in this sample happen to be
+  missing exactly 1 slot — none are missing 2, 3, or 4 — so the counts
+  are unchanged by the generalization for this player's current data.
+  The logic still needs to handle the multi-missing case correctly for
+  other players' data or as this player's own roster changes.
 
 ## Non-goals
 
@@ -109,11 +115,22 @@ export function isReadyToImmortalize(crew: CrewMember, items: OwnedItem[]): bool
   return (
     crew.rarity === crew.max_rarity &&
     crew.level === 100 &&
-    getEquipmentSlotsRemaining(crew) === -1 &&
+    getEquipmentSlotsRemaining(crew) < 0 &&
     areAllMissingItemsOwned(crew, items)
   );
 }
 ```
+
+**Resolved edge case:** "ready" is defined by ownership completeness, not
+missing-slot count. A crew at level 100 with `-4` (nothing equipped) but
+owning all 4 required items counts as ready — matching the user's own
+framing ("I have all conditions to do it, I'm just choosing not to").
+`getEquipmentSlotsRemaining(crew) < 0` (rather than `=== -1`) admits any
+non-zero missing-slot count from `-1` to `-4`; `areAllMissingItemsOwned`
+does the real work of requiring *every* missing item to be owned,
+whether that's 1 item or 4. `< 0` (rather than `<= 0`) excludes the
+already-Immortalized case (`0`), which is `isImmortalized`'s job, not
+this function's.
 
 Both `isImmortalized` and `isReadyToImmortalize` are self-contained (they
 check `rarity === max_rarity` themselves) so they give correct answers on
