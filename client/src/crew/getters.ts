@@ -23,7 +23,8 @@ export function getOwnedItems(data: PlayerData): OwnedItem[] {
 export function getMissingEquipmentArchetypeIds(crew: CrewMember): number[] {
   const filledSlots = new Set(crew.equipment.map(([slot]) => slot));
   const missingIndices = [0, 1, 2, 3].filter((i) => !filledSlots.has(i));
-  return missingIndices.map((i) => crew.equipment_slots[i].archetype);
+  const slots = crew.equipment_slots ?? [];
+  return missingIndices.map((i) => slots[i]?.archetype ?? -1);
 }
 
 export function areAllMissingItemsOwned(crew: CrewMember, items: OwnedItem[]): boolean {
