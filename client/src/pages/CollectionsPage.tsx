@@ -2,13 +2,14 @@ import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/materia
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
 import { getCollectionsList } from '../collections/getters';
+import { byCompletionThenNameAsc } from '../collections/sorters';
 import CollectionsTable from '../collections/CollectionsTable';
 
 function CollectionsPage() {
   const { data, loading, error, refresh } = usePlayerData();
 
   const collections = data
-    ? [...getCollectionsList(data)].sort((a, b) => a.name.localeCompare(b.name))
+    ? [...getCollectionsList(data)].sort(byCompletionThenNameAsc)
     : [];
   const crew = data ? getCrewList(data) : [];
   const items = data ? getOwnedItems(data) : [];

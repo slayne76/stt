@@ -1,7 +1,5 @@
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
 import {
-  Collapse,
-  IconButton,
   Paper,
   Table,
   TableBody,
@@ -11,11 +9,11 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
 import { getCollectionCrew } from './getters';
+import { getCuratedRewards } from './rewards';
 import {
   byEquipmentSlotsRemainingDesc,
   byLevelDesc,
@@ -34,34 +32,21 @@ export interface CollectionsTableProps {
 }
 
 function CollectionsTable({ collections, crew, items }: CollectionsTableProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(
-    () => new Set(collections.map((c) => c.id))
-  );
-
-  const toggle = (id: number) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
   return (
     <TableContainer component={Paper}>
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell />
+            <TableCell>#</TableCell>
             <TableCell>Collection</TableCell>
+            <TableCell>Rewards</TableCell>
+            <TableCell align="right">Progress</TableCell>
+            <TableCell align="right">Milestone</TableCell>
             <TableCell align="right">Crew</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {collections.map((collection) => {
+          {collections.map((collection, index) => {
             const qualifyingCrew = sortCrew(
               getCollectionCrew(collection, crew, items),
               combineComparators(
@@ -72,29 +57,30 @@ function CollectionsTable({ collections, crew, items }: CollectionsTableProps) {
                 byNameAsc
               )
             );
-            const expanded = expandedIds.has(collection.id);
+            const rewards = getCuratedRewards(collection);
+            const progressDisplay =
+              collection.milestone.goal === 0
+                ? 'MAX'
+                : `${collection.progress}/${collection.milestone.goal}`;
             return (
               <Fragment key={collection.id}>
                 <TableRow>
-                  <TableCell>
-                    <IconButton size="small" onClick={() => toggle(collection.id)}>
-                      {expanded ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
-                    </IconButton>
-                  </TableCell>
+                  <TableCell>{index + 1}</TableCell>
                   <TableCell>{collection.name}</TableCell>
+                  <TableCell>{rewards.join(', ')}</TableCell>
+                  <TableCell align="right">{progressDisplay}</TableCell>
+                  <TableCell align="right">{collection.claimable_milestone_index}</TableCell>
                   <TableCell align="right">{qualifyingCrew.length}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={3}>
-                    <Collapse in={expanded} timeout="auto" unmountOnExit>
-                      {qualifyingCrew.length === 0 ? (
-                        <Typography color="text.secondary" sx={{ py: 1 }}>
-                          No crew match.
-                        </Typography>
-                      ) : (
-                        <CollectionCrewList crew={qualifyingCrew} items={items} />
-                      )}
-                    </Collapse>
+                  <TableCell sx={{ bgcolor: 'action.hover' }} colSpan={6}>
+                    {qualifyingCrew.length === 0 ? (
+                      <Typography color="text.secondary" sx={{ py: 1 }}>
+                        No crew match.
+                      </Typography>
+                    ) : (
+                      <CollectionCrewList crew={qualifyingCrew} items={items} />
+                    )}
                   </TableCell>
                 </TableRow>
               </Fragment>
