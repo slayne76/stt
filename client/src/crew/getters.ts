@@ -7,3 +7,7 @@ export function getCrewList(data: PlayerData): CrewMember[] {
   const crew = character?.crew;
   return Array.isArray(crew) ? (crew as CrewMember[]) : [];
 }
+
+export function getEquipmentSlotsRemaining(crew: CrewMember): number {
+  return (crew.equipment?.length ?? 0) - 4;
+}

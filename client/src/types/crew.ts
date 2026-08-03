@@ -6,4 +6,5 @@ export interface CrewMember {
   rarity: number;
   max_rarity: number;
   level: number;
+  equipment: [number, number][];
 }

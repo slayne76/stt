@@ -13,15 +13,18 @@ import {
   Typography,
 } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
-import { getCrewList } from '../crew/getters';
+import { getCrewList, getEquipmentSlotsRemaining } from '../crew/getters';
 import { filterByRarity } from '../crew/filters';
-import { sortByLevelThenName } from '../crew/sorters';
+import { byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, combineComparators, sortCrew } from '../crew/sorters';
 
 function ThreeFourStarsCrewPage() {
   const { data, loading, error, refresh } = usePlayerData();
 
   const crew = data
-    ? sortByLevelThenName(filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 }))
+    ? sortCrew(
+        filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 }),
+        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc)
+      )
     : [];
 
   return (
@@ -52,6 +55,7 @@ function ThreeFourStarsCrewPage() {
                 <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell align="right">Level</TableCell>
+                  <TableCell align="right">Items to equip</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -59,6 +63,7 @@ function ThreeFourStarsCrewPage() {
                   <TableRow key={c.id}>
                     <TableCell>{c.name}</TableCell>
                     <TableCell align="right">{c.level}</TableCell>
+                    <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
