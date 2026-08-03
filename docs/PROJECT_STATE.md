@@ -72,6 +72,7 @@ client/src/
     crew.ts                    CrewMember interface (see below)
     item.ts                    OwnedItem interface (see below)
     collection.ts              Collection interface (see "The collections membership logic")
+    storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering
@@ -80,9 +81,10 @@ client/src/
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
-                                getCollectionCount, getCollectionCrew (reverse direction)
+                                getCollectionCount, getCollectionCrew (reverse direction),
+                                getFrozenCrewArchetypeIds
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
-    sorters.ts                 getCollectionCompletionRatio, byCompletionThenNameAsc
+    sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
   pages/
@@ -565,8 +567,14 @@ completion-ratio-first, alphabetical as the tiebreak — "which collection
 is closest to its next milestone" (`collections/sorters.ts`):
 
 ```ts
+export function isMaxedOut(collection: Collection): boolean {
+  return collection.milestone.goal === 0;
+}
+
+const MAXED_OUT_RATIO = -1; // sorts maxed-out collections to the bottom, deliberately — see below
+
 export function getCollectionCompletionRatio(collection: Collection): number {
-  return collection.milestone.goal === 0 ? -1 : collection.progress / collection.milestone.goal;
+  return isMaxedOut(collection) ? MAXED_OUT_RATIO : collection.progress / collection.milestone.goal;
 }
 
 export function byCompletionThenNameAsc(a: Collection, b: Collection): number {
@@ -575,6 +583,16 @@ export function byCompletionThenNameAsc(a: Collection, b: Collection): number {
   return a.name.localeCompare(b.name);
 }
 ```
+
+**`isMaxedOut` was extracted after shipping** — the row-detail feature
+originally inlined `collection.milestone.goal === 0` separately in both
+`getCollectionCompletionRatio` and `CollectionsTable`'s progress display,
+flagged as a deferred duplication risk, then folded into the very next
+feature that happened to touch both files (frozen-crew exclusion, below)
+rather than left to rot. The `MAXED_OUT_RATIO` constant and its comment
+exist because the `-1` value is exactly the decision that got reversed
+once already (see next paragraph) — worth documenting in code, not just
+in this file, so a future reader doesn't "helpfully" flip it back.
 
 **`goal === 0` is a real, common state, not a hypothetical edge case:** 8
 of the 88 sample collections are fully maxed out for this player (every
@@ -597,6 +615,116 @@ confirmed by exhaustive search. The `Milestone` column shows
 `claimable_milestone_index` alone; the total isn't retrievable from this
 data source at all, by anyone, ever — not something a future getter could
 extract with more effort.
+
+## Frozen crew and duplicate exclusion
+
+STT lets a player fully immortalize a crew member and then "freeze" it —
+store it elsewhere to free up active-roster inventory space. If the
+player later re-pulls a duplicate of that same crew archetype, the new
+copy starts fresh at low rarity/level. Before this feature, the
+Collections page's crew lists had no way to tell "this crew genuinely
+needs attention" apart from "this is a fresh re-pull of an archetype
+that's already been fully completed once via its frozen twin" — both
+look identical from the active-roster crew object alone. The user caught
+this by noticing collections they'd already fully completed (see
+`isMaxedOut` above — "Common Crew," "Uncommon Crew," the "immortalize
+every N-star crew" collections) still showed active, not-yet-immortalized
+crew in their sub-list.
+
+**`player.character.stored_immortals`** — an array of `{ id, quantity,
+qbits }` — is the frozen-crew list. `id` is the crew's `archetype_id`:
+
+```ts
+// types/storedImmortal.ts
+export interface StoredImmortal {
+  id: number;
+}
+```
+
+```ts
+// collections/getters.ts
+export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
+  const player = data.player as Record<string, unknown> | undefined;
+  const character = player?.character as Record<string, unknown> | undefined;
+  const storedImmortals = character?.stored_immortals;
+  const list = Array.isArray(storedImmortals) ? (storedImmortals as StoredImmortal[]) : [];
+  return new Set(list.map((s) => s.id));
+}
+```
+
+**This was reverse-engineered from nothing** — the field's meaning isn't
+documented anywhere. First evidence: 716 ids in `stored_immortals`, and
+exactly 12 of them also appear as an active-roster `archetype_id`, every
+one matching the reported symptom (a low-rarity/under-leveled duplicate
+of an archetype with a frozen twin — e.g. Captain Janeway at 4/4 level
+20, Telek R'Mor at 1/2 level 1). That overlap was suggestive but not
+proof on its own. **The proof came from a reconciliation, done during
+final review:** 15 of the 88 collections are defined purely by
+`extra_crew` (no trait matching at all — see "The collections membership
+logic" above), which means the game's own `progress` field for those 15
+is a ground-truth count this project can independently predict:
+
+```
+ownedImmortalArchetypes = archetype_ids in stored_immortals
+                         ∪ archetype_ids of active crew where isImmortalized(crew)
+predictedProgress = |collection.extra_crew ∩ ownedImmortalArchetypes|
+```
+
+**Result: 15/15 exact match against the real `progress` values, with the
+frozen set included. 0/15 match with it excluded.** This isn't
+correlation — it proves the game itself computes collection progress by
+archetype over *(frozen ∪ active-immortalized)*, which means an active,
+non-immortalized duplicate of a frozen archetype can never advance a
+collection. The exclusion this feature makes is therefore provably
+correct, not a display preference that merely looks right on inspection.
+
+**The exclusion is scoped to `getCollectionCrew` only** — `getCrewTier`
+(`crew/getters.ts`) stays completely untouched, since it's a general
+"how close to immortalized" concept reused by `crew/sorters.ts`'s
+`byTierAsc` and `CollectionCrewList`'s "Ready" chip, not something
+specific to frozen-crew bookkeeping:
+
+```ts
+export function getCollectionCrew(
+  collection: Collection,
+  crewList: CrewMember[],
+  items: OwnedItem[],
+  frozenArchetypeIds: Set<number>
+): CrewMember[] {
+  return crewList.filter(
+    (crew) =>
+      crewBelongsToCollection(crew, collection) &&
+      getCrewTier(crew, items) !== null &&
+      !frozenArchetypeIds.has(crew.archetype_id)
+  );
+}
+```
+
+Since `getCrewTier` already returns `null` for already-immortalized
+crew, the frozen-set clause can only ever narrow an already-partial
+result further — there's no path where a legitimately-finished crew gets
+hidden by it, and no path where `CollectionCrewList`/`byTierAsc` ever see
+an unfiltered crew list (both are fed exclusively by this getter's
+output).
+
+**Deliberately scoped to the Collections page only** — the 4 existing
+crew pages (3/4, 4/5, 4/4-ready, 4/4-needs-work) never call
+`getCollectionCrew` and remain completely unaffected; a crew like
+Captain Janeway still appears on "4/4 Stars crew" as needing work.
+Broadening this to those pages was raised explicitly during design and
+declined for now.
+
+**Real-data impact, verified:** 14 of 88 collections affected, total
+qualifying-crew entries drop from 368 to 343 across the whole set. Only
+**7** of the 12 overlapping archetypes actually change any collection's
+crew list (Captain Janeway, Ensign Kim, First Maje Haron, Festive Jadzia
+Dax, Telek R'Mor, Off-Duty Stamets, Fleet Commander Martok) — the other
+5 (Idrin, Martia, Duelist Yar, Indignant Seven, Anxious Kirk) were
+already excluded by `getCrewTier`'s one-star bound before this feature
+existed, since they're more than one star from their ceiling.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-crew-exclusion-design.md`,
+`docs/superpowers/plans/2026-08-03-frozen-crew-exclusion-plan.md`.
 
 ## Sorting design
 
@@ -755,6 +883,15 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     came back with zero findings — first feature in the project where an
     implementer's diff matched its brief closely enough that no Minor
     findings surfaced until the final whole-branch review.
+12. **Frozen crew and duplicate exclusion** (`2026-08-03-frozen-crew-exclusion`)
+    — reverse-engineered `stored_immortals` as the frozen-crew archetype
+    list (deep-dive above), excluded frozen-archetype duplicates from
+    `getCollectionCrew`'s output (Collections page only, by explicit
+    scope decision), and bundled in the `isMaxedOut` extraction the
+    row-detail feature had deferred. First feature where the final
+    review didn't just re-confirm the spec's claim but independently
+    strengthened it — the `extra_crew`-collection `progress` reconciliation
+    proves the exclusion correct rather than merely plausible.
 
 ## Current routes / nav (in order)
 
@@ -883,23 +1020,6 @@ doing:
   (GHSA-qwww-vcr4-c8h2) — doesn't apply, this app is a plain
   client-side-rendered SPA with no RSC usage. Worth `npm audit fix` next
   time dependencies are touched anyway.
-- **"Is this collection maxed out?" is checked twice, independently:**
-  `collection.milestone.goal === 0` is hardcoded in both
-  `collections/sorters.ts` (`getCollectionCompletionRatio`) and
-  `collections/CollectionsTable.tsx` (the `MAX` display branch). In
-  lockstep today; a future change to how "maxed" is detected has two
-  edit sites and only one is visible from either file. A one-line
-  `isMaxedOut(collection)` predicate (in `collections/sorters.ts` or a
-  small new `collections/milestone.ts`) would bind both to one
-  definition.
-- **The `-1` sort sentinel is undocumented in code:**
-  `getCollectionCompletionRatio` returns `-1` for maxed-out collections
-  with no comment explaining why — and this is exactly the decision that
-  was reversed once already during design (an initial "rank complete
-  collections first" instinct became "rank them last"). A future reader
-  could plausibly "fix" it back without knowing that's already been
-  tried and rejected. Worth a one-line comment or a named
-  `MAXED_OUT_RATIO` constant.
 - **Collections whose only rewards are excluded types render a blank
   Rewards cell:** 5 real collections ("The Wild West," "Sherwood
   Forest," "Set Sail!," "Our Man Bashir," "Perils in Paradise") only
@@ -915,21 +1035,32 @@ doing:
   bare number under "Milestone" invites misreading as a second progress
   figure. A header tooltip or relabeling to "Claimed" was suggested but
   not acted on.
+- **`getFrozenCrewArchetypeIds` lives in `collections/getters.ts` but
+  reads crew-domain data** — it takes `PlayerData` and knows nothing
+  about collections, structurally a sibling of `getCrewList`/
+  `getOwnedItems` in `crew/getters.ts`. Harmless today, and doesn't
+  threaten the acyclicity constraint above (it only needs `PlayerData`
+  and a type, no import from `crew/`) — it only becomes friction if the
+  declined "broaden frozen-exclusion to the 4 crew pages" decision is
+  ever revisited, since those pages would then need to import from
+  `collections/`. Cheap to move then; not worth churning the diff now.
 
 ## Likely next steps
 
 The user has been building this up feature-by-feature, each explicitly
 brainstormed and reviewed before implementation — level, equipment slots,
-collections count, then the collections-eye-view page (which the
-collections-count feature deliberately shaped its predicate to support,
-and which has now shipped, including a follow-up pass adding rewards/
-progress/milestone detail to it). Nothing is currently in flight.
-Plausible next asks, roughly by how directly they follow from what's
-already built: another classification factor (skills? traits?), a
-`getFilledSlotIndices`-style consolidation of the deferred issues above
-(several of which are now small, well-scoped, and independent — the
-`isMaxedOut` dedup and the `-1` sentinel comment could both be a single
-tiny follow-up commit), finally tackling the page-shell duplication (5
-pages now share the identical shell, the threshold every prior review
-named), or a `docs/PROJECT_STATE.md`-adjacent housekeeping pass if this
-document itself starts lagging again after a burst of features.
+collections count, the collections-eye-view page (which the
+collections-count feature deliberately shaped its predicate to support),
+a follow-up pass adding rewards/progress/milestone detail to it, and most
+recently frozen-crew duplicate exclusion (caught by the user noticing
+stale data on collections they'd already completed, then reverse-
+engineered and proven correct via the `extra_crew`-progress reconciliation
+— see deep-dive above). Nothing is currently in flight. Plausible next
+asks, roughly by how directly they follow from what's already built:
+another classification factor (skills? traits?), finally tackling the
+page-shell duplication (5 pages now share the identical shell, the
+threshold every prior review named), reconsidering whether frozen-crew
+exclusion should broaden to the 4 crew pages now that its correctness is
+proven rather than merely plausible, or a `docs/PROJECT_STATE.md`-adjacent
+housekeeping pass if this document itself starts lagging again after a
+burst of features.
