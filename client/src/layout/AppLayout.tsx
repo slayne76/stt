@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
   { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready' },
   { label: '4/4 Stars crew', path: '/4-4-stars-crew' },
+  { label: 'Collections', path: '/collections' },
 ];
 
 function AppLayout() {

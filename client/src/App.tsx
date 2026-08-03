@@ -6,6 +6,7 @@ import ThreeFourStarsCrewPage from './pages/ThreeFourStarsCrewPage';
 import FourFiveStarsCrewPage from './pages/FourFiveStarsCrewPage';
 import FourFourStarsCrewReadyPage from './pages/FourFourStarsCrewReadyPage';
 import FourFourStarsCrewPage from './pages/FourFourStarsCrewPage';
+import CollectionsPage from './pages/CollectionsPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/4-5-stars-crew" element={<FourFiveStarsCrewPage />} />
             <Route path="/4-4-stars-crew-ready" element={<FourFourStarsCrewReadyPage />} />
             <Route path="/4-4-stars-crew" element={<FourFourStarsCrewPage />} />
+            <Route path="/collections" element={<CollectionsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
