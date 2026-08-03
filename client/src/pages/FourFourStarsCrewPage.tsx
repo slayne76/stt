@@ -2,19 +2,21 @@ import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/materia
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
 import { filterByRarity, filterNeedsWork } from '../crew/filters';
-import { byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, combineComparators, sortCrew } from '../crew/sorters';
+import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, combineComparators, sortCrew } from '../crew/sorters';
+import { getCollectionsList } from '../collections/getters';
 import CrewTable from '../crew/CrewTable';
 
 function FourFourStarsCrewPage() {
   const { data, loading, error, refresh } = usePlayerData();
 
+  const collections = data ? getCollectionsList(data) : [];
   const crew = data
     ? sortCrew(
         filterNeedsWork(
           filterByRarity(getCrewList(data), { rarity: 4, maxRarity: 4 }),
           getOwnedItems(data)
         ),
-        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc)
+        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
       )
     : [];
 
@@ -42,7 +44,7 @@ function FourFourStarsCrewPage() {
         crew.length === 0 ? (
           <Typography color="text.secondary">No crew at 4/4 stars.</Typography>
         ) : (
-          <CrewTable crew={crew} />
+          <CrewTable crew={crew} collections={collections} />
         )
       )}
     </Stack>

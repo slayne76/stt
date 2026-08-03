@@ -1,5 +1,7 @@
 import type { CrewMember } from '../types/crew';
+import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
+import { getCollectionCount } from '../collections/getters';
 
 export type Comparator<T> = (a: T, b: T) => number;
 
@@ -19,6 +21,10 @@ export function byLevelDesc(a: CrewMember, b: CrewMember): number {
 
 export function byEquipmentSlotsRemainingDesc(a: CrewMember, b: CrewMember): number {
   return getEquipmentSlotsRemaining(b) - getEquipmentSlotsRemaining(a);
+}
+
+export function byCollectionCountDesc(collections: Collection[]): Comparator<CrewMember> {
+  return (a, b) => getCollectionCount(b, collections) - getCollectionCount(a, collections);
 }
 
 export function byNameAsc(a: CrewMember, b: CrewMember): number {
