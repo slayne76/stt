@@ -14,42 +14,53 @@ of my crew belong to this collection?"
 ## The crew subset and classification
 
 Every existing crew page filters by a specific `rarity`/`max_rarity`
-combo (3/4, 4/5, 4/4). This page instead classifies **every owned,
-non-Immortalized crew member** into one of three tiers, generalizing the
-existing Immortalization concepts to *any* `max_rarity` rather than just 4:
+combo (3/4, 4/5, 4/4). This page instead classifies **every owned crew
+member close to being fully immortalized** into one of three tiers,
+generalizing the existing Immortalization concepts to *any* `max_rarity`
+rather than just 4 — but, per an explicit correction to the first draft
+of this spec, "close" is bounded: a crew must be at most **one star**
+below its ceiling to appear here at all. A 1/4 or 2/4 crew (2-3 stars
+short) is excluded just like an already-Immortalized crew is — only 3/4
+(exactly one star short) and 4/4 (at the ceiling) qualify. Same for any
+other `max_rarity`: only `max_rarity - 1` and `max_rarity` qualify.
 
 ```ts
 type CrewTier = 'ready' | 'needsWork' | 'leveling';
 
 function getCrewTier(crew: CrewMember, items: OwnedItem[]): CrewTier | null {
-  if (isImmortalized(crew)) return null;               // excluded entirely
-  if (crew.rarity < crew.max_rarity) return 'leveling';
-  return isReadyToImmortalize(crew, items) ? 'ready' : 'needsWork';
+  if (isImmortalized(crew)) return null;                    // done, excluded
+  if (crew.rarity < crew.max_rarity - 1) return null;        // too far from max, excluded
+  if (crew.rarity === crew.max_rarity - 1) return 'leveling'; // exactly one star short
+  return isReadyToImmortalize(crew, items) ? 'ready' : 'needsWork'; // rarity === max_rarity
 }
 ```
 
-**No new business logic was needed for this.** `isImmortalized` and
-`isReadyToImmortalize` (`crew/getters.ts`) already check
-`crew.rarity === crew.max_rarity` generically — they were never
-hardcoded to 4. The two existing "4/4" pages just happen to be the only
-place today that pre-filters to `max_rarity === 4` before applying them.
-`getCrewTier` is a three-line wrapper that applies the same predicates
-across the whole roster instead.
+**No new business logic was needed for the ready/needsWork half of
+this.** `isImmortalized` and `isReadyToImmortalize` (`crew/getters.ts`)
+already check `crew.rarity === crew.max_rarity` generically — they were
+never hardcoded to 4. The two existing "4/4" pages just happen to be the
+only place today that pre-filters to `max_rarity === 4` before applying
+them. The only genuinely new rule is the `leveling` bound: exactly one
+star short, not "any lower rarity."
 
 Verified against the real sample (`example-data.json`, 597 crew):
-`leveling: 413, ready: 10, needsWork: 43, excluded (Immortalized): 131`.
-Broken down by `max_rarity`: `5/leveling: 304`, `4/ready: 10`,
-`4/leveling: 103`, `4/needsWork: 42`, `2/leveling: 5`, `3/leveling: 1`,
-and one real edge case confirming the generalization works beyond 4/5 —
-**`1/needsWork: 1`**, a crew at its max rarity of 1 that isn't yet
-level-100/fully-equipped. No `5/ready` or `5/needsWork` crew exist in the
-current sample (all 131 currently-Immortalized crew happen to be 5/5),
-but the logic is verified generic and will correctly classify one the
-moment such a crew exists — this page doesn't special-case 5 the way the
-existing pages special-case 4.
+`leveling: 58, ready: 10, needsWork: 43`, with **486 excluded** (131
+already-Immortalized + 355 more than one star from their ceiling).
+Compare to the first draft's rule (any `rarity < max_rarity` counted as
+leveling), which had `leveling: 413` — this correction cuts the leveling
+bucket by nearly 90%, which is the intended effect: this page is about
+"close to done," not "everything not yet done." One real edge case
+confirms the generalization still works beyond 4/5 — a crew at `1/2`
+(one star short of a `max_rarity` of 2) correctly classifies as
+`leveling` (see "The Neutral Zone" example below). No `5/ready` or
+`5/needsWork` crew exist in the current sample (all 131
+currently-Immortalized crew happen to be 5/5), but the logic is verified
+generic and will correctly classify one the moment such a crew exists.
 
-`null` (Immortalized) is excluded outright — consistent with every
-existing page, none of which ever display already-Immortalized crew.
+`null` (Immortalized, or too far from max) is excluded outright —
+consistent with every existing page, none of which display
+already-Immortalized crew, now extended to also exclude crew that
+aren't "close" by this page's one-star bound.
 
 ## Sorting
 
@@ -74,24 +85,31 @@ Full priority for a collection's crew list:
 (same), then leveling crew (same), ties broken by level, then equipment
 completeness, then name.
 
-**Verified against a real example** — the "Fully Functional" collection
-(8 qualifying crew) sorts to exactly this order:
+**Verified against two real examples.** The collection used in the first
+draft of this spec, "Fully Functional," had 8 qualifying crew under the
+old (any-lower-rarity) rule; under the corrected one-star bound it drops
+to 2 — the other 6 were all two or more stars from their ceiling:
 
 ```
-4/4 ready       Dr. Brown        (lvl 100, slots -1)
-4/4 needsWork   Lal              (lvl 50,  slots -2)
-1/5 leveling    The One, Lore    (lvl 100, slots  0)
-1/5 leveling    2024 Picard      (lvl 20,  slots -1)
-1/5 leveling    Age of Sail Data (lvl 20,  slots -1)
-1/5 leveling    Ilia Probe       (lvl 20,  slots -1)
-2/5 leveling    Fred             (lvl 10,  slots -2)
-2/4 leveling    Friar Tuck Data  (lvl 30,  slots -1)
+4/4 ready       Dr. Brown   (lvl 100, slots -1)
+4/4 needsWork   Lal         (lvl 50,  slots -2)
 ```
 
-(Ready and needs-work both happened to be `max_rarity` 4 here since no
-5/5 example exists in the sample; the leveling group correctly puts all
-four `max_rarity`-5 crew before the one `max_rarity`-4 crew, with level,
-then slots, then name breaking remaining ties.)
+A collection that still exercises all three tiers under the corrected
+rule, **"The Neutral Zone"** (4 qualifying crew):
+
+```
+4/4 ready       Commander Sela         (lvl 100, slots -1)
+4/4 needsWork   Reclamation Narissa    (lvl 70,  slots -1)
+4/4 needsWork   Zhaban                 (lvl 30,  slots -1)
+1/2 leveling    Telek R'Mor            (lvl 1,   slots -4)
+```
+
+Confirms: ready first; needs-work next, sorted by level desc (70 before
+30, both `max_rarity` 4); leveling last — `Telek R'Mor` at `1/2` (exactly
+one star short of a `max_rarity` of 2) correctly classifies as
+`leveling`, proving the rule generalizes below `max_rarity` 4 as well as
+above it.
 
 ## Reverse-direction getter
 
@@ -112,8 +130,10 @@ function getCollectionCrew(collection: Collection, crewList: CrewMember[], items
 ```
 
 Collections themselves are sorted alphabetically by name before being
-handed to the table. Verified: only 1 of the 88 sample collections has
-zero qualifying crew, and the largest has 119 — no pagination/truncation
+handed to the table. Verified under the corrected rule: 25 of the 88
+sample collections now have zero qualifying crew (up from 1 under the
+first draft's looser rule — expected, since the subset is deliberately
+much narrower now), and the largest has 21 — no pagination/truncation
 needed at this scale.
 
 ## Components and page
@@ -156,7 +176,7 @@ needed at this scale.
 - Crew belonging to zero collections never appear in any row — a natural
   consequence of the filter, nothing to guard.
 - No pagination/truncation — YAGNI, confirmed unnecessary at the real
-  data's scale (max 119 qualifying crew for one collection).
+  data's scale (max 21 qualifying crew for one collection).
 - Whole-page empty state (no collections at all) follows the same
   "loaded but empty" `Typography` pattern every other page uses.
 - No new defensive guards needed beyond what already exists in
@@ -169,10 +189,13 @@ needed at this scale.
 Same throwaway-script-against-real-data pattern as every prior feature:
 a `client/src/collections/__verify.ts`, run via `npx tsx`, deleted before
 committing, confirming:
-- The tier-count breakdown above (`leveling: 413, ready: 10,
-  needsWork: 43`, 131 excluded), including the `1/needsWork: 1` edge case.
-- The "Fully Functional" collection's `getCollectionCrew` result matches
-  the 8-crew order shown above, exactly.
+- The tier-count breakdown above (`leveling: 58, ready: 10,
+  needsWork: 43`, 486 excluded).
+- "Fully Functional" shrinks to exactly the 2 crew shown above (Dr. Brown,
+  Lal) — a direct check that the one-star bound is excluding, not just
+  the ready/needsWork logic.
+- "The Neutral Zone" matches the 4-crew order shown above exactly,
+  including `Telek R'Mor` (`1/2`) correctly landing in `leveling`.
 - Alphabetical collection ordering, and that a collection's row count
   matches `getCollectionCrew(...).length` for a couple of spot-checked
   collections.
