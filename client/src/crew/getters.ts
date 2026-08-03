@@ -44,3 +44,12 @@ export function isReadyToImmortalize(crew: CrewMember, items: OwnedItem[]): bool
     areAllMissingItemsOwned(crew, items)
   );
 }
+
+export type CrewTier = 'ready' | 'needsWork' | 'leveling';
+
+export function getCrewTier(crew: CrewMember, items: OwnedItem[]): CrewTier | null {
+  if (isImmortalized(crew)) return null;
+  if (crew.rarity < crew.max_rarity - 1) return null;
+  if (crew.rarity === crew.max_rarity - 1) return 'leveling';
+  return isReadyToImmortalize(crew, items) ? 'ready' : 'needsWork';
+}

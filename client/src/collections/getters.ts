@@ -1,6 +1,8 @@
 import type { PlayerData } from '../types/player';
 import type { Collection } from '../types/collection';
 import type { CrewMember } from '../types/crew';
+import type { OwnedItem } from '../types/item';
+import { getCrewTier } from '../crew/getters';
 
 export function getCollectionsList(data: PlayerData): Collection[] {
   const player = data.player as Record<string, unknown> | undefined;
@@ -22,4 +24,10 @@ export function getCrewCollections(crew: CrewMember, collections: Collection[]):
 
 export function getCollectionCount(crew: CrewMember, collections: Collection[]): number {
   return getCrewCollections(crew, collections).length;
+}
+
+export function getCollectionCrew(collection: Collection, crewList: CrewMember[], items: OwnedItem[]): CrewMember[] {
+  return crewList.filter(
+    (crew) => crewBelongsToCollection(crew, collection) && getCrewTier(crew, items) !== null
+  );
 }

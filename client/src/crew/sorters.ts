@@ -1,6 +1,7 @@
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
-import { getEquipmentSlotsRemaining } from './getters';
+import type { OwnedItem } from '../types/item';
+import { getEquipmentSlotsRemaining, getCrewTier, type CrewTier } from './getters';
 import { getCollectionCount } from '../collections/getters';
 
 export type Comparator<T> = (a: T, b: T) => number;
@@ -25,6 +26,16 @@ export function byEquipmentSlotsRemainingDesc(a: CrewMember, b: CrewMember): num
 
 export function byCollectionCountDesc(collections: Collection[]): Comparator<CrewMember> {
   return (a, b) => getCollectionCount(b, collections) - getCollectionCount(a, collections);
+}
+
+const TIER_ORDER: Record<CrewTier, number> = { ready: 0, needsWork: 1, leveling: 2 };
+
+export function byTierAsc(items: OwnedItem[]): Comparator<CrewMember> {
+  return (a, b) => TIER_ORDER[getCrewTier(a, items)!] - TIER_ORDER[getCrewTier(b, items)!];
+}
+
+export function byMaxRarityDesc(a: CrewMember, b: CrewMember): number {
+  return b.max_rarity - a.max_rarity;
 }
 
 export function byNameAsc(a: CrewMember, b: CrewMember): number {
