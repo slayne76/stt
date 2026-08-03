@@ -78,14 +78,20 @@ client/src/
     sorters.ts                 Composable comparators (see "Sorting design")
     CrewTable.tsx               Shared table renderer (#/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
-  collections/                  Crew-collection membership logic (mirrors crew/'s shape)
-    getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections, getCollectionCount
+  collections/                  Crew↔collection logic + the Collections page's own components
+    getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
+                                getCollectionCount, getCollectionCrew (reverse direction)
+    rewards.ts                 getCuratedRewards — the reward/buff display allowlist
+    sorters.ts                 getCollectionCompletionRatio, byCompletionThenNameAsc
+    CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
+    CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
     FourFiveStarsCrewPage.tsx   rarity=4, max_rarity=5
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
     FourFourStarsCrewPage.tsx      rarity=4, max_rarity=4, "needs work"
+    CollectionsPage.tsx             one row per collection, reverse (collection→crew) view
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
@@ -322,6 +328,41 @@ to fully immortalize" — the function name doesn't currently signal this
 distinction. Flagged in the final review as a Minor/naming concern, not
 yet acted on.
 
+## Crew tier classification (ready / needsWork / leveling)
+
+Built for the Collections page (below), but lives in `crew/getters.ts`
+alongside `isImmortalized`/`isReadyToImmortalize` because it's a
+generalization of them, not a collections-specific concept:
+
+```ts
+export type CrewTier = 'ready' | 'needsWork' | 'leveling';
+
+export function getCrewTier(crew: CrewMember, items: OwnedItem[]): CrewTier | null {
+  if (isImmortalized(crew)) return null;
+  if (crew.rarity < crew.max_rarity - 1) return null;
+  if (crew.rarity === crew.max_rarity - 1) return 'leveling';
+  return isReadyToImmortalize(crew, items) ? 'ready' : 'needsWork';
+}
+```
+
+**No new business logic was needed for `ready`/`needsWork`** —
+`isImmortalized`/`isReadyToImmortalize` already check
+`rarity === max_rarity` generically, never hardcoded to 4. The 4/4 pages
+just happen to be the only place that pre-filters to `max_rarity === 4`
+before applying them; `getCrewTier` applies the same predicates across
+the whole roster instead. The one genuinely new rule is `leveling`'s
+**one-star bound**: `rarity === max_rarity - 1` exactly, not "any lower
+rarity." This was an explicit user correction mid-design — a first draft
+counted any `rarity < max_rarity` as `leveling` (413 of 597 sample crew);
+the corrected rule narrows it to 58, on the reasoning that "close to
+immortalized" means one star short, not "anywhere on the leveling path."
+Crew more than one star from their ceiling get `null` (excluded), same
+bucket as already-Immortalized crew.
+
+Verified against the real sample: `leveling: 58, ready: 10, needsWork: 43`,
+`486` excluded. A real edge case proves the generalization holds outside
+4/5: a crew at `1/2` (`max_rarity` 2) correctly classifies as `leveling`.
+
 ## The collections membership logic
 
 The game groups crew into thematic "collections" (`cryo_collections` in
@@ -338,13 +379,26 @@ interface Collection {
   name: string;
   traits: string[];
   extra_crew: number[];   // archetype_ids, NOT owned-instance ids — see below
+  progress: number;
+  claimable_milestone_index: number;
+  milestone: CollectionMilestone;
+}
+
+interface CollectionMilestone {
+  goal: number;
+  rewards: CollectionReward[];
+  buffs: CollectionBuff[];
 }
 ```
 
-Omits `image`, `description`, `progress`, `claimable_milestone_index`, and
-`milestone` — none are used by this feature or its planned successor (a
-future collections-eye-view page only needs `id`/`name` for display and
-`traits`/`extra_crew` for matching).
+Started narrower — `id`/`name`/`traits`/`extra_crew` only, on the
+reasoning that a future collections-eye-view page would only need those
+for display and matching. That page arrived (the Collections page, see
+feature history below) and needed real milestone data too, so the type
+grew to match — still "type only what you use," just what's used grew.
+`CollectionReward`/`CollectionBuff` are themselves narrow (`type`/
+`symbol`/`quantity`/`full_name` and `name` respectively) — see "Curated
+collection rewards" below for why.
 
 ### The membership rule
 
@@ -402,14 +456,31 @@ matches; `getCollectionCount(crew, collections)` is just that result's
 `.length` — the value shown in the "Collections" table column and used by
 the `byCollectionCountDesc` sort key.
 
-**Why the predicate is factored out on its own:** the app currently only
-needs the crew's-eye view ("which collections does this crew belong
-to?"), but a planned future page needs the reverse — for a given
-collection, which owned crew belong to it. That reduces to
-`crewList.filter((c) => crewBelongsToCollection(c, collection))`, reusing
-the *exact same* predicate with the arguments held the other way around.
-That page is **not built yet** — only the predicate is shaped so it costs
-nothing extra when it eventually is.
+**Why the predicate is factored out on its own:** it was originally
+shaped to support a reverse direction — for a given collection, which
+owned crew belong to it — without new matching logic. That reverse page
+now exists (the Collections page), and its getter proves the payoff:
+
+```ts
+export function getCollectionCrew(collection: Collection, crewList: CrewMember[], items: OwnedItem[]): CrewMember[] {
+  return crewList.filter(
+    (crew) => crewBelongsToCollection(crew, collection) && getCrewTier(crew, items) !== null
+  );
+}
+```
+
+Reuses `crewBelongsToCollection` unmodified, arguments just held the
+other way around, plus the tier filter (see "Crew tier classification"
+above) to narrow down to the same "close to immortalized" subset the
+crew pages show. **Deliberately returns unsorted** — sorting is composed
+at the call site (`CollectionsTable.tsx`), not inside this getter. This
+wasn't a stylistic choice: `crew/sorters.ts` already imports
+`getCollectionCount` from `collections/getters.ts`, so if this getter
+also imported sort comparators from `crew/sorters.ts`, it would create a
+cycle (`collections/getters.ts` → `crew/sorters.ts` →
+`collections/getters.ts`). **This is a load-bearing constraint for
+future work, not just history: `crew/getters.ts` must stay import-free of
+`collections/` — the whole graph stays acyclic only because it does.**
 
 **Dedup is a non-issue by construction:** membership is computed by
 filtering the single `collections` array with an OR'd predicate, not by
@@ -429,6 +500,103 @@ rather than deviate from the approved plan for a purely stylistic gain.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-03-crew-collections-count-design.md`,
 `docs/superpowers/plans/2026-08-03-crew-collections-count-plan.md`.
+
+## Curated collection rewards
+
+The Collections page shows a "Rewards" summary per collection, but not
+every reward the game grants — only a hand-picked subset the user
+actually cares about, everything else silently dropped. This is an
+explicit allowlist in `collections/rewards.ts` (`getCuratedRewards`), not
+a general-purpose reward formatter:
+
+| Include | Match | Display |
+|---|---|---|
+| 10x Portal | `reward.symbol === 'premium_10x_bundle'` | `10x Portal (quantity)` |
+| Portal | `reward.symbol === 'premium_1x_bundle'` | `Portal (quantity)` |
+| Dilithium | `reward.symbol === 'premium_purchasable'` | `Dilithium (quantity)` |
+| Crew | `reward.type === 1` | `reward.full_name` |
+| The Niners Avatar | `reward.symbol === 'niners_avatar'` | as-is |
+| Legendary Honorable Citation | `reward.symbol === 'honorable_citation_quality5'` | as-is |
+| Core Skill buffs | `buff.name` matches `/^(.+) Core Skill \+\d+%$/` | `Skill: {captured name}` |
+| Skill Proficiency buffs | `buff.name` matches `/^(.+) Skill Proficiency (?:Min\|Max) \+\d+%$/` | `Proficiency: {captured name}` |
+
+Excluded (verified present, deliberately not shown): Chronitons, Merits,
+Federation Credits, Honor (common — 63 of 88 collections — but still
+excluded per explicit confirmation), Replicator Fuel, 10x Standard
+Shuttle Boost. Anything unrecognized in the future is silently dropped —
+a safe default, since a new reward type is more likely worth a deliberate
+add than a sight-unseen surface.
+
+**Matched by `symbol`, not display `name`, wherever possible** — symbols
+are stable identifiers, display text is what changes if the game's
+copywriting does. `full_name` (not `name`) is used for the crew reward
+specifically because they differ: the one crew-reward example in the
+sample has `name: "Janeway"` but `full_name: "Lucille Davenport"` — the
+actual crew's proper name.
+
+**The two skill-buff categories needed parsing, not substring matching,
+and this is the part worth remembering if it's ever touched again:**
+- **"Core Skill" and "Skill Proficiency" live in `milestone.buffs`, never
+  `milestone.rewards`** — verified across all 88 collections, zero
+  matches in `rewards`. This was a real correction during design; the
+  user originally pointed at the wrong field.
+- **Skill Proficiency buffs always come in a Min/Max pair** for the same
+  skill (e.g. "Medicine Skill Proficiency Min +1%" and "...Max +1%") and
+  must collapse to **one** `Proficiency: Medicine` entry, not two. Two
+  `Set<string>` accumulators (one for Core-Skill skill names, one for
+  Proficiency skill names) do this for free — the regex strips the
+  Min/Max suffix before insertion, so both variants produce the same
+  `Set` key.
+- **The percentage is never displayed** — every matching buff in the real
+  sample is exactly `+1%`, confirmed exhaustively, so showing it would be
+  redundant, not informative.
+- **Verified worked example** — "Their Royal Highnesses" grants Command's
+  Min, Max, *and* Core buffs together, and must produce exactly
+  `['Portal (5)', 'Skill: Command', 'Proficiency: Command']` (3 entries,
+  not 4) — this is the case that actually proves the dedup works, not
+  just the more common single-buff case.
+
+**Spec:** `docs/superpowers/specs/2026-08-03-collections-row-detail-design.md`.
+
+## Collection completion sort
+
+The Collections page's row order changed from purely alphabetical to
+completion-ratio-first, alphabetical as the tiebreak — "which collection
+is closest to its next milestone" (`collections/sorters.ts`):
+
+```ts
+export function getCollectionCompletionRatio(collection: Collection): number {
+  return collection.milestone.goal === 0 ? -1 : collection.progress / collection.milestone.goal;
+}
+
+export function byCompletionThenNameAsc(a: Collection, b: Collection): number {
+  const ratioDiff = getCollectionCompletionRatio(b) - getCollectionCompletionRatio(a);
+  if (ratioDiff !== 0) return ratioDiff;
+  return a.name.localeCompare(b.name);
+}
+```
+
+**`goal === 0` is a real, common state, not a hypothetical edge case:** 8
+of the 88 sample collections are fully maxed out for this player (every
+milestone already claimed — confirmed by empty `rewards`/`buffs`
+alongside `goal: 0`), and a bare `progress / goal` division would produce
+`Infinity`/`NaN` for them. **These sort to the very bottom** (`-1`, below
+every partial-progress collection regardless of how low its ratio is) —
+this was an explicit user correction from an initial "rank complete
+collections first" instinct to "rank them last, since there's nothing
+left to do there." The `Progress` column shows `MAX` for these instead of
+a division.
+
+**A hard data limitation, not an implementation gap:** the game's UI
+shows a claimed/total milestone pair (e.g. "13 of 19"), but this payload
+only ever exposes the *current next* milestone (`progress`/`goal`) plus a
+running claimed-count (`claimable_milestone_index`) — there is no array
+of all milestones and no total-count field anywhere in
+`player.character.cryo_collections` or elsewhere in the payload,
+confirmed by exhaustive search. The `Milestone` column shows
+`claimable_milestone_index` alone; the total isn't retrievable from this
+data source at all, by anyone, ever — not something a future getter could
+extract with more effort.
 
 ## Sorting design
 
@@ -466,6 +634,28 @@ computing membership inline per comparison is fast enough (measured
 ~12ms for a full-page sort at real page sizes during final review) that a
 lookup-map would be optimizing before it's needed.
 
+**Two more `crew/sorters.ts` comparators, added for the Collections page's
+crew sub-lists:** `byTierAsc(items)` (another factory — needs `items` to
+compute each crew's tier, see "Crew tier classification" above) orders
+`ready` before `needsWork` before `leveling`; `byMaxRarityDesc` is a
+plain comparator ordering higher `max_rarity` first. `CollectionsTable`
+composes `byTierAsc(items), byMaxRarityDesc, byLevelDesc,
+byEquipmentSlotsRemainingDesc, byNameAsc` for each collection's crew
+sub-list — same five-key shape as the crew pages, with tier/max_rarity
+replacing collection-count as the leading keys. **`byTierAsc` assumes
+every crew it's given already has a non-`null` tier** (uses a non-null
+assertion on `getCrewTier(...)` for this reason) — it's only ever called
+on `getCollectionCrew`'s already-filtered output, never on a raw crew
+list.
+
+**`collections/sorters.ts` is a separate, smaller module** for sorting
+*collections themselves* (not crew) — `getCollectionCompletionRatio`/
+`byCompletionThenNameAsc`, see "Collection completion sort" above. Kept
+out of `crew/sorters.ts` since it operates on a different type entirely
+and has exactly one consumer (`CollectionsPage`), so there's no shared
+`combineComparators`-style composition need here — YAGNI against
+building generality nobody's asked for.
+
 ## The shared rendering layer
 
 `CrewTable` (`crew/CrewTable.tsx`) and `StarRating` (`crew/StarRating.tsx`)
@@ -486,6 +676,26 @@ system would be speculative generality nobody has asked for yet.
 `CrewTable` takes a required `collections: Collection[]` prop (added
 alongside the `Collections` column) — the same "pass the extra data list
 as context" pattern `isReadyToImmortalize` already used for `items`.
+
+**The Collections page has its own parallel rendering layer**
+(`CollectionsTable.tsx`, `CollectionCrewList.tsx`) rather than reusing
+`CrewTable` — the two tables show fundamentally different row shapes
+(one row per collection vs. one row per crew), so sharing would have
+meant threading collection-specific columns through a component built
+for crew rows. `CollectionsTable` renders one MUI `TableRow` pair per
+collection (`#`/`Collection`/`Rewards`/`Progress`/`Milestone`/`Crew` on
+the main row, a `colSpan`-ed row below holding that collection's
+`CollectionCrewList`) — the standard MUI "collapsible table row" recipe,
+except **the collapse half was removed entirely**, not hidden. Rows were
+originally individually expand/collapsible (`useState` tracking expanded
+ids, an `IconButton` toggle); once the user confirmed rows should always
+stay expanded, that whole state/toggle became genuinely dead code and was
+deleted rather than left unreachable — `useState`, `IconButton`, both
+arrow icons, and `Collapse` are all gone from the file. The sub-row keeps
+a subtle `action.hover` background tint so it still visually reads as
+"belonging to" its parent row without the collapse affordance doing that
+job implicitly. `CollectionCrewList` highlights `tier === 'ready'` crew
+with a bold name plus a small "Ready" `Chip`.
 
 ## Feature history (chronological)
 
@@ -527,6 +737,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
    sort key inserted between equipment-slots and name. First feature to
    add a new top-level module (`collections/`) alongside `crew/`, and the
    first factory-shaped comparator in `sorters.ts`.
+10. **Collections page** (`2026-08-03-collections-page`) — the reverse
+    direction of #9: for each of the 88 collections, which owned crew
+    belong to it. `getCrewTier` (deep-dive above, generalizing
+    Immortalization across every `max_rarity`), `getCollectionCrew`
+    (reuses `crewBelongsToCollection` unmodified, kept unsorted to avoid
+    a circular import), new `CollectionsTable`/`CollectionCrewList`
+    components, new `/collections` route. First feature where a
+    circular-import risk was caught and resolved *during planning*
+    rather than discovered at review time.
+11. **Collections row detail** (`2026-08-03-collections-row-detail`) —
+    extended the Collections page's main rows with row number, curated
+    rewards (deep-dive above), progress/goal, and claimed-milestone-count
+    columns; changed collection ordering from alphabetical to
+    completion-ratio-first (deep-dive above); removed the expand/collapse
+    UI entirely since rows are always expanded. Both task-level reviews
+    came back with zero findings — first feature in the project where an
+    implementer's diff matched its brief closely enough that no Minor
+    findings surfaced until the final whole-branch review.
 
 ## Current routes / nav (in order)
 
@@ -537,6 +765,7 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
 | 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
 | 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
+| Collections | `/collections` | one row per collection, reverse (collection→crew) view |
 
 ## How this project is worked on (process notes for a future session)
 
@@ -576,14 +805,17 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
   bad token, clear it (`sed -i '/github.com/d' ~/.git-credentials`)
   before retrying with a corrected token.
 - **`example-data.json`** (real personal game data, gitignored, lives at
-  the repo root) is the ground-truth reference for every crew-related
-  feature. Every non-trivial getter/filter has been verified against it —
-  usually via a throwaway `client/src/crew/__verify.ts` script, run via
-  `npx tsx`, deleted before committing. Reviewers have repeatedly
-  independently re-derived these numbers rather than trusting the
-  implementer's report, and this has caught real things (e.g. confirming
-  the `-4..0` sign convention wasn't a bug, hand-constructing a
-  4-missing-slot test case the real data didn't naturally contain).
+  the repo root) is the ground-truth reference for every crew- and
+  collections-related feature. Every non-trivial getter/filter has been
+  verified against it — usually via a throwaway `client/src/crew/__verify.ts`
+  or `client/src/collections/__verify.ts` script, run via `npx tsx`,
+  deleted before committing. Reviewers have repeatedly independently
+  re-derived these numbers rather than trusting the implementer's report,
+  and this has caught real things (e.g. confirming the `-4..0` sign
+  convention wasn't a bug, hand-constructing a 4-missing-slot test case
+  the real data didn't naturally contain, and independently re-deriving
+  all 88 collections' tier/reward/sort numbers during the Collections
+  row-detail final review rather than trusting the implementer's report).
 - **No automated test framework** — a deliberate, repeatedly-reaffirmed
   project-wide choice. Verification is TypeScript strict mode + ESLint +
   data-driven throwaway scripts against real data + manual dev-server curl
@@ -603,19 +835,20 @@ doing:
   "Refresh" button but no retry-on-error in its `Alert`; the crew pages
   have retry-on-error but no header refresh button. Predates the crew
   pages; nobody has unified it yet.
-- **Page-shell duplication:** all crew pages (`ThreeFourStarsCrewPage`,
+- **Page-shell duplication — the deferred threshold has now been
+  crossed:** all crew pages (`ThreeFourStarsCrewPage`,
   `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
-  `FourFourStarsCrewPage` — 4 files now) repeat the same
-  `usePlayerData()` + loading/error/empty-state/title scaffolding, differing
-  only in their filter composition and copy strings. The Collections
-  feature added a 4th repeated concern on top of the existing 3
-  (`getCollectionsList(data)` fetch + `collections` prop + sort-key
-  insertion, identically in all 4 files) — the final whole-branch review
-  explicitly called this "the clearest signal yet" that a shared
-  page-shell refactor is the next structural cleanup worth planning.
-  Recommendation from multiple reviews: extract a shared
-  `RarityCrewPage`/`CrewListPage` component or a `useRarityCrew(...)` hook
-  **once a 5th such page appears** — deliberately not done preemptively.
+  `FourFourStarsCrewPage`) repeat the same `usePlayerData()` +
+  loading/error/empty-state/title scaffolding, differing only in filter
+  composition and copy strings. `CollectionsPage` is now the **5th** page
+  with this identical shell — the exact trigger multiple prior reviews
+  named for finally extracting it. Still not done; still deliberately
+  deferred, but the condition for doing it is now met, not just
+  approaching. Recommendation unchanged: extract a shared
+  `RarityCrewPage`/`CrewListPage` component or a `usePageData(...)` hook
+  covering the `usePlayerData` + loading/error/empty/title pattern (the
+  filter/sort composition itself varies too much across pages to fold
+  into the same abstraction — only the shell repeats identically).
 - **Nav active-state:** the nav `ListItemButton`s don't show which page is
   currently selected (no `selected` prop / `useLocation` check). Cosmetic.
 - **`NAV_ITEMS` and `<Routes>` are hand-synced lists** in two different
@@ -650,19 +883,53 @@ doing:
   (GHSA-qwww-vcr4-c8h2) — doesn't apply, this app is a plain
   client-side-rendered SPA with no RSC usage. Worth `npm audit fix` next
   time dependencies are touched anyway.
+- **"Is this collection maxed out?" is checked twice, independently:**
+  `collection.milestone.goal === 0` is hardcoded in both
+  `collections/sorters.ts` (`getCollectionCompletionRatio`) and
+  `collections/CollectionsTable.tsx` (the `MAX` display branch). In
+  lockstep today; a future change to how "maxed" is detected has two
+  edit sites and only one is visible from either file. A one-line
+  `isMaxedOut(collection)` predicate (in `collections/sorters.ts` or a
+  small new `collections/milestone.ts`) would bind both to one
+  definition.
+- **The `-1` sort sentinel is undocumented in code:**
+  `getCollectionCompletionRatio` returns `-1` for maxed-out collections
+  with no comment explaining why — and this is exactly the decision that
+  was reversed once already during design (an initial "rank complete
+  collections first" instinct became "rank them last"). A future reader
+  could plausibly "fix" it back without knowing that's already been
+  tried and rejected. Worth a one-line comment or a named
+  `MAXED_OUT_RATIO` constant.
+- **Collections whose only rewards are excluded types render a blank
+  Rewards cell:** 5 real collections ("The Wild West," "Sherwood
+  Forest," "Set Sail!," "Our Man Bashir," "Perils in Paradise") only
+  grant Chronitons/Merits/Honor/Credits — all excluded by design — so
+  their curated-rewards column is empty. Spec-correct, but an empty cell
+  can read as "failed to load" rather than "nothing notable here."
+  Considered but not resolved: an em-dash or similar placeholder.
+- **`Milestone` and `Progress` can look redundant side by side:** for
+  collections whose milestone lands at every crew count, `progress`
+  numerically equals `claimable_milestone_index` (e.g. "Class A Dress" →
+  `13/14` and `13`). The columns are correct and represent different
+  things (current-milestone progress vs. total-claimed-count), but a
+  bare number under "Milestone" invites misreading as a second progress
+  figure. A header tooltip or relabeling to "Claimed" was suggested but
+  not acted on.
 
 ## Likely next steps
 
-The user has been adding crew-classification factors one at a time
-("I'll list them step by step" was the original framing) — level,
-equipment slots, and now collections count. Nothing is currently in
-flight. The Collections feature deliberately built its predicate
-(`crewBelongsToCollection`) to be reused in the opposite direction, so
-the most natural next ask is the **collections-eye-view page** it was
-shaped for: for a given collection, which owned crew belong to it
-(`crewList.filter((c) => crewBelongsToCollection(c, collection))` — zero
-new matching logic needed, just a new page and a getter that binds the
-arguments the other way). Other plausible next asks: another
-classification factor (skills? a different completion metric?), another
-rarity-bucket page reusing `CrewTable`, or finally tackling the
-page-shell duplication (now flagged twice as ripe).
+The user has been building this up feature-by-feature, each explicitly
+brainstormed and reviewed before implementation — level, equipment slots,
+collections count, then the collections-eye-view page (which the
+collections-count feature deliberately shaped its predicate to support,
+and which has now shipped, including a follow-up pass adding rewards/
+progress/milestone detail to it). Nothing is currently in flight.
+Plausible next asks, roughly by how directly they follow from what's
+already built: another classification factor (skills? traits?), a
+`getFilledSlotIndices`-style consolidation of the deferred issues above
+(several of which are now small, well-scoped, and independent — the
+`isMaxedOut` dedup and the `-1` sentinel comment could both be a single
+tiny follow-up commit), finally tackling the page-shell duplication (5
+pages now share the identical shell, the threshold every prior review
+named), or a `docs/PROJECT_STATE.md`-adjacent housekeeping pass if this
+document itself starts lagging again after a burst of features.
