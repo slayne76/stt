@@ -6,6 +6,7 @@ const DRAWER_WIDTH = 220;
 const NAV_ITEMS = [
   { label: 'Overview', path: '/' },
   { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
+  { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
 ];
 
 function AppLayout() {
