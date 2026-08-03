@@ -4,6 +4,8 @@ import AppLayout from './layout/AppLayout';
 import OverviewPage from './pages/OverviewPage';
 import ThreeFourStarsCrewPage from './pages/ThreeFourStarsCrewPage';
 import FourFiveStarsCrewPage from './pages/FourFiveStarsCrewPage';
+import FourFourStarsCrewReadyPage from './pages/FourFourStarsCrewReadyPage';
+import FourFourStarsCrewPage from './pages/FourFourStarsCrewPage';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
             <Route path="/" element={<OverviewPage />} />
             <Route path="/3-4-stars-crew" element={<ThreeFourStarsCrewPage />} />
             <Route path="/4-5-stars-crew" element={<FourFiveStarsCrewPage />} />
+            <Route path="/4-4-stars-crew-ready" element={<FourFourStarsCrewReadyPage />} />
+            <Route path="/4-4-stars-crew" element={<FourFourStarsCrewPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
