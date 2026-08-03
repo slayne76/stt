@@ -1,21 +1,9 @@
-import {
-  Alert,
-  Button,
-  CircularProgress,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
-import { getCrewList, getEquipmentSlotsRemaining } from '../crew/getters';
+import { getCrewList } from '../crew/getters';
 import { filterByRarity } from '../crew/filters';
 import { byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, combineComparators, sortCrew } from '../crew/sorters';
+import CrewTable from '../crew/CrewTable';
 
 function ThreeFourStarsCrewPage() {
   const { data, loading, error, refresh } = usePlayerData();
@@ -51,28 +39,7 @@ function ThreeFourStarsCrewPage() {
         crew.length === 0 ? (
           <Typography color="text.secondary">No crew at 3/4 stars.</Typography>
         ) : (
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>#</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell align="right">Level</TableCell>
-                  <TableCell align="right">Items to equip</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {crew.map((c, index) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>{c.name}</TableCell>
-                    <TableCell align="right">{c.level}</TableCell>
-                    <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <CrewTable crew={crew} />
         )
       )}
     </Stack>
