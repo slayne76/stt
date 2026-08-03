@@ -16,3 +16,7 @@ export function filterReadyToImmortalize(crew: CrewMember[], items: OwnedItem[])
 export function filterNeedsWork(crew: CrewMember[], items: OwnedItem[]): CrewMember[] {
   return crew.filter((c) => !isImmortalized(c) && !isReadyToImmortalize(c, items));
 }
+
+export function filterFrozenDuplicates(crew: CrewMember[], frozenArchetypeIds: Set<number>, maxRarity: number): CrewMember[] {
+  return crew.filter((c) => frozenArchetypeIds.has(c.archetype_id) && c.max_rarity === maxRarity);
+}
