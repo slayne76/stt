@@ -84,7 +84,8 @@ client/src/
                                 getCollectionCount, getCollectionCrew (reverse direction),
                                 getFrozenCrewArchetypeIds
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
-    sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc
+    sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
+                                isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
   pages/
@@ -619,6 +620,146 @@ confirmed by exhaustive search. The `Milestone` column shows
 data source at all, by anyone, ever — not something a future getter could
 extract with more effort.
 
+## The "Upgradable" chip and upgradable-first sort
+
+A follow-up to the needsWork tier label (above): a collection gets a blue
+"Upgradable" `Chip` next to its name when the crew still needed to reach
+its *next* milestone can already be fully covered by crew the player owns
+but hasn't finished immortalizing yet. The math (`collections/sorters.ts`):
+
+```ts
+export function isCollectionUpgradable(collection: Collection, qualifyingCrew: CrewMember[], items: OwnedItem[]): boolean {
+  const remaining = collection.milestone.goal - collection.progress;
+  if (remaining <= 0) return false;
+  const eligible = qualifyingCrew.filter((crew) => {
+    const tier = getCrewTier(crew, items);
+    return tier === 'ready' || tier === 'needsWork';
+  }).length;
+  return eligible >= remaining;
+}
+```
+
+`remaining = goal - progress` is the same arithmetic the Progress column
+already displays (see "Collection completion sort" above); `eligible`
+counts the collection's already-filtered qualifying crew (`getCollectionCrew`'s
+output, so frozen-archetype duplicates and non-close-to-immortalized crew
+are already excluded) at `ready` or `needsWork` tier. Upgradable iff
+`eligible >= remaining`.
+
+**No explicit `isMaxedOut` guard, deliberately** — the `remaining <= 0`
+check alone excludes maxed-out collections. Verified against real data
+both at design time and independently by the final reviewer: all 8
+maxed-out collections (`goal === 0`) retain non-zero `progress` from their
+last claimed milestone (values `27/62/91/12/10/10/10/13` in the sample),
+so `remaining` is always strictly negative for them — never zero, never
+positive. Zero collections have `remaining === 0` at all. Adding a
+redundant guard for a case the real data proves can't occur was raised
+and explicitly declined during brainstorming.
+
+**`isCollectionUpgradable` takes the already-filtered `qualifyingCrew` as
+a parameter — it does not call `getCollectionCrew` itself.** This mirrors
+`byTierAsc`/`byMaxRarityDesc` in `crew/sorters.ts`, which also operate on
+a pre-filtered list rather than re-deriving it.
+
+**Verified against `example-data.json`, independently re-derived twice**
+(task review and final review, each from raw data rather than by calling
+the shipped function): exactly 5 of 88 collections are upgradable —
+Delphic Expanse (7/8, remaining 1, eligible 1), Our Man Bashir (2/3, 1,
+1), Ruthless Aggression (114/120, 6, 6), Class A Dress (13/14, 1, 2),
+Perils in Paradise (2/3, 1, 2). Notable: every eligible crew across all 5
+is `needsWork` tier — the `ready`-tier half of the `||` is real code but
+untested by the current sample's data (not a defect; just not yet
+exercised).
+
+**Sort order: upgradable-first, ahead of completion ratio.** Explicit
+user request, not just a visual tag. The naive implementation — a
+comparator calling `isCollectionUpgradable`/`getCollectionCrew` from
+*inside* the per-comparison function — would run an O(597)-crew filter
+roughly `n log n` times (~1,100+ calls for 88 collections) instead of
+once, a real performance defect this project specifically designed around
+rather than discovered after the fact:
+
+```ts
+export function byUpgradableThenCompletionThenNameAsc(
+  collections: Collection[],
+  crewList: CrewMember[],
+  items: OwnedItem[],
+  frozenArchetypeIds: Set<number>
+): Comparator<Collection> {
+  const upgradableIds = new Set(
+    collections
+      .filter((c) => isCollectionUpgradable(c, getCollectionCrew(c, crewList, items, frozenArchetypeIds), items))
+      .map((c) => c.id)
+  );
+  return combineComparators(
+    (a, b) => Number(upgradableIds.has(b.id)) - Number(upgradableIds.has(a.id)),
+    byCompletionThenNameAsc
+  );
+}
+```
+
+The `Set` is precomputed once (88 `getCollectionCrew` calls, at factory
+call time) and the returned comparator does only O(1) lookups. **The
+final reviewer proved this empirically, not just by reading the
+structure:** 100,000 calls to the returned comparator completed in
+8.91ms (~0.09µs/call) — several orders of magnitude faster than a single
+`getCollectionCrew` call would be, confirming the expensive filter really
+is outside the hot path. The reviewer also brute-forced all 3,828
+collection pairs and found **zero** pairs compare equal, meaning the sort
+produces a strict total order — no flicker risk from
+`Array.prototype.sort`'s stability characteristics being incidentally
+relied upon. Real timing measured three times independently (design-time
+dry run, implementer, task reviewer) landed consistently in the same
+range: ~29-31ms steady-state, ~40-79ms on a cold/first call (JIT
+warm-up) — higher than the `byCollectionCountDesc` precedent (~12ms,
+"Sorting design" below) because this factory's precompute step does 88
+fresh crew-list filters rather than one cheap per-crew lookup, but still
+a one-time per-render cost, imperceptible during a page load/refresh.
+
+**Architecture change, not a silent one:** `collections/sorters.ts` was
+previously import-free besides the `Collection` type, and this file
+explicitly documented that as deliberate (see "Sorting design" below,
+which this feature makes partially inaccurate — corrected there too). It
+now imports `combineComparators`/`Comparator` from `crew/sorters.ts` and
+`getCollectionCrew` from `collections/getters.ts`. Checked and confirmed
+acyclic by two independent reviewers reading the actual import lists:
+`crew/getters.ts` imports only types; `collections/getters.ts` imports
+`crew/getters.ts`; `crew/sorters.ts` imports `collections/getters.ts`
+(pre-existing, for `getCollectionCount`) — nothing imports back into
+`collections/sorters.ts`, so the new edges
+(`collections/sorters.ts → crew/sorters.ts → collections/getters.ts →
+crew/getters.ts`, and `collections/sorters.ts → collections/getters.ts`
+directly) form a DAG.
+
+**Chip:** `<Chip label="Upgradable" size="small" color="info" sx={{ ml: 1 }} />`,
+rendered inline immediately after the collection name in the same
+`Collection` table cell (`CollectionsTable.tsx`) — the third distinct
+chip color on this page, after `success` (green, "Ready") and `warning`
+(amber, "4/4 Stars" — see needsWork tier label above), each tier/state
+getting its own color, no collision.
+
+**Accepted duplication, reasoned about explicitly, not an oversight:**
+`getCollectionCrew` now runs once more per collection at the page level
+(`CollectionsPage.tsx`, for the sort's upgradable set) in addition to
+`CollectionsTable`'s existing per-row call (for rendering) — 176 total
+calls per page render instead of 88. This project already accepts
+comparable per-render filtering costs elsewhere (`byCollectionCountDesc`'s
+~12ms precedent). **A real consistency risk flagged at final review,
+parked as a deferred minor, not fixed in this feature:** the two
+computations agree today only because `CollectionsPage.tsx` passes
+`CollectionsTable` the same `crew`/`items`/`frozenArchetypeIds` the sort
+factory received — if those inputs ever diverge (e.g. the table gains its
+own filter), a row could show a chip that didn't sort to the top, or vice
+versa. The clean fix, deferred: have `byUpgradableThenCompletionThenNameAsc`
+expose its `upgradableIds` Set as a return value, thread it into
+`CollectionsTable` as a prop, and delete the per-row `isCollectionUpgradable`
+call — this would both halve the `getCollectionCrew` calls (176→88) and
+remove the dual-source-of-truth risk in one move. See "Deferred issues"
+below.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-04-collections-upgradable-chip-design.md`,
+`docs/superpowers/plans/2026-08-04-collections-upgradable-chip-plan.md`.
+
 ## Frozen crew and duplicate exclusion
 
 STT lets a player fully immortalize a crew member and then "freeze" it —
@@ -846,10 +987,29 @@ list.
 **`collections/sorters.ts` is a separate, smaller module** for sorting
 *collections themselves* (not crew) — `getCollectionCompletionRatio`/
 `byCompletionThenNameAsc`, see "Collection completion sort" above. Kept
-out of `crew/sorters.ts` since it operates on a different type entirely
-and has exactly one consumer (`CollectionsPage`), so there's no shared
-`combineComparators`-style composition need here — YAGNI against
-building generality nobody's asked for.
+out of `crew/sorters.ts` since it operates on a different type entirely.
+
+**Update, Upgradable chip feature:** the claim above ("no shared
+composition need") no longer holds and is kept here only as history, not
+current fact. `collections/sorters.ts` now has two consumers
+(`CollectionsPage` *and* `CollectionsTable`, the latter for
+`isCollectionUpgradable`) and does use `combineComparators` — imported
+from `crew/sorters.ts` — to compose `byUpgradableThenCompletionThenNameAsc`
+with the existing `byCompletionThenNameAsc` (see "The 'Upgradable' chip
+and upgradable-first sort" above for the full deep-dive, including why
+this is still acyclic). **A Minor architectural smell flagged at final
+review, deferred rather than fixed:** `combineComparators`/`Comparator<T>`
+are fully generic and domain-neutral, but living in `crew/sorters.ts`
+forces this new `collections/ → crew/` edge for what's really a
+crew-agnostic utility. Extracting them to a shared, domain-neutral module
+(e.g. `types/comparator.ts` or `sorters/compose.ts`) would delete that
+edge entirely, leaving a clean one-directional
+`collections/sorters.ts → collections/getters.ts → crew/getters.ts`
+chain, and would pre-empt the actual cycle risk this creates: `crew/sorters.ts`
+already imports `collections/getters.ts`, so the day anything in
+`crew/sorters.ts` needs something from `collections/sorters.ts`, there is
+a real cycle, not just a smell. Zero-behavior-change move, not yet done —
+see "Deferred issues" below.
 
 ## The shared rendering layer
 
@@ -1009,6 +1169,28 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     chose "4/4 Stars," which shipped as a one-line post-review fix with
     its own scoped re-review, not a plan-vs-review case the controller
     could resolve unilaterally.
+15. **Collections "Upgradable" chip** (`2026-08-04-collections-upgradable-chip`)
+    — deep-dive above ("The 'Upgradable' chip and upgradable-first sort").
+    A collection gets a blue "Upgradable" chip and sorts to the top when
+    its remaining-to-milestone crew count is already covered by its
+    `ready`/`needsWork` crew. First feature with a proper design spec
+    since the needsWork label feature skipped one (this one spans three
+    files and a real architecture change, judged to warrant it). First
+    feature where the controller pre-validated the plan's exact code by
+    applying it directly on `main` and running build/lint/the real
+    verification script *before* dispatching any implementer — caught and
+    corrected an inaccurate performance claim in the plan (guessed "well
+    under ~12ms," measured ~29-31ms steady-state) before it could cause a
+    false failure downstream. First feature where a final-review finding
+    was adjudicated by the controller against the review's own
+    recommendation: the reviewer marked the `PROJECT_STATE.md` staleness
+    "Important — must fix before merge," but the controller recognized
+    this conflicts with the project's own established, repeatedly-confirmed
+    workflow (doc updates land as a separate commit *after* merge+push,
+    not inside the feature branch) and parked it for the standard
+    post-merge follow-up instead of looping a fix into the branch — the
+    same category of judgment call as the earlier `-4..0` sign-convention
+    override, just about process timing rather than business logic.
 
 ## Current routes / nav (in order)
 
@@ -1087,6 +1269,36 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 Collected across final reviews, roughly in the order they'd become worth
 doing:
 
+- **Upgradable-status dual computation (new, from the Upgradable chip
+  feature):** `CollectionsPage.tsx`'s sort factory and `CollectionsTable.tsx`'s
+  per-row chip check each independently call `getCollectionCrew` and
+  `isCollectionUpgradable` for the same collection — 176 total calls per
+  page render instead of 88, and correct today only because both receive
+  identical `crew`/`items`/`frozenArchetypeIds`. If those inputs ever
+  diverge, a row's chip and its sort position could disagree. Fix:
+  `byUpgradableThenCompletionThenNameAsc` should expose its precomputed
+  `upgradableIds: Set<number>` as a return value (or a second output),
+  threaded into `CollectionsTable` as a prop, deleting the per-row
+  `isCollectionUpgradable` call entirely — halves the `getCollectionCrew`
+  calls and removes the dual-source-of-truth risk in one move.
+- **`combineComparators`/`Comparator<T>` living in `crew/sorters.ts` (new,
+  from the Upgradable chip feature):** both are fully generic and
+  domain-neutral, but their location forces `collections/sorters.ts` to
+  import from a crew-domain module just to reuse them, and pre-empts a
+  real future cycle (`crew/sorters.ts` already imports
+  `collections/getters.ts`; if it ever needs anything from
+  `collections/sorters.ts`, that's a genuine cycle, not just a smell).
+  Fix: extract both to a shared, domain-neutral module (e.g.
+  `types/comparator.ts`) — zero behavior change, pure move.
+- **`isCollectionUpgradable`'s eligible-crew count assumes no duplicate
+  `archetype_id`s among a collection's eligible crew (new, from the
+  Upgradable chip feature):** if a player ever holds two un-immortalized
+  copies of the same max-rarity archetype, both would count toward
+  `eligible` even though only one could actually complete a milestone
+  slot. Verified currently zero risk (no archetype appears more than once
+  among any collection's non-null-tier crew in the sample), so this is
+  latent, not live. Same category of accepted gap as `OwnedItem` not
+  tracking `quantity`, below.
 - **Cross-page refresh UX inconsistency:** `OverviewPage` has a header
   "Refresh" button but no retry-on-error in its `Alert`; the crew pages
   have retry-on-error but no header refresh button. Predates the crew
@@ -1179,18 +1391,25 @@ collections they'd already completed, then reverse-engineered and proven
 correct via the `extra_crew`-progress reconciliation), and most recently
 its deliberate opposite — the two Frozen Duplicates pages, surfacing
 exactly what the exclusion feature hides so the user can review and
-decide keep-vs-trash in-game — and most recently the Collections
-needsWork tier label, a small follow-up giving the Collections page's
-crew sub-list a third visual signal (amber "4/4 Stars" chip) alongside
-the existing "Ready" chip, so `needsWork` crew are distinguishable from
-`leveling` crew at a glance. Nothing is currently in flight. Plausible
-next asks, roughly by how directly they follow from what's already
-built: another classification factor (skills? traits?), finally tackling
-the page-shell duplication (6 pages now share the identical shell, well
-past the threshold every prior review named), reconsidering whether
-frozen-crew exclusion should broaden to the 4 crew pages now that its
-correctness is proven rather than merely plausible, moving
-`getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the placement
-friction has actually triggered rather than staying hypothetical, or a
-`docs/PROJECT_STATE.md`-adjacent housekeeping pass if this document
-itself starts lagging again after a burst of features.
+decide keep-vs-trash in-game; the Collections needsWork tier label, a
+small follow-up giving the Collections page's crew sub-list a third
+visual signal (amber "4/4 Stars" chip) alongside the existing "Ready"
+chip; and most recently the Collections "Upgradable" chip, surfacing
+which collections' next milestone is already within reach given the
+player's ready/needsWork crew, with an upgradable-first sort so those
+collections rise to the top of the table. Nothing is currently in
+flight. Plausible next asks, roughly by how directly they follow from
+what's already built: the two Upgradable-feature deferred items
+(unifying the dual upgradable-status computation between the sort and
+the chip; extracting `combineComparators`/`Comparator<T>` to a
+domain-neutral module before the `collections/ ↔ crew/` import graph gets
+any more tangled) are now the freshest, most concretely-scoped follow-ups
+in the backlog; beyond those, another classification factor (skills?
+traits?), finally tackling the page-shell duplication (6 pages now share
+the identical shell, well past the threshold every prior review named),
+reconsidering whether frozen-crew exclusion should broaden to the 4 crew
+pages now that its correctness is proven rather than merely plausible,
+moving `getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the
+placement friction has actually triggered rather than staying
+hypothetical, or a `docs/PROJECT_STATE.md`-adjacent housekeeping pass if
+this document itself starts lagging again after a burst of features.
