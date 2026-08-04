@@ -24,3 +24,9 @@ export function getShipDisplayLevel(ship: Ship): string {
 export function getShipSchematicsDisplay(ship: Ship, items: OwnedItem[]): string {
   return `${getShipSchematicsOwned(ship, items)}/${ship.schematic_gain_cost_next_level}`;
 }
+
+export function getShipSchematicsProgress(ship: Ship, items: OwnedItem[]): number {
+  const needed = ship.schematic_gain_cost_next_level;
+  if (needed <= 0) return 100;
+  return Math.min(100, (getShipSchematicsOwned(ship, items) / needed) * 100);
+}

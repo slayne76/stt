@@ -1,7 +1,7 @@
-import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import { Box, LinearProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import type { Ship } from '../types/ship';
 import type { OwnedItem } from '../types/item';
-import { getShipDisplayLevel, getShipSchematicsDisplay } from './getters';
+import { getShipDisplayLevel, getShipSchematicsDisplay, getShipSchematicsProgress } from './getters';
 
 export interface ShipsTableProps {
   ships: Ship[];
@@ -26,7 +26,12 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
               <TableCell>{index + 1}</TableCell>
               <TableCell>{s.name}</TableCell>
               <TableCell align="right">{getShipDisplayLevel(s)}</TableCell>
-              <TableCell align="right">{getShipSchematicsDisplay(s, items)}</TableCell>
+              <TableCell align="right">
+                <Box sx={{ display: 'inline-block', minWidth: 100 }}>
+                  <LinearProgress variant="determinate" value={getShipSchematicsProgress(s, items)} color="primary" />
+                  <Typography variant="body2">{getShipSchematicsDisplay(s, items)}</Typography>
+                </Box>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
