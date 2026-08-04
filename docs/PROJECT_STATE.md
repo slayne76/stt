@@ -75,7 +75,7 @@ client/src/
     storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
-    filters.ts                 Array-in-array-out crew filtering
+    filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
     sorters.ts                 Composable comparators (see "Sorting design")
     CrewTable.tsx               Shared table renderer (#/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
@@ -94,6 +94,9 @@ client/src/
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
     FourFourStarsCrewPage.tsx      rarity=4, max_rarity=4, "needs work"
     CollectionsPage.tsx             one row per collection, reverse (collection→crew) view
+    FrozenDuplicatesPage.tsx        internal, parameterized (maxRarity/title) — see below
+    FourStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=4
+    FiveStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=5
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
@@ -726,6 +729,70 @@ existed, since they're more than one star from their ceiling.
 **Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-crew-exclusion-design.md`,
 `docs/superpowers/plans/2026-08-03-frozen-crew-exclusion-plan.md`.
 
+## Frozen duplicates pages (surfacing, not hiding)
+
+**The deliberate opposite of "Frozen crew and duplicate exclusion"
+above** — that feature *hides* frozen-archetype duplicates from the
+Collections page because they can never advance a collection; this one
+*surfaces* them explicitly, on two new pages ("4 Stars Duplicates," "5
+Stars Duplicates"), so the user can look at each short list and decide,
+in the game itself, whether to keep leveling a duplicate or dismiss/fuse
+it. Both features read the same `getFrozenCrewArchetypeIds` set; they
+just do opposite things with membership in it. If a future session sees
+both filters and assumes one must be a mistake given the other exists —
+it isn't. They serve different questions ("what still needs my
+attention toward a collection?" vs. "what active crew are redundant
+copies I should decide about?").
+
+```ts
+// crew/filters.ts
+export function filterFrozenDuplicates(crew: CrewMember[], frozenArchetypeIds: Set<number>, maxRarity: number): CrewMember[] {
+  return crew.filter((c) => frozenArchetypeIds.has(c.archetype_id) && c.max_rarity === maxRarity);
+}
+```
+
+**No completion-state filtering, by explicit user decision** — every
+active-roster crew whose archetype is frozen and whose `max_rarity`
+matches shows up, regardless of the duplicate's own level/equipment/
+rarity. The frozen twin itself is never a double-counting risk:
+`stored_immortals` entries aren't part of `player.character.crew` at
+all. **Two things worth knowing if this page ever looks "wrong":**
+- **The "5 Stars Duplicates" page is empty in the sample data, and that's
+  a data fact, not a bug.** Of the 12 archetypes with a frozen twin, the
+  `max_rarity` distribution is `{1:1, 2:5, 3:1, 4:5, 5:0}` — none happen
+  to be 5-star, despite 435 owned 5-star crew in the sample. A future
+  session seeing this page empty next to a large 5-star roster should
+  check the actual overlap before assuming something's broken.
+- **None of the 12 overlapping archetypes is itself already-immortalized
+  on the active roster in the sample**, so the "no completion-state
+  filtering" decision has never actually been exercised by real data yet.
+  If a listed duplicate is ever leveled all the way to Immortalized, it
+  will *still* appear on these pages — that's the intended, explicitly-
+  decided behavior, not something to "fix" if it's noticed later.
+
+`FrozenDuplicatesPage` (internal, not itself routed) takes `maxRarity`/
+`title` props; `FourStarsDuplicatesPage`/`FiveStarsDuplicatesPage` are
+thin wrappers (7 lines each, zero logic) rendering it with fixed values
+— chosen specifically because the two pages differ by exactly one
+number, without touching the broader page-shell duplication tracked
+below (adding two routes cost one shell copy, not two).
+
+**`filterFrozenDuplicates` takes the frozen-id `Set` as a plain
+parameter** rather than importing `getFrozenCrewArchetypeIds` itself —
+`crew/filters.ts` stays oblivious to where the set came from, same
+module-boundary discipline as `getCollectionCrew`'s call-site-composed
+sorting. `FrozenDuplicatesPage.tsx` itself does import from
+`collections/getters.ts` (for `getFrozenCrewArchetypeIds` and
+`getCollectionsList`), which is unremarkable — every crew page already
+imports `getCollectionsList` for `byCollectionCountDesc` — but see the
+deferred-issues entry below: this is the first page with nothing to do
+with collections that needs a `collections/` import, which is exactly
+the condition a prior review flagged as the point where
+`getFrozenCrewArchetypeIds`'s placement would start to matter.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-duplicates-pages-design.md`,
+`docs/superpowers/plans/2026-08-03-frozen-duplicates-pages-plan.md`.
+
 ## Sorting design
 
 Started as one named function per sort combination (`sortByName`, then
@@ -892,6 +959,15 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     review didn't just re-confirm the spec's claim but independently
     strengthened it — the `extra_crew`-collection `progress` reconciliation
     proves the exclusion correct rather than merely plausible.
+13. **Frozen duplicates pages** (`2026-08-03-frozen-duplicates-pages`) —
+    the deliberate opposite of #12 (deep-dive above): two new pages
+    surfacing frozen-archetype duplicates by `max_rarity` instead of
+    hiding them, via a new `filterFrozenDuplicates` and one parameterized
+    `FrozenDuplicatesPage` reused by two thin wrappers. Final review
+    independently re-derived the headline claim through a code path that
+    never called the shipped filter or sort functions at all, and got an
+    identical result — the strongest form of verification this project
+    has done yet.
 
 ## Current routes / nav (in order)
 
@@ -903,6 +979,8 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
 | 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
+| 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
+| 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
 
 ## How this project is worked on (process notes for a future session)
 
@@ -977,11 +1055,12 @@ doing:
   `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
   `FourFourStarsCrewPage`) repeat the same `usePlayerData()` +
   loading/error/empty-state/title scaffolding, differing only in filter
-  composition and copy strings. `CollectionsPage` is now the **5th** page
-  with this identical shell — the exact trigger multiple prior reviews
+  composition and copy strings. `CollectionsPage` and now
+  `FrozenDuplicatesPage` bring this to **6** pages sharing the identical
+  shell (parameterization kept the two Duplicates routes from being a
+  7th independent copy) — well past the trigger multiple prior reviews
   named for finally extracting it. Still not done; still deliberately
-  deferred, but the condition for doing it is now met, not just
-  approaching. Recommendation unchanged: extract a shared
+  deferred. Recommendation unchanged: extract a shared
   `RarityCrewPage`/`CrewListPage` component or a `usePageData(...)` hook
   covering the `usePlayerData` + loading/error/empty/title pattern (the
   filter/sort composition itself varies too much across pages to fold
@@ -1036,14 +1115,16 @@ doing:
   figure. A header tooltip or relabeling to "Claimed" was suggested but
   not acted on.
 - **`getFrozenCrewArchetypeIds` lives in `collections/getters.ts` but
-  reads crew-domain data** — it takes `PlayerData` and knows nothing
-  about collections, structurally a sibling of `getCrewList`/
-  `getOwnedItems` in `crew/getters.ts`. Harmless today, and doesn't
-  threaten the acyclicity constraint above (it only needs `PlayerData`
-  and a type, no import from `crew/`) — it only becomes friction if the
-  declined "broaden frozen-exclusion to the 4 crew pages" decision is
-  ever revisited, since those pages would then need to import from
-  `collections/`. Cheap to move then; not worth churning the diff now.
+  reads crew-domain data — the friction this was flagged as hypothetical
+  for has now actually arrived.** It takes `PlayerData` and knows
+  nothing about collections, structurally a sibling of `getCrewList`/
+  `getOwnedItems` in `crew/getters.ts`. Still doesn't threaten the
+  acyclicity constraint above (it only needs `PlayerData` and a type, no
+  import from `crew/`), and still not urgent — but `FrozenDuplicatesPage`
+  (see "Frozen duplicates pages" above) is now the first page with
+  nothing to do with collections that imports from `collections/getters.ts`
+  purely for this getter. Cheap to move to `crew/getters.ts` whenever
+  it's next touched; not worth a standalone diff just for this.
 
 ## Likely next steps
 
@@ -1051,16 +1132,20 @@ The user has been building this up feature-by-feature, each explicitly
 brainstormed and reviewed before implementation — level, equipment slots,
 collections count, the collections-eye-view page (which the
 collections-count feature deliberately shaped its predicate to support),
-a follow-up pass adding rewards/progress/milestone detail to it, and most
-recently frozen-crew duplicate exclusion (caught by the user noticing
-stale data on collections they'd already completed, then reverse-
-engineered and proven correct via the `extra_crew`-progress reconciliation
-— see deep-dive above). Nothing is currently in flight. Plausible next
-asks, roughly by how directly they follow from what's already built:
-another classification factor (skills? traits?), finally tackling the
-page-shell duplication (5 pages now share the identical shell, the
-threshold every prior review named), reconsidering whether frozen-crew
-exclusion should broaden to the 4 crew pages now that its correctness is
-proven rather than merely plausible, or a `docs/PROJECT_STATE.md`-adjacent
-housekeeping pass if this document itself starts lagging again after a
-burst of features.
+a follow-up pass adding rewards/progress/milestone detail to it, frozen-
+crew duplicate exclusion (caught by the user noticing stale data on
+collections they'd already completed, then reverse-engineered and proven
+correct via the `extra_crew`-progress reconciliation), and most recently
+its deliberate opposite — the two Frozen Duplicates pages, surfacing
+exactly what the exclusion feature hides so the user can review and
+decide keep-vs-trash in-game. Nothing is currently in flight. Plausible
+next asks, roughly by how directly they follow from what's already
+built: another classification factor (skills? traits?), finally tackling
+the page-shell duplication (6 pages now share the identical shell, well
+past the threshold every prior review named), reconsidering whether
+frozen-crew exclusion should broaden to the 4 crew pages now that its
+correctness is proven rather than merely plausible, moving
+`getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the placement
+friction has actually triggered rather than staying hypothetical, or a
+`docs/PROJECT_STATE.md`-adjacent housekeeping pass if this document
+itself starts lagging again after a burst of features.
