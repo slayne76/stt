@@ -13,12 +13,15 @@ function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
   return (
     <Box sx={{ py: 1 }}>
       {crew.map((c) => {
-        const isReady = getCrewTier(c, items) === 'ready';
+        const tier = getCrewTier(c, items);
+        const isReady = tier === 'ready';
+        const isNeedsWork = tier === 'needsWork';
         return (
           <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
             <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
             {isReady && <Chip label="Ready" size="small" color="success" />}
+            {isNeedsWork && <Chip label={`${c.max_rarity} Stars`} size="small" color="warning" />}
             <Typography color="text.secondary" sx={{ ml: 'auto' }}>
               Lv {c.level}
             </Typography>
