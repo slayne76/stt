@@ -68,13 +68,15 @@ client/src/
   layout/AppLayout.tsx          AppBar + Drawer nav shell; also the app's sole Refresh control
                                  (see "Topbar Refresh button" below) — its first non-page
                                  `usePlayerData()` consumer
+  layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
     crew.ts                    CrewMember interface (see below)
-    item.ts                    OwnedItem interface (see below)
+    item.ts                    OwnedItem interface (see below; `quantity?` added for Ships)
     collection.ts              Collection interface (see "The collections membership logic")
     storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
+    ship.ts                    Ship interface (see "Ships pages")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
@@ -90,6 +92,13 @@ client/src/
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
+  ships/                         All ship-related pure logic + the Ships pages' table (see "Ships pages")
+    getters.ts                 getShipList, isShipMaxed, getShipSchematicsOwned,
+                                getShipDisplayLevel, getShipSchematicsDisplay
+    filters.ts                 filterIncompleteShipsByRarity
+    sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
+                                byNameAsc, sortShips (reuses crew/sorters.ts's Comparator/combineComparators)
+    ShipsTable.tsx               Shared table renderer (#/Ship/Level/Schematics)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -100,6 +109,9 @@ client/src/
     FrozenDuplicatesPage.tsx        internal, parameterized (maxRarity/title) — see below
     FourStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=4
     FiveStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=5
+    ShipsPage.tsx                    internal, parameterized (rarity/title) — see "Ships pages"
+    FiveStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=5
+    FourStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=4
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
@@ -1157,6 +1169,152 @@ later.
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-topbar-refresh-button-design.md`,
 `docs/superpowers/plans/2026-08-04-topbar-refresh-button-plan.md`.
 
+## Ships pages
+
+Two new pages, "5 Stars Ships" and "4 Stars Ships," reachable via a new
+"Ships" flyout group in the sidebar — the first domain in this app that
+isn't crew or collections, and the first nested/flyout nav item. Each
+lists the player's ships at that rarity that are **not yet fully
+leveled**, one row per ship, sorted so the ships closest to completion
+rise to the top.
+
+**Data source:** `player.character.ships` (128 ships in the sample) — a
+sibling array to `player.character.crew`, never previously read by this
+app.
+
+### Verified facts about the ship data
+
+- `max_level` is 1:1 with `rarity`: rarity 1→`max_level` 5, 2→6, 3→7,
+  4→8, 5→9. **Every rarity-1/2/3 ship in the sample already has `level
+  === max_level`** — confirmed, which is why only two pages exist (18
+  incomplete 4★ ships, 55 incomplete 5★ ships in the sample).
+- **The game's on-screen level is the raw JSON value plus one, out of
+  `max_level` plus one** — `getShipDisplayLevel(ship)` returns
+  `` `${ship.level + 1}/${ship.max_level + 1}` ``. Confirmed against two
+  independent real examples the user gave from memory: H.M.S. Bounty is
+  `level: 9, max_level: 9` in the JSON, described as "10/10"; U.S.S.
+  Reliant is `level: 8, max_level: 9`, described as "9/10." Both match
+  `display = raw + 1` exactly.
+- **Current schematics owned live in `player.character.items`, not on the
+  ship object** — `type: 8` entries whose `archetype_id` equals the
+  ship's own `schematic_id`. `getShipSchematicsOwned(ship, items)` does
+  `items.find(item => item.archetype_id === ship.schematic_id)?.quantity
+  ?? 0`. Verified: U.S.S. Reliant (`schematic_id: 8176`) has a matching
+  item with `quantity: 1755`; its `schematic_gain_cost_next_level` is
+  `1800` — 1755/1800 toward next level. **5 of 73 incomplete ships in the
+  sample have no matching item at all** (all `level: 0`, zero schematics
+  collected yet) — the `?? 0` fallback is what handles this, not an error
+  case.
+- `schematic_gain_cost_next_level` is `-1` for every already-maxed ship in
+  the sample (0 exceptions) and a real positive number for every
+  incomplete one (0 exceptions) — a clean sentinel. `getShipSchematicsDisplay`
+  does not special-case this sentinel (would render e.g. `"0/-1"` for a
+  maxed ship) — a deliberately accepted gap, since the only call site
+  (`ShipsTable`, fed by `filterIncompleteShipsByRarity`'s output) never
+  calls it on a maxed ship in practice. See "Deferred issues" below.
+- `OwnedItem` (`types/item.ts`) gained one optional field —
+  `quantity?: number` — the only change to an existing type this feature
+  made. This closes a deferred-issues backlog entry that had anticipated
+  exactly this trigger ("`OwnedItem` doesn't track `quantity`").
+
+### Sort order
+
+`combineComparators(byLevelDesc, byLevelProgressDesc,
+byMissingSchematicsAsc(items), byNameAsc)` (`ships/sorters.ts`, reusing
+`Comparator<T>`/`combineComparators` imported from `crew/sorters.ts`
+as-is — not extracted to a shared module, an explicit decision reaffirmed
+during this feature; see "Deferred issues" below for why that's now more
+motivated than before) — level first (higher first), then
+level-completion fraction (`level / max_level`, closer to its own ceiling
+first), then remaining schematics (fewer first), then name as the final
+tiebreak.
+
+**Documented, not a defect:** `max_level` is 1:1 with `rarity`, and each
+page only ever shows one rarity, so `byLevelProgressDesc` can never
+actually change an ordering `byLevelDesc` alone wouldn't already produce
+on this app's current pages — a level tie is already a progress-fraction
+tie within a page. Implemented anyway, exactly as the user specified,
+because it's correct general logic that would matter the moment a page
+ever mixed rarities. Same category as `isCollectionUpgradable`'s
+documented-but-currently-unexercised `||` branch. **A related latent gap
+flagged at final review:** `ships/sorters.ts`'s comparators silently
+assume their input has already been filtered to non-maxed ships (a maxed
+ship's `-1` sentinel would sort it to the very top of both
+`byMissingSchematicsAsc` and `byLevelProgressDesc`) — true today only
+because `ShipsPage` always filters first, not enforced by the module
+itself. See "Deferred issues" below.
+
+### Table and pages
+
+`ShipsTable` columns: `#`, `Ship` (name), `Level` (right-aligned,
+`getShipDisplayLevel`), `Schematics` (right-aligned,
+`getShipSchematicsDisplay`). **No Stars/rarity column** — every row on a
+given page shares the same rarity already stated in the page title,
+unlike the crew pages where rarity varies row-to-row.
+
+`ShipsPage` (internal, not routed) takes `rarity`/`title` props, the same
+pairing pattern `FrozenDuplicatesPage` established;
+`FiveStarsShipsPage`/`FourStarsShipsPage` are thin wrappers. Empty-state
+copy: "No incomplete ships at this rarity." Routes: `/5-stars-ships`,
+`/4-stars-ships`.
+
+### The nav flyout
+
+The app's first nested nav item. `AppLayout.tsx`'s `NAV_ITEMS` is now a
+mix of flat `NavLink`s and one `NavGroup` (`{ label, children: NavLink[]
+}`), discriminated by an `isNavGroup` type guard. "Ships" is appended at
+the end, its two children ordered "5 Stars Ships" then "4 Stars Ships" —
+**explicit user choice, overriding this project's usual "lower number
+first" nav-ordering convention, for this group only.**
+
+New `NavGroupItem` component (`layout/NavGroupItem.tsx`) renders the
+"Ships" row (`cursor: default`, no `onClick`/route — it's a group label,
+not a page) plus an MUI `Popper` anchored to it, `placement="right-start"`.
+**Portal-based deliberately, not `disablePortal`** — the `Drawer`'s paper
+has `overflow-y: auto`, which would clip an inline flyout.
+
+Open/close state: entering or focusing *either* the trigger or the panel
+opens it and cancels any pending close; leaving or blurring *either*
+schedules a close on a cancelable ~150ms timer. **A final-review finding
+proved this is more robust than it looks:** because the `Popper` is a
+JSX child of the trigger `div` in the React tree (even though portaled
+elsewhere in the DOM), React's enter/leave event synthesis computes the
+lowest-common-ancestor over the *fiber* tree, not the DOM tree — so
+diagonal mouse movement from the trigger straight into the panel never
+even fires the trigger's `onMouseLeave`. The 150ms timer is real
+belt-and-braces for the pixel-gap case, not the only thing preventing
+flicker-close.
+
+**Keyboard accessibility required a fix round after the initial task
+review.** The first implementation relied on native Tab order to carry
+focus from the trigger into the portaled panel — but `Popper` mounts its
+content as the *last child of `document.body`*, so Tab order follows DOM
+order, not visual/component order. On any real page with focusable
+content in the main area, tabbing off "Ships" moved focus into the page
+instead of into the panel, which then closed. (The bug shipped past its
+own task's interactive Playwright test because that test happened to run
+against the Overview page's session-cookie-missing error state, which has
+zero focusable elements — Tab wrapped around and landed on the panel for
+the wrong reason.) Fixed with explicit keyboard handling: `ArrowDown`/
+`Enter` on the trigger opens the panel and moves focus to its first item
+(via a callback ref, since `Popper`'s content mounts on a delay a plain
+`useEffect` would race); `Escape` inside the panel closes it and returns
+focus to the trigger, guarded against immediately reopening itself via
+the trigger's own `onFocus`. Re-verified on `/5-stars-ships` (a page with
+a real focusable "Retry"-style control), not the page that hid the
+original bug.
+
+**Known gaps, deferred, not yet acted on:** no ARIA menu semantics
+(`role="menu"`/`"menuitem"`, `aria-haspopup`/`aria-expanded`) — the panel
+is keyboard-*operable* now but not screen-reader-idiomatic; `Escape` only
+closes the panel when focus is already inside it, not when focus is still
+on the trigger (`handlePanelKeyDown` is attached to the portaled `Paper`,
+which doesn't receive keydowns that never left the trigger). See
+"Deferred issues" below.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-04-ships-pages-design.md`,
+`docs/superpowers/plans/2026-08-04-ships-pages-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -1291,6 +1449,27 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     Upgradable chip) where a final-review `PROJECT_STATE.md`-staleness
     finding was adjudicated as a post-merge follow-up rather than a
     branch fix, for the same established-workflow reason as before.
+17. **Ships pages** (`2026-08-04-ships-pages`) — deep-dive above. Two new
+    pages ("5 Stars Ships," "4 Stars Ships") reading a previously-untouched
+    part of the payload (`player.character.ships`), the first domain
+    module that isn't crew or collections, and a new hover/focus flyout
+    "Ships" nav group — the app's first nested nav item. First feature
+    with a genuine multi-round fix loop at the task level (not just final
+    review): the initial `NavGroupItem` implementation passed its own
+    task's interactive Playwright test but only because that test ran
+    against a page with zero focusable content, masking a real keyboard-
+    Tab-order bug caused by `Popper`'s portal mounting outside the
+    visual DOM order; caught by task review, fixed, and re-verified on a
+    page that actually exercised the bug. First feature where the
+    controller found and patched a gap in its own plan text *before*
+    dispatching any implementer (the `byLevelProgressDesc` comparator's
+    "not dead code" rationale lived in the design spec's prose but not in
+    the Global Constraints block task reviewers actually see — added
+    during the required pre-flight scan, avoiding a predictable
+    false-positive review finding). Third feature (after the Upgradable
+    chip and the Refresh button) where a final-review
+    `PROJECT_STATE.md`-staleness finding was adjudicated as a post-merge
+    follow-up rather than a branch fix.
 
 ## Current routes / nav (in order)
 
@@ -1304,6 +1483,12 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
 | 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
 | 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
+| Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
+| Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
+
+"Ships" itself is not a route — it's a hover/focus flyout group in the drawer
+(see "Ships pages" below), the app's first nested nav item. Every other row
+above is still a flat, directly-clickable drawer entry.
 
 ## How this project is worked on (process notes for a future session)
 
@@ -1411,12 +1596,13 @@ doing:
   `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
   `FourFourStarsCrewPage`) repeat the same `usePlayerData()` +
   loading/error/empty-state/title scaffolding, differing only in filter
-  composition and copy strings. `CollectionsPage` and now
-  `FrozenDuplicatesPage` bring this to **6** pages sharing the identical
-  shell (parameterization kept the two Duplicates routes from being a
-  7th independent copy) — well past the trigger multiple prior reviews
-  named for finally extracting it. Still not done; still deliberately
-  deferred. Recommendation unchanged: extract a shared
+  composition and copy strings. `CollectionsPage`, `FrozenDuplicatesPage`,
+  and now `ShipsPage` bring this to **7** pages sharing the identical
+  shell (parameterization kept the two Duplicates routes and the two
+  Ships routes from being independent copies) — well past the trigger
+  multiple prior reviews named for finally extracting it. Still not
+  done; still deliberately deferred. Recommendation unchanged: extract a
+  shared
   `RarityCrewPage`/`CrewListPage` component or a `usePageData(...)` hook
   covering the `usePlayerData` + loading/error/empty/title pattern (the
   filter/sort composition itself varies too much across pages to fold
@@ -1481,6 +1667,56 @@ doing:
   nothing to do with collections that imports from `collections/getters.ts`
   purely for this getter. Cheap to move to `crew/getters.ts` whenever
   it's next touched; not worth a standalone diff just for this.
+- **`combineComparators`/`Comparator<T>` cross-domain reliance is now
+  stronger, not weaker (new, from the Ships pages feature):** the
+  deferred item above (from the Upgradable chip feature) about extracting
+  these to a domain-neutral module was reconsidered during Ships and
+  explicitly left as-is — reusing them from `crew/sorters.ts` was judged
+  the right call for this feature specifically, since `ships/` is a new
+  module and extracting mid-feature would have touched files the plan
+  explicitly froze. But `ships/sorters.ts` is now the **third** consumer
+  of a crew-housed utility (`collections/sorters.ts` and
+  `collections/CollectionsTable.tsx` were already importing it), which
+  makes the eventual extraction more clearly worthwhile, not less.
+- **`ships/sorters.ts`'s comparators assume pre-filtered (non-maxed) input
+  (new, from the Ships pages feature):** `byMissingSchematicsAsc` and
+  `byLevelProgressDesc` both silently rely on being called only on
+  incomplete ships — a maxed ship's `schematic_gain_cost_next_level: -1`
+  sentinel would sort it to the very top of `byMissingSchematicsAsc`
+  (`-1 - owned` is a large negative number), and `byLevelProgressDesc`
+  returns exactly `1.0` for any maxed ship. True today only because
+  `ShipsPage` always calls `filterIncompleteShipsByRarity` first, not
+  enforced by the sorters module itself. Same category as
+  `getShipSchematicsDisplay`'s unhandled `"0/-1"` case, immediately
+  below. Fix: a one-line file-header comment stating the assumption; no
+  behavior change needed.
+- **`getShipSchematicsDisplay` renders `"0/-1"` for an already-maxed ship
+  (new, from the Ships pages feature):** the getter doesn't special-case
+  the `-1` sentinel. Unreachable today — the only call site
+  (`ShipsTable`) only ever receives `filterIncompleteShipsByRarity`'s
+  output — but latent for the same reason as the item above.
+- **`NavGroupItem`'s `Escape` key only closes the flyout when focus is
+  already inside the panel, not when focus is still on the trigger (new,
+  from the Ships pages feature):** `handlePanelKeyDown` is attached to
+  the portaled `Paper`, which never receives a keydown that fired on the
+  trigger and never left it — the most common state right after Tab
+  lands on "Ships." Fix: move the `Escape` handling to the wrapper
+  `div`'s `onKeyDown` (both trigger and panel keydowns bubble there
+  through the React tree regardless of the DOM portal), guarded with an
+  `document.activeElement !== triggerRef.current` check so it doesn't
+  fight the existing focus-return logic.
+- **`NavGroupItem` has no ARIA menu semantics (new, from the Ships pages
+  feature):** no `role="menu"`/`"menuitem"`, no `aria-haspopup`/
+  `aria-expanded` on the trigger, no `ArrowUp`/`ArrowDown` movement
+  between panel items. The flyout is keyboard-*operable* after the
+  Task 4 fix round (see "Ships pages" above) but not screen-reader-
+  idiomatic. Worth pairing with the `Escape`-from-trigger fix above as
+  one small follow-up, not urgent for a single-user local tool.
+- **`NavGroupItemProps.items` duplicates `AppLayout.tsx`'s `NavLink` shape
+  (new, from the Ships pages feature):** both independently declare
+  `{ label: string; path: string }`. Exporting `NavLink` from one file and
+  importing it in the other would remove the duplication — zero behavior
+  change.
 
 ## Likely next steps
 
@@ -1500,23 +1736,32 @@ visual signal (amber "4/4 Stars" chip) alongside the existing "Ready"
 chip; and most recently the Collections "Upgradable" chip, surfacing
 which collections' next milestone is already within reach given the
 player's ready/needsWork crew, with an upgradable-first sort so those
-collections rise to the top of the table; and most recently the topbar
-Refresh button, unifying what was previously an Overview-only control
-into an always-visible, app-wide green button in `AppLayout`'s topbar —
-which also closed the long-standing "cross-page refresh UX inconsistency"
-deferred item. Nothing is currently in flight. Plausible next asks,
-roughly by how directly they follow from what's already built: the two
-Upgradable-feature deferred items (unifying the dual upgradable-status
-computation between the sort and the chip; extracting
-`combineComparators`/`Comparator<T>` to a domain-neutral module before the
-`collections/ ↔ crew/` import graph gets any more tangled) are still the
-freshest, most concretely-scoped follow-ups in the backlog; beyond those,
-another classification factor (skills?
-traits?), finally tackling the page-shell duplication (6 pages now share
-the identical shell, well past the threshold every prior review named),
-reconsidering whether frozen-crew exclusion should broaden to the 4 crew
-pages now that its correctness is proven rather than merely plausible,
-moving `getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the
-placement friction has actually triggered rather than staying
-hypothetical, or a `docs/PROJECT_STATE.md`-adjacent housekeeping pass if
-this document itself starts lagging again after a burst of features.
+collections rise to the top of the table; the topbar Refresh button,
+unifying what was previously an Overview-only control into an
+always-visible, app-wide green button in `AppLayout`'s topbar — which
+also closed the long-standing "cross-page refresh UX inconsistency"
+deferred item; and most recently the Ships pages, the first non-crew/
+collections domain (`player.character.ships`) and the first nested nav
+item — two new pages surfacing not-yet-fully-leveled 4★/5★ ships via a
+hover/focus flyout "Ships" nav group, which needed a keyboard-
+accessibility fix round after its own task's interactive test initially
+passed for the wrong reason (see "Ships pages" above). Nothing is
+currently in flight. Plausible next asks, roughly by how directly they
+follow from what's already built: the small paired follow-up on
+`NavGroupItem` (Escape-from-trigger + ARIA menu semantics, both flagged
+at Ships' final review) is the freshest and most concretely-scoped;
+close behind it, extracting `combineComparators`/`Comparator<T>` to a
+domain-neutral module is now backed by a third consumer
+(`ships/sorters.ts`, alongside `collections/sorters.ts` and
+`CollectionsTable.tsx`) rather than just the two the Upgradable-chip
+feature left it at; beyond those, unifying the dual upgradable-status
+computation between the Collections sort and chip, another crew
+classification factor (skills? traits?), finally tackling the page-shell
+duplication (7 pages now share the identical shell, well past the
+threshold every prior review named), reconsidering whether frozen-crew
+exclusion should broaden to the 4 crew pages now that its correctness is
+proven rather than merely plausible, moving `getFrozenCrewArchetypeIds`
+to `crew/getters.ts` now that the placement friction has actually
+triggered rather than staying hypothetical, or a
+`docs/PROJECT_STATE.md`-adjacent housekeeping pass if this document
+itself starts lagging again after a burst of features.
