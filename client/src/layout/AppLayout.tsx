@@ -1,10 +1,25 @@
 import { AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
+import NavGroupItem from './NavGroupItem';
 
 const DRAWER_WIDTH = 220;
 
-const NAV_ITEMS = [
+interface NavLink {
+  label: string;
+  path: string;
+}
+
+interface NavGroup {
+  label: string;
+  children: NavLink[];
+}
+
+function isNavGroup(item: NavLink | NavGroup): item is NavGroup {
+  return 'children' in item;
+}
+
+const NAV_ITEMS: (NavLink | NavGroup)[] = [
   { label: 'Overview', path: '/' },
   { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
   { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
@@ -13,6 +28,13 @@ const NAV_ITEMS = [
   { label: 'Collections', path: '/collections' },
   { label: '4 Stars Duplicates', path: '/4-stars-duplicates' },
   { label: '5 Stars Duplicates', path: '/5-stars-duplicates' },
+  {
+    label: 'Ships',
+    children: [
+      { label: '5 Stars Ships', path: '/5-stars-ships' },
+      { label: '4 Stars Ships', path: '/4-stars-ships' },
+    ],
+  },
 ];
 
 function AppLayout() {
@@ -51,11 +73,15 @@ function AppLayout() {
       >
         <Toolbar />
         <List>
-          {NAV_ITEMS.map((item) => (
-            <ListItemButton key={item.path} onClick={() => navigate(item.path)}>
-              <ListItemText primary={item.label} />
-            </ListItemButton>
-          ))}
+          {NAV_ITEMS.map((item) =>
+            isNavGroup(item) ? (
+              <NavGroupItem key={item.label} label={item.label} items={item.children} />
+            ) : (
+              <ListItemButton key={item.path} onClick={() => navigate(item.path)}>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            )
+          )}
         </List>
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
