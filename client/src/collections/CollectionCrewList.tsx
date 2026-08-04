@@ -21,7 +21,7 @@ function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
             <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
             {isReady && <Chip label="Ready" size="small" color="success" />}
-            {isNeedsWork && <Chip label={`${c.max_rarity} Stars`} size="small" color="warning" />}
+            {isNeedsWork && <Chip label={`${c.max_rarity}/${c.max_rarity} Stars`} size="small" color="warning" />}
             <Typography color="text.secondary" sx={{ ml: 'auto' }}>
               Lv {c.level}
             </Typography>
