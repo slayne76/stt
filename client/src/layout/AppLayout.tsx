@@ -32,7 +32,10 @@ function AppLayout() {
             onClick={() => void refresh()}
             disabled={loading}
             startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
-            sx={{ ml: 'auto' }}
+            sx={{
+              ml: 'auto',
+              '&.Mui-disabled': { bgcolor: 'success.dark', color: 'common.white' },
+            }}
           >
             Refresh
           </Button>
