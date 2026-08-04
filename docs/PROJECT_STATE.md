@@ -65,7 +65,9 @@ client/src/
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
-  layout/AppLayout.tsx          AppBar + Drawer nav shell
+  layout/AppLayout.tsx          AppBar + Drawer nav shell; also the app's sole Refresh control
+                                 (see "Topbar Refresh button" below) — its first non-page
+                                 `usePlayerData()` consumer
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
@@ -1073,6 +1075,88 @@ duplicates, a different concept entirely) — this wording was corrected
 during final review, after the plan had specified the literal
 `${max_rarity} Stars` form verbatim.
 
+## Topbar Refresh button
+
+The "Refresh" control used to live only in `OverviewPage.tsx`'s own
+header. It now lives in `AppLayout.tsx`'s `Toolbar` — the app's
+persistent topbar, rendered on every route — right-aligned, green
+(`color="success"`) instead of the default blue, with a small
+`CircularProgress` spinner while loading:
+
+```tsx
+<Button
+  variant="contained"
+  color="success"
+  onClick={() => void refresh()}
+  disabled={loading}
+  startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+  sx={{
+    ml: 'auto',
+    '&.Mui-disabled': { bgcolor: 'success.dark', color: 'common.white' },
+  }}
+>
+  Refresh
+</Button>
+```
+
+**Zero new plumbing, by construction, not by extra effort.** `refresh()`
+already lived in `PlayerDataContext` as one function shared by every page
+via `usePlayerData()` — there was never a per-page fetch or per-page
+cache, just one `data`/`loading`/`error`/`refresh` in the whole app.
+`AppLayout` is rendered inside `PlayerDataProvider` in the component tree
+(`App.tsx`: `PlayerDataProvider` wraps `BrowserRouter`, which contains the
+`AppLayout` route), so `AppLayout` can call `usePlayerData()` directly,
+exactly like every page already does. This was verified directly, not
+assumed, by the final reviewer reading `App.tsx`'s actual provider
+nesting — it's the one claim the whole feature depends on. The practical
+effect: clicking Refresh from any page updates the one shared `data`
+value, and whatever page is currently rendered re-renders off that same
+updated value — no page-specific wiring needed.
+
+**`color="inherit"` on the spinner doesn't mean what the button's disabled
+styling makes it look like — this cost a fix-loop round, worth
+remembering.** MUI's contained-`Button` disabled state (`Mui-disabled`)
+overrides `color` entirely with theme greys (`action.disabled`/
+`action.disabledBackground`), regardless of the button's own `color`
+prop. Since `disabled={loading}` and `loading` is `true` during every
+refresh **and on every app start** (`PlayerDataContext`'s `loading` state
+initializes to `true`), the button spent all of its "working" time
+rendered as ~1.5:1-contrast grey-on-blue, with the spinner — meant to be
+the app-wide loading signal this feature was specifically asked to add —
+nearly invisible. Caught only at final review (the task-level review,
+which checks diff-vs-plan fidelity, had no way to catch a bug that was
+baked into the plan's own visual assumption, not a deviation from it).
+Fixed with a `&.Mui-disabled` `sx` override forcing white-on-dark-green
+specifically during the disabled state — the snippet above is the
+corrected, shipped version, not the plan's original.
+
+**Re-render behavior, checked and confirmed a non-issue at this app's
+scale:** giving `AppLayout` a `usePlayerData()` call means it now
+re-renders on every `loading`/`data` transition (previously it didn't,
+protected by React's children-as-prop bail-out — `PlayerDataProvider`
+received a stable `children` element from `App`, so only actual context
+consumers below re-rendered). The added cost is one AppBar + two
+`Toolbar`s + one `Typography` + one `Button` + the `Drawer`'s 8
+`ListItemButton`s re-rendering per refresh (~15 elements, all producing
+identical output so React diffs them to zero DOM mutations) — a fraction
+of what the crew/Collections pages' own hundred-plus-row re-renders
+already cost on the exact same state transitions. No `useMemo` added to
+`PlayerDataContext`'s provider value for this — flagged as a reasonable
+general hygiene improvement, not a problem this feature needs to fix.
+
+**Overview's own button was removed, not duplicated** — explicit,
+considered decision, not an oversight. `OverviewPage.tsx`'s title reverted
+to a plain `Typography variant="h4"`, matching every other page's header
+pattern; the `Stack direction="row"` wrapper that existed only to
+position the old button is gone. Overview's error `Alert` still has no
+in-page "Retry" action (unlike the crew/Collections pages, which pair
+theirs with one) — by design, since the always-visible topbar button
+already covers it; noted so the asymmetry doesn't read as an oversight
+later.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-04-topbar-refresh-button-design.md`,
+`docs/superpowers/plans/2026-08-04-topbar-refresh-button-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -1191,6 +1275,22 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     post-merge follow-up instead of looping a fix into the branch — the
     same category of judgment call as the earlier `-4..0` sign-convention
     override, just about process timing rather than business logic.
+16. **Topbar Refresh button** (`2026-08-04-topbar-refresh-button`) —
+    deep-dive above. Moved the "Refresh" control from `OverviewPage`'s own
+    header into `AppLayout`'s persistent topbar, recolored green, added a
+    loading spinner. First feature that touched `AppLayout.tsx` itself
+    (previously untouched by any feature) and the first non-page
+    `usePlayerData()` consumer. First feature with a real bug caught only
+    at final review that traced back to an incorrect assumption in the
+    *spec itself*, not an implementation deviation — `color="inherit"` on
+    the spinner was assumed to render white-on-green, but MUI's
+    disabled-button styling overrides `color` entirely, so the button
+    rendered near-invisible grey-on-blue during every loading state
+    (including every app start) until a `&.Mui-disabled` `sx` override
+    fixed it in a one-round fix loop. Also the second feature (after the
+    Upgradable chip) where a final-review `PROJECT_STATE.md`-staleness
+    finding was adjudicated as a post-merge follow-up rather than a
+    branch fix, for the same established-workflow reason as before.
 
 ## Current routes / nav (in order)
 
@@ -1299,10 +1399,13 @@ doing:
   among any collection's non-null-tier crew in the sample), so this is
   latent, not live. Same category of accepted gap as `OwnedItem` not
   tracking `quantity`, below.
-- **Cross-page refresh UX inconsistency:** `OverviewPage` has a header
-  "Refresh" button but no retry-on-error in its `Alert`; the crew pages
-  have retry-on-error but no header refresh button. Predates the crew
-  pages; nobody has unified it yet.
+- **Cross-page refresh UX inconsistency — resolved by the Topbar Refresh
+  button feature, see deep-dive below.** (Kept here, struck through in
+  spirit, as a pointer for anyone who remembers this entry from before —
+  the fix is real, not just noted.) Every page now has an always-visible
+  refresh/retry path via the topbar, including Overview's error state,
+  which previously had none. The crew pages' own per-`Alert` "Retry"
+  buttons remain as harmless duplication, not removed.
 - **Page-shell duplication — the deferred threshold has now been
   crossed:** all crew pages (`ThreeFourStarsCrewPage`,
   `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
@@ -1397,14 +1500,18 @@ visual signal (amber "4/4 Stars" chip) alongside the existing "Ready"
 chip; and most recently the Collections "Upgradable" chip, surfacing
 which collections' next milestone is already within reach given the
 player's ready/needsWork crew, with an upgradable-first sort so those
-collections rise to the top of the table. Nothing is currently in
-flight. Plausible next asks, roughly by how directly they follow from
-what's already built: the two Upgradable-feature deferred items
-(unifying the dual upgradable-status computation between the sort and
-the chip; extracting `combineComparators`/`Comparator<T>` to a
-domain-neutral module before the `collections/ ↔ crew/` import graph gets
-any more tangled) are now the freshest, most concretely-scoped follow-ups
-in the backlog; beyond those, another classification factor (skills?
+collections rise to the top of the table; and most recently the topbar
+Refresh button, unifying what was previously an Overview-only control
+into an always-visible, app-wide green button in `AppLayout`'s topbar —
+which also closed the long-standing "cross-page refresh UX inconsistency"
+deferred item. Nothing is currently in flight. Plausible next asks,
+roughly by how directly they follow from what's already built: the two
+Upgradable-feature deferred items (unifying the dual upgradable-status
+computation between the sort and the chip; extracting
+`combineComparators`/`Comparator<T>` to a domain-neutral module before the
+`collections/ ↔ crew/` import graph gets any more tangled) are still the
+freshest, most concretely-scoped follow-ups in the backlog; beyond those,
+another classification factor (skills?
 traits?), finally tackling the page-shell duplication (6 pages now share
 the identical shell, well past the threshold every prior review named),
 reconsidering whether frozen-crew exclusion should broaden to the 4 crew
