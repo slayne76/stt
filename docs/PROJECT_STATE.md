@@ -94,7 +94,8 @@ client/src/
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
   ships/                         All ship-related pure logic + the Ships pages' table (see "Ships pages")
     getters.ts                 getShipList, isShipMaxed, getShipSchematicsOwned,
-                                getShipDisplayLevel, getShipSchematicsDisplay
+                                getShipDisplayLevel, getShipSchematicsDisplay,
+                                getShipSchematicsProgress
     filters.ts                 filterIncompleteShipsByRarity
     sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
                                 byNameAsc, sortShips (reuses crew/sorters.ts's Comparator/combineComparators)
@@ -1315,6 +1316,63 @@ which doesn't receive keydowns that never left the trigger). See
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-ships-pages-design.md`,
 `docs/superpowers/plans/2026-08-04-ships-pages-plan.md`.
 
+## Crew nav group and schematics progress bar
+
+Two small, unrelated UI changes shipped together.
+
+**Nav restructure:** the six crew-related drawer entries (the four crew
+pages plus "4 Stars Duplicates"/"5 Stars Duplicates") now live inside a
+new "Crew" flyout group, the same shape as "Ships" above. Top-level drawer
+order is now **Overview / Crew / Ships / Collections** — "Overview" and
+"Collections" stay flat single items (no reason to group either). Within
+"Crew," item order is unchanged from the original flat list, just nested.
+**This is a pure `NAV_ITEMS` data change** — `NavGroupItem` (see "The nav
+flyout" above) needed zero modification to support a second group with 3×
+the children, which is the concrete proof its "generic, reusable"
+design claim from the Ships feature actually holds. **One real ceiling
+worth knowing:** `NavGroupItem`'s panel has no `max-height`/scroll
+fallback, so six default-height `ListItemButton`s (~304px) would clip on
+a sub-450px-tall viewport — not worth engineering around for a local
+desktop app, but it's the practical limit on how many children one group
+can hold before that changes.
+
+**Schematics progress bar:** the Ships pages' "Schematics" column gained a
+thin blue `LinearProgress` bar stacked above the existing `"owned/needed"`
+text. New getter in `ships/getters.ts`:
+
+```ts
+export function getShipSchematicsProgress(ship: Ship, items: OwnedItem[]): number {
+  const needed = ship.schematic_gain_cost_next_level;
+  if (needed <= 0) return 100;
+  return Math.min(100, (getShipSchematicsOwned(ship, items) / needed) * 100);
+}
+```
+
+`color="primary"` renders MUI's default blue without any theme change
+(this app has no custom MUI theme). The wrapping `Box` needs
+`minWidth: 100` — without it, an `inline-block` wrapper shrinks to the
+text's natural width and the bar (which fills 100% of its container)
+would render at an inconsistent width per row. **Both the bar and the
+existing text read from the same `getShipSchematicsOwned`/
+`schematic_gain_cost_next_level` values, so they cannot disagree** — no
+second source of truth was introduced.
+
+**A real latent gap flagged at final review, not yet fixed:** the
+`needed <= 0` guard only catches a non-positive value, not a genuinely
+*missing* one. `getShipList` casts unvalidated JSON, so if the API ever
+omits `schematic_gain_cost_next_level` entirely, `undefined <= 0` is
+`false` and the function falls through to `(owned / undefined) * 100`,
+which is `NaN` — MUI renders that as an invalid `translateX(NaN%)`
+transform, which browsers silently drop, so the bar would render as if
+100% full for a ship that isn't. Never observed in the real sample (the
+field is always present, verified with zero exceptions across all 128
+ships), so this is the same category of accepted, unexercised gap as the
+already-documented `getShipSchematicsDisplay` `"0/-1"` case. See
+"Deferred issues" below for the one-line fix.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-04-crew-nav-group-and-schematics-bar-design.md`,
+`docs/superpowers/plans/2026-08-04-crew-nav-group-and-schematics-bar-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -1470,25 +1528,42 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     chip and the Refresh button) where a final-review
     `PROJECT_STATE.md`-staleness finding was adjudicated as a post-merge
     follow-up rather than a branch fix.
+18. **Crew nav group and schematics progress bar**
+    (`2026-08-04-crew-nav-group-and-schematics-bar`) — deep-dive above.
+    Two small, independent changes: the six crew-related drawer entries
+    regrouped under a new "Crew" flyout (reusing `NavGroupItem` completely
+    unmodified — the concrete proof of its "generic, reusable" design
+    claim from the Ships feature), reordering the top-level drawer to
+    Overview / Crew / Ships / Collections; and a thin blue `LinearProgress`
+    bar added above the Ships pages' existing "owned/needed" schematics
+    text. First feature since Ships where the final whole-branch review
+    returned **zero** Critical or Important findings — only five Minors,
+    all deferred — and the first time a final reviewer independently
+    identified the `PROJECT_STATE.md`-staleness item as a correctly
+    out-of-scope post-merge follow-up on its own, rather than flagging it
+    "must fix before merge" and needing the controller to override it (as
+    happened for the two prior features).
 
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
 |---|---|---|
 | Overview | `/` | player identity, not crew |
-| 3/4 Stars crew | `/3-4-stars-crew` | rarity=3, max_rarity=4 |
-| 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
-| 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
-| 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
-| Collections | `/collections` | one row per collection, reverse (collection→crew) view |
-| 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
-| 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
+| Crew → 3/4 Stars crew | `/3-4-stars-crew` | rarity=3, max_rarity=4 |
+| Crew → 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
+| Crew → 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
+| Crew → 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
+| Crew → 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
+| Crew → 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
 | Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
+| Collections | `/collections` | one row per collection, reverse (collection→crew) view |
 
-"Ships" itself is not a route — it's a hover/focus flyout group in the drawer
-(see "Ships pages" below), the app's first nested nav item. Every other row
-above is still a flat, directly-clickable drawer entry.
+Top-level drawer order: **Overview / Crew / Ships / Collections**. "Crew"
+and "Ships" are both hover/focus flyout groups (see "The nav flyout" and
+"Crew nav group and schematics progress bar" above) — neither is itself a
+route. "Overview" and "Collections" are the only remaining flat,
+directly-clickable drawer entries.
 
 ## How this project is worked on (process notes for a future session)
 
@@ -1717,6 +1792,36 @@ doing:
   `{ label: string; path: string }`. Exporting `NavLink` from one file and
   importing it in the other would remove the duplication — zero behavior
   change.
+- **`getShipSchematicsProgress`'s guard doesn't catch a missing
+  `schematic_gain_cost_next_level`, only a non-positive one (new, from the
+  Crew nav group / schematics bar feature):** `getShipList` casts
+  unvalidated JSON, so if the field is ever absent, `undefined <= 0` is
+  `false` and the function falls through to a `NaN` result — MUI would
+  render an invalid `translateX(NaN%)` transform (silently dropped by the
+  browser), showing the bar as if 100% full for a ship that isn't. Never
+  observed in the real sample (verified present on all 128 ships). Fix:
+  `if (!(needed > 0)) return 100;` or a `Number.isFinite` check — one
+  token, no behavior change for real data.
+- **The Schematics progress bar has no accessible label (new, from the
+  Crew nav group / schematics bar feature):** MUI's determinate
+  `LinearProgress` emits an unlabeled `role="progressbar"` immediately
+  followed by `Typography` stating the same figure more precisely —
+  redundant for screen readers ("97 percent" then "1755/1800"). Fix:
+  `aria-hidden` on the `LinearProgress`, making it purely decorative and
+  leaving the text as the single announcement. Low priority for a
+  single-user local tool.
+- **No vertical gap between the progress bar and its text (new, from the
+  Crew nav group / schematics bar feature):** `Typography`'s default
+  `margin: 0` puts the 4px bar flush against the digits below it. Matches
+  the spec exactly as written, so not a defect — just the first thing
+  likely to want a small `sx={{ mb: 0.5 }}` once seen against real data
+  with the user's own session cookie.
+- **`NavGroupItem`'s flyout panel has no `max-height`/scroll fallback
+  (new, from the Crew nav group feature):** six default-height
+  `ListItemButton`s (~304px, the new "Crew" group's size) would clip on a
+  sub-450px-tall viewport. Not worth engineering around for a local
+  desktop app today, but it's the practical ceiling on how many children
+  one flyout group can hold before this needs revisiting.
 
 ## Likely next steps
 
@@ -1745,12 +1850,18 @@ collections domain (`player.character.ships`) and the first nested nav
 item — two new pages surfacing not-yet-fully-leveled 4★/5★ ships via a
 hover/focus flyout "Ships" nav group, which needed a keyboard-
 accessibility fix round after its own task's interactive test initially
-passed for the wrong reason (see "Ships pages" above). Nothing is
-currently in flight. Plausible next asks, roughly by how directly they
-follow from what's already built: the small paired follow-up on
-`NavGroupItem` (Escape-from-trigger + ARIA menu semantics, both flagged
-at Ships' final review) is the freshest and most concretely-scoped;
-close behind it, extracting `combineComparators`/`Comparator<T>` to a
+passed for the wrong reason (see "Ships pages" above); and most recently
+the Crew nav group and schematics progress bar — regrouping the six
+crew-related drawer entries under their own "Crew" flyout (proving
+`NavGroupItem`'s reusability with a second, larger group, zero component
+changes needed) and adding a blue `LinearProgress` bar to the Ships
+pages' Schematics column. Nothing is currently in flight. Plausible next
+asks, roughly by how directly they follow from what's already built: the
+`getShipSchematicsProgress` `NaN`-on-missing-field guard and the small
+paired `NavGroupItem` follow-up (Escape-from-trigger + ARIA menu
+semantics + the panel's `max-height` ceiling, all flagged across the last
+two features' final reviews) are the freshest and most concretely-scoped;
+close behind them, extracting `combineComparators`/`Comparator<T>` to a
 domain-neutral module is now backed by a third consumer
 (`ships/sorters.ts`, alongside `collections/sorters.ts` and
 `CollectionsTable.tsx`) rather than just the two the Upgradable-chip
