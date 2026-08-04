@@ -9,6 +9,8 @@ import FourFourStarsCrewPage from './pages/FourFourStarsCrewPage';
 import CollectionsPage from './pages/CollectionsPage';
 import FourStarsDuplicatesPage from './pages/FourStarsDuplicatesPage';
 import FiveStarsDuplicatesPage from './pages/FiveStarsDuplicatesPage';
+import FiveStarsShipsPage from './pages/FiveStarsShipsPage';
+import FourStarsShipsPage from './pages/FourStarsShipsPage';
 
 function App() {
   return (
@@ -24,6 +26,8 @@ function App() {
             <Route path="/collections" element={<CollectionsPage />} />
             <Route path="/4-stars-duplicates" element={<FourStarsDuplicatesPage />} />
             <Route path="/5-stars-duplicates" element={<FiveStarsDuplicatesPage />} />
+            <Route path="/5-stars-ships" element={<FiveStarsShipsPage />} />
+            <Route path="/4-stars-ships" element={<FourStarsShipsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
