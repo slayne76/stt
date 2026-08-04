@@ -1,6 +1,5 @@
 import {
   Alert,
-  Button,
   CircularProgress,
   Paper,
   Stack,
@@ -21,17 +20,12 @@ const FIELD_LABELS: Record<keyof PlayerIdentity, string> = {
 };
 
 function OverviewPage() {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error } = usePlayerData();
   const identity = data ? extractPlayerIdentity(data) : null;
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h4">Overview</Typography>
-        <Button variant="contained" onClick={() => void refresh()} disabled={loading}>
-          Refresh
-        </Button>
-      </Stack>
+      <Typography variant="h4">Overview</Typography>
 
       {loading && <CircularProgress />}
       {error && <Alert severity="error">{error}</Alert>}

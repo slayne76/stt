@@ -1,5 +1,6 @@
-import { AppBar, Box, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
+import { usePlayerData } from '../hooks/usePlayerData';
 
 const DRAWER_WIDTH = 220;
 
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
 
 function AppLayout() {
   const navigate = useNavigate();
+  const { refresh, loading } = usePlayerData();
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -24,6 +26,16 @@ function AppLayout() {
           <Typography variant="h6" noWrap component="div">
             STT Tracker
           </Typography>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => void refresh()}
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+            sx={{ ml: 'auto' }}
+          >
+            Refresh
+          </Button>
         </Toolbar>
       </AppBar>
       <Drawer
