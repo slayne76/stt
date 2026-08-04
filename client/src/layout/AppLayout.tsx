@@ -21,13 +21,17 @@ function isNavGroup(item: NavLink | NavGroup): item is NavGroup {
 
 const NAV_ITEMS: (NavLink | NavGroup)[] = [
   { label: 'Overview', path: '/' },
-  { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
-  { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
-  { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready' },
-  { label: '4/4 Stars crew', path: '/4-4-stars-crew' },
-  { label: 'Collections', path: '/collections' },
-  { label: '4 Stars Duplicates', path: '/4-stars-duplicates' },
-  { label: '5 Stars Duplicates', path: '/5-stars-duplicates' },
+  {
+    label: 'Crew',
+    children: [
+      { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
+      { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
+      { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready' },
+      { label: '4/4 Stars crew', path: '/4-4-stars-crew' },
+      { label: '4 Stars Duplicates', path: '/4-stars-duplicates' },
+      { label: '5 Stars Duplicates', path: '/5-stars-duplicates' },
+    ],
+  },
   {
     label: 'Ships',
     children: [
@@ -35,6 +39,7 @@ const NAV_ITEMS: (NavLink | NavGroup)[] = [
       { label: '4 Stars Ships', path: '/4-stars-ships' },
     ],
   },
+  { label: 'Collections', path: '/collections' },
 ];
 
 function AppLayout() {
