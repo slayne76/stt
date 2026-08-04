@@ -2,18 +2,19 @@ import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/materia
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
 import { getCollectionsList, getFrozenCrewArchetypeIds } from '../collections/getters';
-import { byCompletionThenNameAsc } from '../collections/sorters';
+import { byUpgradableThenCompletionThenNameAsc } from '../collections/sorters';
 import CollectionsTable from '../collections/CollectionsTable';
 
 function CollectionsPage() {
   const { data, loading, error, refresh } = usePlayerData();
 
-  const collections = data
-    ? [...getCollectionsList(data)].sort(byCompletionThenNameAsc)
-    : [];
+  const rawCollections = data ? getCollectionsList(data) : [];
   const crew = data ? getCrewList(data) : [];
   const items = data ? getOwnedItems(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
+  const collections = data
+    ? [...rawCollections].sort(byUpgradableThenCompletionThenNameAsc(rawCollections, crew, items, frozenArchetypeIds))
+    : [];
 
   const loaded = !loading && !error && data;
 

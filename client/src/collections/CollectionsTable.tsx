@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import {
+  Chip,
   Paper,
   Table,
   TableBody,
@@ -14,7 +15,7 @@ import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
 import { getCollectionCrew } from './getters';
 import { getCuratedRewards } from './rewards';
-import { isMaxedOut } from './sorters';
+import { isCollectionUpgradable, isMaxedOut } from './sorters';
 import {
   byEquipmentSlotsRemainingDesc,
   byLevelDesc,
@@ -59,6 +60,7 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
                 byNameAsc
               )
             );
+            const upgradable = isCollectionUpgradable(collection, qualifyingCrew, items);
             const rewards = getCuratedRewards(collection);
             const progressDisplay = isMaxedOut(collection)
               ? 'MAX'
@@ -67,7 +69,10 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
               <Fragment key={collection.id}>
                 <TableRow>
                   <TableCell>{index + 1}</TableCell>
-                  <TableCell>{collection.name}</TableCell>
+                  <TableCell>
+                    {collection.name}
+                    {upgradable && <Chip label="Upgradable" size="small" color="info" sx={{ ml: 1 }} />}
+                  </TableCell>
                   <TableCell>{rewards.join(', ')}</TableCell>
                   <TableCell align="right">{progressDisplay}</TableCell>
                   <TableCell align="right">{collection.claimable_milestone_index}</TableCell>
