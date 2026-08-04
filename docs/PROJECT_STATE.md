@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-03. This document is the durable, in-depth record of
+Last updated: 2026-08-04. This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -890,7 +890,28 @@ arrow icons, and `Collapse` are all gone from the file. The sub-row keeps
 a subtle `action.hover` background tint so it still visually reads as
 "belonging to" its parent row without the collapse affordance doing that
 job implicitly. `CollectionCrewList` highlights `tier === 'ready'` crew
-with a bold name plus a small "Ready" `Chip`.
+with a bold name plus a small "Ready" `Chip`, and (added in the
+Collections needsWork tier label feature, see Feature history #14)
+`tier === 'needsWork'` crew with a normal-weight name plus an amber
+`color="warning"` `Chip` reading `` `${max_rarity}/${max_rarity} Stars` ``
+(e.g. "4/4 Stars") — mirroring "Ready," one visual signal per tier, so a
+collection's crew sub-list reads at a glance as three groups (green
+chip → amber chip → no chip, matching `byTierAsc`'s
+ready-before-needsWork-before-leveling sort). `tier === 'leveling'` and
+`tier === null` (unreachable at this call site, since `getCollectionCrew`
+already filters `null` out) both render neither chip nor bold — no
+explicit branch needed, since `isReady`/`isNeedsWork` are each computed
+directly from a single `getCrewTier(...)` call, hoisted once per row into
+a local `tier` variable specifically to avoid calling it twice (it chains
+into `isReadyToImmortalize` → `areAllMissingItemsOwned`, an
+`items.some(...)` scan per missing slot — worth avoiding at ~343 rendered
+rows). The chip text intentionally says "4/4 Stars" rather than the
+literal `max_rarity` alone ("4 Stars") specifically to match this app's
+own existing "4/4 Stars crew" page name for the same tier, and to avoid
+colliding with the unrelated "4 Stars Duplicates" page (frozen-archetype
+duplicates, a different concept entirely) — this wording was corrected
+during final review, after the plan had specified the literal
+`${max_rarity} Stars` form verbatim.
 
 ## Feature history (chronological)
 
@@ -968,6 +989,26 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     never called the shipped filter or sort functions at all, and got an
     identical result — the strongest form of verification this project
     has done yet.
+14. **Collections needsWork tier label** (`2026-08-04-collections-needs-work-label`)
+    — a small, single-file rendering-only addition to `CollectionCrewList`
+    (deep-dive in "The shared rendering layer" above): crew at the
+    `needsWork` tier (max rarity, but not level 100 and/or not fully
+    equipped) now get an amber "4/4 Stars"-style chip, mirroring the
+    existing green "Ready" chip for the `ready` tier — so a collection's
+    crew sub-list visually distinguishes all three tiers at a glance
+    instead of just singling out `ready`. No new getters, filters, types,
+    or business logic; `getCrewTier` already computed the distinction,
+    this only surfaces it. First feature with no spec doc (brainstormed,
+    then went straight to a plan, by explicit user choice for a
+    single-file change) and first feature where the final whole-branch
+    review's finding changed shipped copy after the fact: the plan
+    specified the chip text as the literal `${max_rarity} Stars`
+    ("4 Stars"), but final review flagged that this collided with the
+    unrelated "4 Stars Duplicates" page name and suggested matching the
+    app's own "4/4 Stars crew" page name instead; the user was asked and
+    chose "4/4 Stars," which shipped as a one-line post-review fix with
+    its own scoped re-review, not a plan-vs-review case the controller
+    could resolve unilaterally.
 
 ## Current routes / nav (in order)
 
@@ -1138,7 +1179,11 @@ collections they'd already completed, then reverse-engineered and proven
 correct via the `extra_crew`-progress reconciliation), and most recently
 its deliberate opposite — the two Frozen Duplicates pages, surfacing
 exactly what the exclusion feature hides so the user can review and
-decide keep-vs-trash in-game. Nothing is currently in flight. Plausible
+decide keep-vs-trash in-game — and most recently the Collections
+needsWork tier label, a small follow-up giving the Collections page's
+crew sub-list a third visual signal (amber "4/4 Stars" chip) alongside
+the existing "Ready" chip, so `needsWork` crew are distinguishable from
+`leveling` crew at a glance. Nothing is currently in flight. Plausible
 next asks, roughly by how directly they follow from what's already
 built: another classification factor (skills? traits?), finally tackling
 the page-shell duplication (6 pages now share the identical shell, well
