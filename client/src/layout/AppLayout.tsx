@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
+import { refreshAssets } from '../api/assetsApi';
 import NavGroupItem from './NavGroupItem';
 
 const DRAWER_WIDTH = 220;
@@ -45,6 +47,16 @@ const NAV_ITEMS: (NavLink | NavGroup)[] = [
 function AppLayout() {
   const navigate = useNavigate();
   const { refresh, loading } = usePlayerData();
+  const [refreshingAssets, setRefreshingAssets] = useState(false);
+
+  async function handleRefreshAssets() {
+    setRefreshingAssets(true);
+    try {
+      await refreshAssets();
+    } finally {
+      setRefreshingAssets(false);
+    }
+  }
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -65,6 +77,15 @@ function AppLayout() {
             }}
           >
             Refresh
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => void handleRefreshAssets()}
+            disabled={refreshingAssets}
+            startIcon={refreshingAssets ? <CircularProgress size={16} /> : undefined}
+            sx={{ ml: 1, color: 'common.white', borderColor: 'common.white' }}
+          >
+            Refresh assets
           </Button>
         </Toolbar>
       </AppBar>
