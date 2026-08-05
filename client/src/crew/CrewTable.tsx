@@ -4,6 +4,7 @@ import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
 import { getCollectionCount } from '../collections/getters';
 import StarRating from './StarRating';
+import Thumbnail from '../assets/Thumbnail';
 
 export interface CrewTableProps {
   crew: CrewMember[];
@@ -17,6 +18,7 @@ function CrewTable({ crew, collections }: CrewTableProps) {
         <TableHead>
           <TableRow>
             <TableCell>#</TableCell>
+            <TableCell>Image</TableCell>
             <TableCell>Stars</TableCell>
             <TableCell>Name</TableCell>
             <TableCell align="right">Level</TableCell>
@@ -28,6 +30,9 @@ function CrewTable({ crew, collections }: CrewTableProps) {
           {crew.map((c, index) => (
             <TableRow key={c.id}>
               <TableCell>{index + 1}</TableCell>
+              <TableCell>
+                <Thumbnail asset={c.portrait} alt={c.name} />
+              </TableCell>
               <TableCell>
                 <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
               </TableCell>
@@ -44,3 +49,4 @@ function CrewTable({ crew, collections }: CrewTableProps) {
 }
 
 export default CrewTable;
+
