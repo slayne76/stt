@@ -65,8 +65,10 @@ client/src/
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
-  layout/AppLayout.tsx          AppBar + Drawer nav shell; also the app's sole Refresh control
-                                 (see "Topbar Refresh button" below) — its first non-page
+  api/assetsApi.ts               refreshAssets (see "Asset cache proxy")
+  layout/AppLayout.tsx          AppBar + Drawer nav shell; the app's two topbar controls, "Refresh"
+                                 (player data, see "Topbar Refresh button" below) and "Refresh assets"
+                                 (image cache, see "Asset cache proxy" below) — its first non-page
                                  `usePlayerData()` consumer
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
@@ -79,7 +81,7 @@ client/src/
     ship.ts                    Ship interface (see "Ships pages"; `icon?` added for the image column)
     asset.ts                   DatacoreAsset interface (see "Crew/ship image column")
   assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
-    config.ts                  ASSET_BASE_URL — the one constant Phase 2 will repoint
+    config.ts                  ASSET_BASE_URL = '/api/assets' (repointed at the local proxy — see "Asset cache proxy")
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
     Thumbnail.tsx                40x40 image-or-placeholder renderer, shared by CrewTable/ShipsTable
   crew/                         All crew-related pure logic + shared components
@@ -121,6 +123,7 @@ client/src/
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
+  assetCache.ts, assetClient.ts, routes/assets.ts   Image cache/proxy (see "Asset cache proxy")
 ```
 
 ## The crew data model (as understood from the real game payload)
@@ -1095,6 +1098,12 @@ during final review, after the plan had specified the literal
 
 ## Topbar Refresh button
 
+**Update, Asset cache proxy feature:** the topbar now has two buttons, not
+one — this section describes the original (player-data) "Refresh" button
+only; the second, "Refresh assets," is a separate, independent control
+added later (see "Asset cache proxy" below) and does not touch anything
+described in this section.
+
 The "Refresh" control used to live only in `OverviewPage.tsx`'s own
 header. It now lives in `AppLayout.tsx`'s `Toolbar` — the app's
 persistent topbar, rendered on every route — right-aligned, green
@@ -1380,13 +1389,19 @@ already-documented `getShipSchematicsDisplay` `"0/-1"` case. See
 
 ## Crew/ship image column (Phase 1 of 2 — frontend only)
 
+**Update: Phase 2 has since shipped — see "Asset cache proxy" below.**
+Everything in this section describes Phase 1 as originally built and is
+kept as history; the one detail it no longer gets right is `ASSET_BASE_URL`'s
+literal value, called out inline below.
+
 Every crew page and every ship page gained a 40x40px thumbnail "Image"
 column, second column from the left (right after `#`) — crew portraits on
 the crew pages, ship preview art on the ship pages. This is Phase 1 of a
-two-phase feature: images are hotlinked directly from the public asset host
-`assets.datacore.app` for now. **Phase 2 (a Node-backend caching proxy so
-the browser stops hitting that host directly on every page view) is
-deliberately not built yet** — see "Likely next steps" below.
+two-phase feature: images were hotlinked directly from the public asset host
+`assets.datacore.app` at first. Phase 2 (a Node-backend caching proxy so the
+browser stops hitting that host directly on every page view) was the
+deliberately-deferred next step — see "Asset cache proxy" below for how it
+actually turned out.
 
 **The original ask assumed the image URL would need to be predicted from
 the crew/ship's display name via some slugification scheme — this turned
@@ -1413,7 +1428,8 @@ exercised by this particular dataset).
 future reuse (items/rewards icons, etc.):
 
 ```ts
-// assets/config.ts
+// assets/config.ts — this was the Phase 1 value; since Phase 2 shipped,
+// ASSET_BASE_URL is '/api/assets' instead (see "Asset cache proxy" below)
 export const ASSET_BASE_URL = 'https://assets.datacore.app';
 
 // assets/getAssetUrl.ts
@@ -1500,6 +1516,128 @@ the thumbnails render is the one check this feature never got to make.
 **Spec/plan:**
 `docs/superpowers/specs/2026-08-05-crew-ship-image-column-design.md`,
 `docs/superpowers/plans/2026-08-05-crew-ship-image-column.md`.
+
+## Asset cache proxy
+
+Phase 2 of the crew/ship image feature above: crew and ship thumbnails now
+load from the local Express server instead of hotlinking
+`assets.datacore.app` directly on every page view. `ASSET_BASE_URL`
+(`assets/config.ts`) — the one-constant seam Phase 1 was specifically built
+around — is now `/api/assets`; `getAssetUrl.ts` and `Thumbnail.tsx` were not
+touched at all, proving that seam worked exactly as designed.
+
+**Server-side cache** (`server/src/assetCache.ts`), a flat-file cache
+mirroring the existing `cache.ts`'s style for `player-cache.json`:
+
+```ts
+const CACHE_DIR = 'data/assets';
+// getCachedAssetPath, isKnownMissing, writeAssetCache, markAssetMissing, clearAssetCache
+```
+
+One real file per cached image (e.g.
+`data/assets/crew_portraits_cm_pike_amand_rauth_sm.png`), one empty
+`<filename>.missing` marker per confirmed-absent asset — both flat, both
+under the existing `server/data/` gitignore entry, nothing new to ignore.
+
+**The one piece of real logic — confirmed-404 vs. transient failure —
+is enforced at the type level, not just by convention**
+(`server/src/assetClient.ts`):
+
+```ts
+export async function fetchAsset(filename: string): Promise<Buffer | null> {
+  // ...
+  if (response.status === 404) return null;       // confirmed absent
+  if (!response.ok) throw new UpstreamError(...);  // transient — never cached as missing
+  // ...
+}
+```
+
+`null` is the only path that reaches `markAssetMissing` in the route
+handler; a thrown `UpstreamError` (network failure, a 5xx, anything that
+isn't a genuine 404) can't reach it structurally, not just by care — this
+was independently re-verified at final review by reading the call graph,
+not by trusting the implementer's report.
+
+**The proxy route** (`server/src/routes/assets.ts`,
+`GET /api/assets/:filename` + `POST /api/assets/refresh`) mirrors
+`routes/player.ts`'s factory shape and 502/`UPSTREAM_ERROR` envelope.
+Branch order: filename-pattern validation → cache hit (serve, no upstream
+call) → known-missing (404, no upstream call) → fetch-and-classify. Both
+"no upstream call" branches were independently re-verified at final review
+by reading the code (both paths `return` before `fetchAsset` is ever
+reached), not just by the task-level curl evidence.
+
+**`:filename` validation is a real security boundary, verified against
+both adversarial input and the full real dataset:**
+`/^[A-Za-z0-9_-]+\.png$/` is checked before the value touches the
+filesystem or the upstream URL. At final review this was checked directly
+against a battery of bypass attempts (`../../etc/passwd`, embedded `%2F`,
+null bytes, CRLF, wrong extensions, Unicode lookalikes) — all correctly
+rejected — and, separately, against every real asset path in
+`example-data.json` to confirm the pattern never rejects legitimate
+traffic. **Re-verified independently for this doc update, not just copied
+from the final review:** running the same transform over all 1322 real
+asset paths (597 crew portraits + 597 crew full-body images + 128 ship
+icons) produces zero pattern failures.
+
+**Cache-hit-avoids-refetch was proven with a real mechanism, not
+inference:** the task-level verification captured a cached file's mtime,
+made a second request, and confirmed the mtime was unchanged — a re-fetch
+would necessarily have rewritten the file and moved it, so an unchanged
+mtime is direct evidence the second request never called `fetchAsset`.
+
+**"Refresh assets" button** (`AppLayout.tsx`), independent of the existing
+player-data "Refresh" button — separate loading state, separate error
+handling, neither triggers the other. Went through one fix round after its
+own task-level review: the first version had no `catch`, so a failed
+refresh silently vanished with zero user feedback.
+The reviewer flagged this as a plan-mandated Important finding (the gap was
+in the plan's own code, not an implementer deviation), it was surfaced to
+the user rather than auto-fixed, and the user chose "fix now" — the shipped
+version adds an `assetsError` state surfaced via an MUI `Snackbar`/`Alert`,
+which is actually a strict improvement over the pattern it was compared
+against (the existing player-data error only renders on `OverviewPage`;
+the new asset error is app-wide since `AppLayout` hosts it on every route).
+
+**Verification, this project's usual pattern, extended for a
+backend-and-network feature:** Task 1 (cache primitives + fetch client) had
+a throwaway `__verify-assets.ts` script exercising real filesystem writes
+and a real network call against `assets.datacore.app` (outbound internet
+access was independently confirmed available in this environment before
+the task was dispatched, rather than assumed). Task 2 (the route) was
+verified with a full curl sequence against the real running dev server —
+cache-miss-then-hit, 404-then-memoized-404, malformed-filename rejection,
+and cache-clearing, each with literal HTTP status codes and file-existence
+checks, not summarized claims. Task 3 (the client wiring) again hit this
+sandbox's known missing-headless-browser-tooling gap (same as Phase 1) and
+fell back to curl through the client's Vite proxy, which is real evidence
+of correct HTTP wiring even without pixels. The final reviewer explicitly
+named this as a gap in *rendering* confidence, not in the correctness of
+anything the branch adds, since every server behavior in the spec's
+error-handling table has direct HTTP-level evidence.
+
+**Known, deliberately-accepted gaps (all Minor at final review, none
+looped into the branch):** cache writes aren't atomic (`writeFileSync` in
+place rather than write-temp-then-rename, so a concurrent request for the
+same uncached filename during the write window could theoretically serve a
+truncated image — self-healing on reload); no in-flight de-duplication for
+concurrent misses of the same filename (correct outcome, just occasionally
+wasteful); `res.sendFile` has no error callback, so deleting a file between
+the cache-check and the send (e.g. clicking "Refresh assets" while a
+thumbnail-heavy page is still loading) falls through to Express's default
+error handler instead of a clean 404; `.missing` markers accumulate with no
+eviction/TTL; `POST /api/assets/refresh` is unauthenticated — explicitly
+judged acceptable and *not* worth fixing, since the proxy has a fixed
+upstream host and no path control (no SSRF/open-relay surface), and this is
+strictly less sensitive than the pre-existing unauthenticated
+`/api/player`/`/api/player/refresh` endpoints already on this server; if
+that trust boundary is ever revisited, binding the server to `127.0.0.1`
+would harden all of these at once, not just this route. See "Deferred
+issues" below.
+
+**Spec/plan:**
+`docs/superpowers/specs/2026-08-05-asset-cache-proxy-design.md`,
+`docs/superpowers/plans/2026-08-05-asset-cache-proxy.md`.
 
 ## Feature history (chronological)
 
@@ -1690,6 +1828,31 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     mitigation given both tables render every filtered row unpaginated)
     and parked the `PROJECT_STATE.md`-staleness finding per the
     now-well-established convention from features #15-18.
+20. **Asset cache proxy, Phase 2** (`2026-08-05-asset-cache-proxy`) — deep
+    dive above. A Node-backend proxy/cache (`GET /api/assets/:filename`,
+    `POST /api/assets/refresh`) so crew/ship thumbnails load from the local
+    server instead of hotlinking `assets.datacore.app` on every view;
+    `ASSET_BASE_URL` repointed, `getAssetUrl.ts`/`Thumbnail.tsx` untouched,
+    proving the Phase 1 seam worked exactly as designed. First feature
+    whose one piece of real logic (confirmed-404-vs-transient-failure) was
+    designed to be structurally unrepresentable-if-wrong (a typed
+    `Buffer | null` return vs. a thrown error) rather than merely
+    convention-correct. First feature with a plan-mandated Important
+    finding from a *task-level* review (not just final review, as in the
+    Ships-pages precedent) — the Refresh-assets button's original
+    try/finally-without-catch came straight from the plan's own code, was
+    surfaced to the user rather than silently fixed or dismissed per the
+    established plan-mandated-finding rule, and the user chose to fix it
+    in a one-round fix loop. First feature since Ships with a real,
+    concretely-scoped multi-task fix loop, and the first time a controller
+    independently re-verified a final reviewer's most load-bearing
+    numeric claim (1322 real asset paths, zero filename-pattern
+    rejections) for a doc update rather than copying it verbatim. Final
+    whole-branch review returned zero Critical/Important findings and
+    explicitly recommended *against* fixing one of its own Minor findings
+    (unauthenticated `/api/assets/refresh`) rather than reflexively listing
+    it as a gap — reasoning that it doesn't widen this server's existing
+    trust boundary, since `/api/player` was already unauthenticated too.
 
 ## Current routes / nav (in order)
 
@@ -1969,12 +2132,12 @@ doing:
   sub-450px-tall viewport. Not worth engineering around for a local
   desktop app today, but it's the practical ceiling on how many children
   one flyout group can hold before this needs revisiting.
-- **Phase 2 of the image column (backend caching proxy) is not built yet
-  (new, from the Crew/ship image column feature):** Phase 1 hotlinks
-  directly to `assets.datacore.app` on every page render. `ASSET_BASE_URL`
-  (`assets/config.ts`) is the one constant designed to be repointed once a
-  local proxy exists — see "Crew/ship image column" above. This is the
-  most directly-expected next step, not a hypothetical.
+- **Phase 2 of the image column — resolved by the Asset cache proxy
+  feature, see deep-dive above.** (Kept here, struck through in spirit, as
+  a pointer for anyone who remembers this entry from before — the fix is
+  real, not just noted.) `ASSET_BASE_URL` is now `/api/assets`; images load
+  from the local server's cache, fetching from `assets.datacore.app` only
+  on a genuine miss.
 - **`Thumbnail`'s placeholder box has no `aria-label`/`role` (new, from the
   Crew/ship image column feature):** a screen-reader user gets nothing
   identifying an empty grey square as "portrait for {name}." Low priority
@@ -1998,11 +2161,13 @@ doing:
   (new, from the Crew/ship image column feature):** currently unreachable
   — rows are keyed by stable entity id and route changes remount the whole
   table — so this is robustness, not a live bug.
-- **No `referrerPolicy` on the hotlinked `<img>` (new, from the Crew/ship
-  image column feature):** Phase 1 sends a `localhost` referrer to the
-  public asset host on every image request. Trivial to add
-  (`referrerPolicy="no-referrer"`), and moot once Phase 2's proxy lands
-  anyway, which is why it wasn't added now.
+- **No `referrerPolicy` on the `<img>` — now fully moot, not just
+  deferred (originally from the Crew/ship image column feature):** this
+  only mattered while Phase 1 hotlinked `assets.datacore.app` directly.
+  Since the Asset cache proxy feature repointed `ASSET_BASE_URL` at the
+  local server, every image request's referrer is same-origin — there is
+  no longer a third-party host to leak a referrer to. No action needed,
+  ever, for this one.
 - **A stray trailing blank line in `CrewTable.tsx` (new, from the Crew/ship
   image column feature):** purely cosmetic, caught at final review, not
   worth a standalone diff.
@@ -2017,6 +2182,49 @@ doing:
   environment (installing the missing system library, or getting
   `chromium-cli` available) before a feature where that matters more (e.g.
   anything with real layout/CSS risk, not just a typed prop wiring change).
+- **Asset cache writes are not atomic (new, from the Asset cache proxy
+  feature):** `writeAssetCache` (`server/src/assetCache.ts`) writes
+  directly to the final path via `writeFileSync`. A concurrent request for
+  the *same* uncached filename during that write window could theoretically
+  read a partially-written file. Self-healing on reload; a
+  write-to-`.tmp`-then-`renameSync` would close it if ever worth a
+  standalone diff.
+- **No in-flight de-duplication for concurrent asset-cache misses (new,
+  from the Asset cache proxy feature):** two near-simultaneous requests
+  for the same uncached filename both fetch upstream and both write.
+  Correct outcome, just occasionally wasteful — explicitly judged
+  acceptable at this app's scale (a handful of concurrent requests, not a
+  high-traffic server).
+- **`res.sendFile` in the asset proxy route has no error callback (new,
+  from the Asset cache proxy feature), with a concrete trigger identified
+  at final review:** clicking "Refresh assets" while a thumbnail-heavy page
+  is still loading races `clearAssetCache`'s file deletion against an
+  in-flight `sendFile` call, producing an ENOENT that falls through to
+  Express's default error handler (a stack trace / 500) instead of a clean
+  404. Fix: pass a callback to `sendFile`, answer 404 on ENOENT.
+- **`.missing` markers accumulate with no eviction or TTL (new, from the
+  Asset cache proxy feature):** every unique nonexistent-but-well-formed
+  filename ever requested costs one inode forever, until "Refresh assets"
+  clears everything. Bounded and tiny for legitimate traffic (~1300 real
+  asset paths), only a nuisance vector for junk requests — not worth
+  engineering around today.
+- **`POST /api/assets/refresh` is unauthenticated (new, from the Asset
+  cache proxy feature) — explicitly judged acceptable, not a gap to
+  close on its own.** This server already has two unauthenticated
+  endpoints more sensitive than this one (`GET /api/player` returns real
+  player data, `POST /api/player/refresh` spends the session cookie
+  upstream), and the asset proxy has a fixed upstream host with no path
+  control, so there's no SSRF/open-relay surface either. If this trust
+  boundary is ever revisited, binding the server to `127.0.0.1`
+  (`app.listen(PORT, '127.0.0.1')` in `server/src/index.ts`) would harden
+  all three endpoints in one line, rather than adding auth to just this one.
+- **Success feedback on "Refresh assets" (new, from the Asset cache proxy
+  feature):** a successful click produces a sub-100ms spinner flicker and
+  nothing else — no confirmation. Consistent with how the existing
+  player-data Refresh button already behaves (it has no success signal
+  either), so this is optional polish, not an inconsistency. A success
+  `Snackbar` reusing the error one's pattern would be a small follow-up if
+  the button ever feels inert in practice.
 
 ## Likely next steps
 
@@ -2050,37 +2258,41 @@ the Crew nav group and schematics progress bar — regrouping the six
 crew-related drawer entries under their own "Crew" flyout (proving
 `NavGroupItem`'s reusability with a second, larger group, zero component
 changes needed) and adding a blue `LinearProgress` bar to the Ships
-pages' Schematics column; and most recently the crew/ship image column,
-Phase 1 — a 40x40 "Image" thumbnail column on all 6 crew pages and both
-ship pages, sourced directly from `crew.portrait`/`ship.icon` fields
-already present in the real payload, via a new asset-type-agnostic
-`assets/` module designed up front to support future asset kinds
-(items/rewards icons) with zero changes. Nothing is currently in flight.
+pages' Schematics column; then the crew/ship image column, Phase 1 — a
+40x40 "Image" thumbnail column on all 6 crew pages and both ship pages,
+sourced directly from `crew.portrait`/`ship.icon` fields already present
+in the real payload, via a new asset-type-agnostic `assets/` module
+designed up front to support future asset kinds (items/rewards icons) with
+zero changes; and most recently its Phase 2, the Asset cache proxy —
+a Node-backend proxy/cache so those thumbnails load from the local server
+instead of hotlinking `assets.datacore.app` directly, closing the loop
+Phase 1's `ASSET_BASE_URL` seam was built to support, plus an independent
+"Refresh assets" button. Nothing is currently in flight.
 
-**The most directly-expected next step is Phase 2 of the image column**
-— the user's own stated plan: a Node-backend caching proxy so the browser
-stops hotlinking `assets.datacore.app` directly on every page render, with
-some refresh/invalidation mechanism (tied to the existing topbar Refresh
-button, a separate dedicated button, or something else — an open question
-for that feature's own brainstorming) and `ASSET_BASE_URL` repointed to the
-local proxy path as the one-line seam this phase was specifically built to
-support. Beyond that, plausible next asks, roughly by how directly they
-follow from what's already built: the `getShipSchematicsProgress`
-`NaN`-on-missing-field guard and the small paired `NavGroupItem` follow-up
-(Escape-from-trigger + ARIA menu semantics + the panel's `max-height`
-ceiling, all flagged across several recent features' final reviews) remain
-the freshest small-scoped items from before this feature; close behind
-them, extracting `combineComparators`/`Comparator<T>` to a domain-neutral
-module is now backed by a third consumer (`ships/sorters.ts`, alongside
-`collections/sorters.ts` and `CollectionsTable.tsx`); beyond those,
-unifying the dual upgradable-status computation between the Collections
-sort and chip, another crew classification factor (skills? traits?),
-finally tackling the page-shell duplication (7 pages now share the
-identical shell, well past the threshold every prior review named),
-reconsidering whether frozen-crew exclusion should broaden to the 4 crew
-pages now that its correctness is proven rather than merely plausible,
-moving `getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the
-placement friction has actually triggered rather than staying
-hypothetical, fixing this sandbox's missing headless-browser tooling
-before a feature with real layout/CSS risk needs it, or settling the
-`Thumbnail` `alt`/placeholder accessibility semantics noted above.
+**Plausible next asks, roughly by how directly they follow from what's
+already built:** the `getShipSchematicsProgress` `NaN`-on-missing-field
+guard and the small paired `NavGroupItem` follow-up (Escape-from-trigger +
+ARIA menu semantics + the panel's `max-height` ceiling, all flagged across
+several recent features' final reviews) remain the freshest small-scoped
+items from before the image-column work; close behind them, extracting
+`combineComparators`/`Comparator<T>` to a domain-neutral module is now
+backed by a third consumer (`ships/sorters.ts`, alongside
+`collections/sorters.ts` and `CollectionsTable.tsx`); a handful of small,
+independently-scoped follow-ups from the Asset cache proxy feature itself
+(the `sendFile`-error-callback fix, atomic cache writes, settling the
+`Thumbnail` `alt`/placeholder accessibility semantics, a success `Snackbar`
+for "Refresh assets") are each a few lines whenever one is worth a
+standalone diff; beyond those, unifying the dual upgradable-status
+computation between the Collections sort and chip, another crew
+classification factor (skills? traits?), finally tackling the page-shell
+duplication (7 pages now share the identical shell, well past the
+threshold every prior review named), reconsidering whether frozen-crew
+exclusion should broaden to the 4 crew pages now that its correctness is
+proven rather than merely plausible, moving `getFrozenCrewArchetypeIds` to
+`crew/getters.ts` now that the placement friction has actually triggered
+rather than staying hypothetical, fixing this sandbox's missing
+headless-browser tooling before a feature with real layout/CSS risk needs
+it, extending the image column to a new asset kind now that two features
+have proven the design (items? rewards?), or binding the server to
+`127.0.0.1` as a standalone hardening pass covering all three
+currently-unauthenticated endpoints at once.
