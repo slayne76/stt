@@ -1,0 +1,38 @@
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const CACHE_DIR = 'data/assets';
+
+function cachedFilePath(filename: string): string {
+  return join(CACHE_DIR, filename);
+}
+
+function missingMarkerPath(filename: string): string {
+  return join(CACHE_DIR, `${filename}.missing`);
+}
+
+export function getCachedAssetPath(filename: string): string | null {
+  const path = cachedFilePath(filename);
+  return existsSync(path) ? path : null;
+}
+
+export function isKnownMissing(filename: string): boolean {
+  return existsSync(missingMarkerPath(filename));
+}
+
+export function writeAssetCache(filename: string, data: Buffer): void {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  writeFileSync(cachedFilePath(filename), data);
+}
+
+export function markAssetMissing(filename: string): void {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  writeFileSync(missingMarkerPath(filename), '');
+}
+
+export function clearAssetCache(): void {
+  if (!existsSync(CACHE_DIR)) return;
+  for (const entry of readdirSync(CACHE_DIR)) {
+    rmSync(join(CACHE_DIR, entry));
+  }
+}
