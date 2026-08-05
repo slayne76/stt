@@ -22,6 +22,8 @@ function Thumbnail({ asset, alt }: ThumbnailProps) {
       src={url}
       alt={alt}
       onError={() => setFailed(true)}
+      loading="lazy"
+      decoding="async"
       sx={{ width: 40, height: 40, borderRadius: 1, objectFit: 'cover' }}
     />
   );
