@@ -2,6 +2,7 @@ import { Box, LinearProgress, Paper, Table, TableBody, TableCell, TableContainer
 import type { Ship } from '../types/ship';
 import type { OwnedItem } from '../types/item';
 import { getShipDisplayLevel, getShipSchematicsDisplay, getShipSchematicsProgress } from './getters';
+import Thumbnail from '../assets/Thumbnail';
 
 export interface ShipsTableProps {
   ships: Ship[];
@@ -15,6 +16,7 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
         <TableHead>
           <TableRow>
             <TableCell>#</TableCell>
+            <TableCell>Image</TableCell>
             <TableCell>Ship</TableCell>
             <TableCell align="right">Level</TableCell>
             <TableCell align="right">Schematics</TableCell>
@@ -24,6 +26,9 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
           {ships.map((s, index) => (
             <TableRow key={s.id}>
               <TableCell>{index + 1}</TableCell>
+              <TableCell>
+                <Thumbnail asset={s.icon} alt={s.name} />
+              </TableCell>
               <TableCell>{s.name}</TableCell>
               <TableCell align="right">{getShipDisplayLevel(s)}</TableCell>
               <TableCell align="right">
