@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-04. This document is the durable, in-depth record of
+Last updated: 2026-08-05. This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -72,16 +72,21 @@ client/src/
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
-    crew.ts                    CrewMember interface (see below)
+    crew.ts                    CrewMember interface (see below; `portrait?` added for the image column)
     item.ts                    OwnedItem interface (see below; `quantity?` added for Ships)
     collection.ts              Collection interface (see "The collections membership logic")
     storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
-    ship.ts                    Ship interface (see "Ships pages")
+    ship.ts                    Ship interface (see "Ships pages"; `icon?` added for the image column)
+    asset.ts                   DatacoreAsset interface (see "Crew/ship image column")
+  assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
+    config.ts                  ASSET_BASE_URL — the one constant Phase 2 will repoint
+    getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
+    Thumbnail.tsx                40x40 image-or-placeholder renderer, shared by CrewTable/ShipsTable
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
     sorters.ts                 Composable comparators (see "Sorting design")
-    CrewTable.tsx               Shared table renderer (#/Stars/Name/Level/Items-to-equip/Collections)
+    CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
@@ -99,7 +104,7 @@ client/src/
     filters.ts                 filterIncompleteShipsByRarity
     sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
                                 byNameAsc, sortShips (reuses crew/sorters.ts's Comparator/combineComparators)
-    ShipsTable.tsx               Shared table renderer (#/Ship/Level/Schematics)
+    ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -1373,6 +1378,129 @@ already-documented `getShipSchematicsDisplay` `"0/-1"` case. See
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-crew-nav-group-and-schematics-bar-design.md`,
 `docs/superpowers/plans/2026-08-04-crew-nav-group-and-schematics-bar-plan.md`.
 
+## Crew/ship image column (Phase 1 of 2 — frontend only)
+
+Every crew page and every ship page gained a 40x40px thumbnail "Image"
+column, second column from the left (right after `#`) — crew portraits on
+the crew pages, ship preview art on the ship pages. This is Phase 1 of a
+two-phase feature: images are hotlinked directly from the public asset host
+`assets.datacore.app` for now. **Phase 2 (a Node-backend caching proxy so
+the browser stops hitting that host directly on every page view) is
+deliberately not built yet** — see "Likely next steps" below.
+
+**The original ask assumed the image URL would need to be predicted from
+the crew/ship's display name via some slugification scheme — this turned
+out to be unnecessary.** Both crew and ship objects in the real payload
+already carry the exact asset path under a `{file}` object:
+
+```
+crew.portrait.file === "/crew_portraits/cm_pike_amand_rauth_sm"
+ship.icon.file      === "/ship_previews/fed_arctic_one"
+```
+
+— which map directly to the real asset URLs
+(`crew_portraits_cm_pike_amand_rauth_sm.png`,
+`ship_previews_fed_arctic_one.png`) by stripping the leading `/`, replacing
+internal `/` with `_`, and appending `.png`. **Re-verified against the full
+reference dataset for this doc update, not just the handful of examples
+used at design time:** all 597/597 crew have a `portrait.file`, all
+128/128 ships have an `icon.file` — no missing-data case exists in the
+sample at all (the `Thumbnail` placeholder path is real code, just not yet
+exercised by this particular dataset).
+
+**New top-level `assets/` module** (sibling to `crew/`, `collections/`,
+`ships/`), deliberately asset-type-agnostic per explicit user request for
+future reuse (items/rewards icons, etc.):
+
+```ts
+// assets/config.ts
+export const ASSET_BASE_URL = 'https://assets.datacore.app';
+
+// assets/getAssetUrl.ts
+export function getAssetUrl(asset: DatacoreAsset | undefined): string | undefined {
+  if (!asset?.file) return undefined;
+  const path = asset.file.replace(/^\//, '').replace(/\//g, '_');
+  return `${ASSET_BASE_URL}/${path}.png`;
+}
+```
+
+`getAssetUrl` doesn't special-case crew vs. ships at all — it just turns
+any `{file: string}` object into a URL. This was checked against the
+hardest real case during final review: item objects in the payload carry
+`icon: {file: "/items/components/casing_compon"}`, a three-segment path,
+deeper than crew/ship assets — `getAssetUrl`'s global `/`→`_` replace
+handles it with zero changes needed, confirming the agnostic-design claim
+is real rather than aspirational.
+
+**Shared `Thumbnail` component** (`assets/Thumbnail.tsx`), used by both
+`CrewTable` and `ShipsTable`:
+
+```tsx
+function Thumbnail({ asset, alt }: ThumbnailProps) {
+  const [failed, setFailed] = useState(false);
+  const url = getAssetUrl(asset);
+  if (!url || failed) {
+    return <Box sx={{ width: 40, height: 40, bgcolor: 'action.hover', borderRadius: 1 }} />;
+  }
+  return (
+    <Box component="img" src={url} alt={alt} loading="lazy" decoding="async"
+      onError={() => setFailed(true)}
+      sx={{ width: 40, height: 40, borderRadius: 1, objectFit: 'cover' }} />
+  );
+}
+```
+
+Two distinct failure modes — "no `{file}` data at all" and "URL present
+but the image failed to load" (e.g. a renamed/removed upstream asset) —
+deliberately collapse to the exact same placeholder rendering path, not two
+different ones; this is also the single point where a real placeholder
+image (planned, not yet supplied by the user) will replace the grey `Box`.
+`loading="lazy"`/`decoding="async"` were added in the final whole-branch
+review, not the original plan — neither `CrewTable` nor `ShipsTable`
+paginates or virtualizes, so every filtered row renders at once, and
+without lazy-loading a page navigation would fire a burst of parallel
+requests at the third-party host for rows mostly below the fold. This is
+an independent mitigation, not a substitute for the Phase 2 caching proxy.
+
+**No security issue in constructing a URL from unvalidated payload data:**
+verified at final review — `getAssetUrl` prefixes a hard-coded scheme and
+authority and strips every `/` from the payload-supplied segment, so a
+hostile `file` value cannot inject a scheme, escape the path, or manipulate
+the authority; worst case is a same-host 404, and the result is only ever
+rendered as an `<img src>`, never as script.
+
+**Column placement:** inserted immediately after `#`, before every other
+existing column, on both `CrewTable` (`#, Image, Stars, Name, Level, Items
+to equip, Collections`) and `ShipsTable` (`#, Image, Ship, Level,
+Schematics`). Both tables are the single shared rendering layer for all 6
+crew pages and 2 ship pages (see "The shared rendering layer" above), so
+the entire feature was two component edits plus two type edits (`portrait?`
+on `CrewMember`, `icon?` on `Ship`) — every page picked up the column
+automatically, zero per-page changes, the same reuse story as every prior
+`CrewTable`/`ShipsTable` feature.
+
+**Verification, this project's usual pattern:** a throwaway
+`assets/__verify.ts` script (deleted before commit) asserted `getAssetUrl`
+against real known-good examples (Amand Rauth Pike, Bold Boimler, Arctic
+One, Alternate Probability Cerritos), all matching exactly, plus a
+missing-portrait count across the full crew list (0/597). **Full
+browser-based visual verification could not be completed for this
+feature** — this sandbox has no working headless-browser tooling
+(`chromium-cli` absent; Playwright's Chromium binary is missing a system
+library; an SSR fallback hit a JSX-transform issue) — so the safety net for
+this feature leaned more heavily than usual on: independent re-verification
+of the data-shape claims against the real payload (by both the final
+reviewer and, again, this doc-update pass), type-checking (which would
+catch a `Thumbnail`/`CrewTable`/`ShipsTable` prop-shape mismatch), and
+close reading of the `Box component="img"` JSX pattern against this
+codebase's other working MUI components. If a future session has real
+browser tooling available, actually loading a crew/ship page and confirming
+the thumbnails render is the one check this feature never got to make.
+
+**Spec/plan:**
+`docs/superpowers/specs/2026-08-05-crew-ship-image-column-design.md`,
+`docs/superpowers/plans/2026-08-05-crew-ship-image-column.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -1543,6 +1671,25 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     out-of-scope post-merge follow-up on its own, rather than flagging it
     "must fix before merge" and needing the controller to override it (as
     happened for the two prior features).
+19. **Crew/ship image column, Phase 1** (`2026-08-05-crew-ship-image-column`)
+    — deep-dive above. A 40x40 "Image" column added to all 6 crew pages and
+    both ship pages, sourced directly from `crew.portrait`/`ship.icon`
+    fields already present in the real payload (no name-based URL
+    prediction needed, unlike what the original request assumed), via a
+    new asset-type-agnostic `assets/` module (`getAssetUrl`, `Thumbnail`).
+    First feature explicitly split into two phases at the brainstorming
+    stage (frontend hotlinking now, a backend caching proxy later) rather
+    than designed as one spec. First feature where full browser-based
+    visual verification was attempted but genuinely unavailable in the
+    sandbox (missing headless-Chromium system library, no `chromium-cli`),
+    so the controller substituted independent data-shape re-verification
+    and close static reading of the JSX/MUI usage in its place — flagged
+    explicitly rather than silently treated as equivalent to a real visual
+    check. Final whole-branch review added one fix
+    (`loading="lazy"`/`decoding="async"`, an independent performance
+    mitigation given both tables render every filtered row unpaginated)
+    and parked the `PROJECT_STATE.md`-staleness finding per the
+    now-well-established convention from features #15-18.
 
 ## Current routes / nav (in order)
 
@@ -1822,6 +1969,54 @@ doing:
   sub-450px-tall viewport. Not worth engineering around for a local
   desktop app today, but it's the practical ceiling on how many children
   one flyout group can hold before this needs revisiting.
+- **Phase 2 of the image column (backend caching proxy) is not built yet
+  (new, from the Crew/ship image column feature):** Phase 1 hotlinks
+  directly to `assets.datacore.app` on every page render. `ASSET_BASE_URL`
+  (`assets/config.ts`) is the one constant designed to be repointed once a
+  local proxy exists — see "Crew/ship image column" above. This is the
+  most directly-expected next step, not a hypothetical.
+- **`Thumbnail`'s placeholder box has no `aria-label`/`role` (new, from the
+  Crew/ship image column feature):** a screen-reader user gets nothing
+  identifying an empty grey square as "portrait for {name}." Low priority
+  for a single-user local tool; also see the next item, which may resolve
+  both at once.
+- **`Thumbnail`'s `alt` text may be the wrong semantic choice (new, from
+  the Crew/ship image column feature):** `alt={crew.name}` /
+  `alt={ship.name}` duplicates the adjacent Name/Ship text cell — a screen
+  reader announces the name twice per row. For a decorative thumbnail next
+  to its own text label, `alt=""` may be more correct, which would also
+  moot the aria-label item above (an unlabeled placeholder is exactly right
+  if the image is decorative). Not acted on — the two items are actually
+  one semantic decision, deferred together.
+- **`getAssetUrl`'s `.png` extension is hard-coded (new, from the Crew/ship
+  image column feature):** correct for every asset kind seen in the real
+  payload (crew portraits/icons/full-body, ship previews/schematics), but
+  it's the one assumption that would break the "fully agnostic" design if
+  a future asset kind isn't a PNG. Worth a one-line comment next time this
+  file is touched; not worth a parameter today.
+- **`Thumbnail`'s `failed` state doesn't reset if its `asset` prop changes
+  (new, from the Crew/ship image column feature):** currently unreachable
+  — rows are keyed by stable entity id and route changes remount the whole
+  table — so this is robustness, not a live bug.
+- **No `referrerPolicy` on the hotlinked `<img>` (new, from the Crew/ship
+  image column feature):** Phase 1 sends a `localhost` referrer to the
+  public asset host on every image request. Trivial to add
+  (`referrerPolicy="no-referrer"`), and moot once Phase 2's proxy lands
+  anyway, which is why it wasn't added now.
+- **A stray trailing blank line in `CrewTable.tsx` (new, from the Crew/ship
+  image column feature):** purely cosmetic, caught at final review, not
+  worth a standalone diff.
+- **This sandbox has no working headless-browser tooling (new, from the
+  Crew/ship image column feature):** no `chromium-cli`, Playwright's
+  headless Chromium binary is missing a system library
+  (`libnspr4.so`), and an `react-dom/server` SSR fallback hit a
+  JSX-transform resolution issue that wasn't chased further. This affected
+  verification depth for this one feature (see the deep-dive above) and
+  will affect any future feature that specifically needs to *see* rendered
+  output rather than reason about it statically — worth fixing the
+  environment (installing the missing system library, or getting
+  `chromium-cli` available) before a feature where that matters more (e.g.
+  anything with real layout/CSS risk, not just a typed prop wiring change).
 
 ## Likely next steps
 
@@ -1855,24 +2050,37 @@ the Crew nav group and schematics progress bar — regrouping the six
 crew-related drawer entries under their own "Crew" flyout (proving
 `NavGroupItem`'s reusability with a second, larger group, zero component
 changes needed) and adding a blue `LinearProgress` bar to the Ships
-pages' Schematics column. Nothing is currently in flight. Plausible next
-asks, roughly by how directly they follow from what's already built: the
-`getShipSchematicsProgress` `NaN`-on-missing-field guard and the small
-paired `NavGroupItem` follow-up (Escape-from-trigger + ARIA menu
-semantics + the panel's `max-height` ceiling, all flagged across the last
-two features' final reviews) are the freshest and most concretely-scoped;
-close behind them, extracting `combineComparators`/`Comparator<T>` to a
-domain-neutral module is now backed by a third consumer
-(`ships/sorters.ts`, alongside `collections/sorters.ts` and
-`CollectionsTable.tsx`) rather than just the two the Upgradable-chip
-feature left it at; beyond those, unifying the dual upgradable-status
-computation between the Collections sort and chip, another crew
-classification factor (skills? traits?), finally tackling the page-shell
-duplication (7 pages now share the identical shell, well past the
-threshold every prior review named), reconsidering whether frozen-crew
-exclusion should broaden to the 4 crew pages now that its correctness is
-proven rather than merely plausible, moving `getFrozenCrewArchetypeIds`
-to `crew/getters.ts` now that the placement friction has actually
-triggered rather than staying hypothetical, or a
-`docs/PROJECT_STATE.md`-adjacent housekeeping pass if this document
-itself starts lagging again after a burst of features.
+pages' Schematics column; and most recently the crew/ship image column,
+Phase 1 — a 40x40 "Image" thumbnail column on all 6 crew pages and both
+ship pages, sourced directly from `crew.portrait`/`ship.icon` fields
+already present in the real payload, via a new asset-type-agnostic
+`assets/` module designed up front to support future asset kinds
+(items/rewards icons) with zero changes. Nothing is currently in flight.
+
+**The most directly-expected next step is Phase 2 of the image column**
+— the user's own stated plan: a Node-backend caching proxy so the browser
+stops hotlinking `assets.datacore.app` directly on every page render, with
+some refresh/invalidation mechanism (tied to the existing topbar Refresh
+button, a separate dedicated button, or something else — an open question
+for that feature's own brainstorming) and `ASSET_BASE_URL` repointed to the
+local proxy path as the one-line seam this phase was specifically built to
+support. Beyond that, plausible next asks, roughly by how directly they
+follow from what's already built: the `getShipSchematicsProgress`
+`NaN`-on-missing-field guard and the small paired `NavGroupItem` follow-up
+(Escape-from-trigger + ARIA menu semantics + the panel's `max-height`
+ceiling, all flagged across several recent features' final reviews) remain
+the freshest small-scoped items from before this feature; close behind
+them, extracting `combineComparators`/`Comparator<T>` to a domain-neutral
+module is now backed by a third consumer (`ships/sorters.ts`, alongside
+`collections/sorters.ts` and `CollectionsTable.tsx`); beyond those,
+unifying the dual upgradable-status computation between the Collections
+sort and chip, another crew classification factor (skills? traits?),
+finally tackling the page-shell duplication (7 pages now share the
+identical shell, well past the threshold every prior review named),
+reconsidering whether frozen-crew exclusion should broaden to the 4 crew
+pages now that its correctness is proven rather than merely plausible,
+moving `getFrozenCrewArchetypeIds` to `crew/getters.ts` now that the
+placement friction has actually triggered rather than staying
+hypothetical, fixing this sandbox's missing headless-browser tooling
+before a feature with real layout/CSS risk needs it, or settling the
+`Thumbnail` `alt`/placeholder accessibility semantics noted above.
