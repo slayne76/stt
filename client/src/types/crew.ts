@@ -1,3 +1,5 @@
+import type { DatacoreAsset } from './asset';
+
 export interface CrewMember {
   id: number;
   symbol: string;
@@ -11,4 +13,5 @@ export interface CrewMember {
   equipment_slots: { level: number; archetype: number }[];
   traits: string[];
   traits_hidden: string[];
+  portrait?: DatacoreAsset;
 }
