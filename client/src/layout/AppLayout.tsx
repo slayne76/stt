@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
+import { Alert, AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Snackbar, Toolbar, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { refreshAssets } from '../api/assetsApi';
@@ -48,11 +48,15 @@ function AppLayout() {
   const navigate = useNavigate();
   const { refresh, loading } = usePlayerData();
   const [refreshingAssets, setRefreshingAssets] = useState(false);
+  const [assetsError, setAssetsError] = useState<string | null>(null);
 
   async function handleRefreshAssets() {
     setRefreshingAssets(true);
+    setAssetsError(null);
     try {
       await refreshAssets();
+    } catch (err) {
+      setAssetsError(err instanceof Error ? err.message : 'Failed to refresh asset cache');
     } finally {
       setRefreshingAssets(false);
     }
@@ -82,7 +86,7 @@ function AppLayout() {
             variant="outlined"
             onClick={() => void handleRefreshAssets()}
             disabled={refreshingAssets}
-            startIcon={refreshingAssets ? <CircularProgress size={16} /> : undefined}
+            startIcon={refreshingAssets ? <CircularProgress size={16} color="inherit" /> : undefined}
             sx={{ ml: 1, color: 'common.white', borderColor: 'common.white' }}
           >
             Refresh assets
@@ -114,6 +118,11 @@ function AppLayout() {
         <Toolbar />
         <Outlet />
       </Box>
+      <Snackbar open={assetsError !== null} autoHideDuration={6000} onClose={() => setAssetsError(null)}>
+        <Alert severity="error" onClose={() => setAssetsError(null)}>
+          {assetsError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
