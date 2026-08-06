@@ -1499,19 +1499,12 @@ automatically, zero per-page changes, the same reuse story as every prior
 `assets/__verify.ts` script (deleted before commit) asserted `getAssetUrl`
 against real known-good examples (Amand Rauth Pike, Bold Boimler, Arctic
 One, Alternate Probability Cerritos), all matching exactly, plus a
-missing-portrait count across the full crew list (0/597). **Full
-browser-based visual verification could not be completed for this
-feature** — this sandbox has no working headless-browser tooling
-(`chromium-cli` absent; Playwright's Chromium binary is missing a system
-library; an SSR fallback hit a JSX-transform issue) — so the safety net for
-this feature leaned more heavily than usual on: independent re-verification
-of the data-shape claims against the real payload (by both the final
-reviewer and, again, this doc-update pass), type-checking (which would
-catch a `Thumbnail`/`CrewTable`/`ShipsTable` prop-shape mismatch), and
-close reading of the `Box component="img"` JSX pattern against this
-codebase's other working MUI components. If a future session has real
-browser tooling available, actually loading a crew/ship page and confirming
-the thumbnails render is the one check this feature never got to make.
+missing-portrait count across the full crew list (0/597). Full
+browser-based visual verification was deferred at the time (this sandbox
+had no working headless-browser tooling) but has since been completed —
+see the "Browser-based visual verification (2026-08-06)" note at the end
+of the "Asset cache proxy" section below, which closes out this gap for
+both Phase 1 and Phase 2.
 
 **Spec/plan:**
 `docs/superpowers/specs/2026-08-05-crew-ship-image-column-design.md`,
@@ -1614,7 +1607,41 @@ fell back to curl through the client's Vite proxy, which is real evidence
 of correct HTTP wiring even without pixels. The final reviewer explicitly
 named this as a gap in *rendering* confidence, not in the correctness of
 anything the branch adds, since every server behavior in the spec's
-error-handling table has direct HTTP-level evidence.
+error-handling table has direct HTTP-level evidence. **This gap is now
+closed — see the next note.**
+
+**Browser-based visual verification (2026-08-06):** the sandbox's
+headless-browser tooling was fixed in an earlier session (missing
+`libnspr4`/`libnss3`/`libasound2t64` shared libraries), and this session
+got the `playwright`/`chrome-devtools` MCP servers actually working
+against it — both were configured (by `claude mcp add` defaults) to
+launch a system Chrome at `/opt/google/chrome/chrome`, which doesn't
+exist in this container; re-pointing both at the already-working bundled
+Playwright Chromium (`~/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`,
+via `--executable-path`/`--executablePath`) and reconnecting (`/mcp`) got
+real browser tooling working for the first time in this project. With it,
+both the crew image column (`/3-4-stars-crew`) and the ship image column
+(`/5-stars-ships`) were loaded against the real dev servers (already
+running with cached `player-cache.json`/asset-cache data) and visually
+confirmed: every row rendered a real portrait/ship-preview thumbnail, not
+the grey placeholder, closing the one check both Phase 1 and Phase 2 final
+reviews flagged as never completed.
+
+Two things surfaced during this pass, both confirming existing design
+rather than finding a defect:
+- One ship thumbnail (U.S.S. Glenn, a 1024×1024/546KB source image)
+  appeared blank in a screenshot taken immediately after navigation, then
+  rendered correctly on a later screenshot of the same page — a
+  `decoding="async"` paint-timing artifact of screenshotting very shortly
+  after load, not a rendering bug.
+- One ship thumbnail (The Serene Squall) hit a real transient 502 from
+  the asset proxy on first load; the `Thumbnail` component's `onError`
+  fallback correctly rendered the grey placeholder `Box` for it (verified
+  via DOM inspection — no `<img>` present, exactly the fail-closed path
+  documented above), and a page reload immediately recovered it to a real
+  `<img>` — direct, live confirmation that the "502/`UPSTREAM_ERROR` is
+  transient, never cached as missing" design (see above) behaves correctly
+  under a real upstream hiccup, not just by code-reading.
 
 **Known, deliberately-accepted gaps (all Minor at final review, none
 looped into the branch):** cache writes aren't atomic (`writeFileSync` in
