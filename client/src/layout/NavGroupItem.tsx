@@ -101,7 +101,7 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
   // role="menu" below would be dishonest: a menu whose items aren't
   // arrow-key navigable doesn't behave like one.
   const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
-    const count = itemRefs.current.length;
+    const count = items.length;
     if (count === 0) return;
     const current = itemRefs.current.findIndex((node) => node === document.activeElement);
     let nextIndex: number;
@@ -156,7 +156,7 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
           onBlur={scheduleClose}
           sx={{ maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}
         >
-          <List role="menu" onKeyDown={handleMenuKeyDown}>
+          <List role="menu" aria-label={label} onKeyDown={handleMenuKeyDown}>
             {items.map((item, index) => (
               <ListItemButton
                 key={item.path}
@@ -164,6 +164,8 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
                 role="menuitem"
                 onClick={() => {
                   navigate(item.path);
+                  suppressTriggerFocusOpenRef.current = true;
+                  triggerRef.current?.focus();
                   setOpen(false);
                 }}
               >

@@ -1319,13 +1319,12 @@ the trigger's own `onFocus`. Re-verified on `/5-stars-ships` (a page with
 a real focusable "Retry"-style control), not the page that hid the
 original bug.
 
-**Known gaps, deferred, not yet acted on:** no ARIA menu semantics
-(`role="menu"`/`"menuitem"`, `aria-haspopup`/`aria-expanded`) — the panel
-is keyboard-*operable* now but not screen-reader-idiomatic; `Escape` only
-closes the panel when focus is already inside it, not when focus is still
-on the trigger (`handlePanelKeyDown` is attached to the portaled `Paper`,
-which doesn't receive keydowns that never left the trigger). See
-"Deferred issues" below.
+**Fixed 2026-08-06 — see "NavGroupItem Escape/ARIA/max-height follow-up"
+below.** (Kept here, struck through in spirit, as a pointer for anyone
+who remembers this entry from before — the fix is real, not just noted.)
+Originally: no ARIA menu semantics, and `Escape` only closed the panel
+when focus was already inside it, not when focus was still on the
+trigger.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-ships-pages-design.md`,
 `docs/superpowers/plans/2026-08-04-ships-pages-plan.md`.
@@ -1343,12 +1342,11 @@ order is now **Overview / Crew / Ships / Collections** — "Overview" and
 **This is a pure `NAV_ITEMS` data change** — `NavGroupItem` (see "The nav
 flyout" above) needed zero modification to support a second group with 3×
 the children, which is the concrete proof its "generic, reusable"
-design claim from the Ships feature actually holds. **One real ceiling
-worth knowing:** `NavGroupItem`'s panel has no `max-height`/scroll
-fallback, so six default-height `ListItemButton`s (~304px) would clip on
-a sub-450px-tall viewport — not worth engineering around for a local
-desktop app, but it's the practical limit on how many children one group
-can hold before that changes.
+design claim from the Ships feature actually holds. **A real ceiling this
+group size ran into, fixed 2026-08-06:** `NavGroupItem`'s panel originally
+had no `max-height`/scroll fallback, so six default-height
+`ListItemButton`s (~304px) would have clipped on a sub-450px-tall
+viewport — see "NavGroupItem Escape/ARIA/max-height follow-up" below.
 
 **Schematics progress bar:** the Ships pages' "Schematics" column gained a
 thin blue `LinearProgress` bar stacked above the existing `"owned/needed"`
@@ -1401,6 +1399,85 @@ doesn't contain — see the plan for the exact script.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-crew-nav-group-and-schematics-bar-design.md`,
 `docs/superpowers/plans/2026-08-04-crew-nav-group-and-schematics-bar-plan.md`.
+
+## NavGroupItem Escape/ARIA/max-height follow-up
+
+Three previously-deferred `NavGroupItem` gaps, closed in one pass — see
+"Ships pages" and "Crew nav group and schematics progress bar" above for
+where each was originally flagged.
+
+**Escape now closes the flyout from the trigger, not just from inside the
+panel.** The old `Escape` handler lived only on the portaled `Paper`, so
+it never fired if focus was still on the trigger (the most common state
+right after opening via hover, or via `ArrowDown`/`Enter` without tabbing
+further). Handling is now consolidated on the wrapper `div`'s `onKeyDown`
+— the `Popper`'s content is portaled elsewhere in the DOM but stays a
+React child of the wrapper, so keydowns from both the trigger and every
+panel item already bubble there (same fiber-vs-DOM-tree fact the
+open/close hover logic already relied on). A
+`document.activeElement !== triggerRef.current` guard skips the
+refocus-and-suppress dance when focus was already on the trigger.
+
+**Full ARIA menu semantics, including arrow-key navigation:** the trigger
+gained `aria-haspopup="true"`/`aria-expanded={open}`; the panel gained
+`role="menu"` with `aria-label={label}` (added after final review — a
+`role="menu"` with no accessible name announces as an unlabeled "menu, N
+items"); each item gained `role="menuitem"` with `ArrowUp`/`ArrowDown`
+(wrapping at both ends) and `Home`/`End` moving focus between them.
+**A real MUI internals risk, checked and confirmed safe:** `ListItemButton`
+is built on `ButtonBase`, which defaults non-native-button components to
+`role="button"` — the final reviewer traced MUI 6.5.0's source
+(`ButtonBase.js`) and confirmed the caller's explicit `role="menuitem"`
+prop is spread *after* that default, so it wins; live-verified in the DOM
+as well. **Also added after final review:** activating an item (`Enter`
+or click) now returns focus to the trigger before closing, rather than
+letting `navigate()` unmount the focused item and drop focus to
+`<body>` — a real WCAG 2.4.3 regression the ArrowDown→Enter keyboard flow
+this feature adds would otherwise hit on every single use.
+
+**Max-height + scroll**, closing the "six items would clip on a
+sub-450px-tall viewport" gap: the panel's `Paper` caps at
+`calc(100vh - 32px)` with `overflowY: auto`. **The `32px` figure isn't
+"16px top + 16px bottom" evenly split, despite reading that way at a
+glance** — MUI's `Popper` clamps the panel's bottom edge into the
+viewport, so in practice all the slack ends up above the panel and none
+below; the final reviewer measured this directly (a 300px-tall viewport
+produced a panel bottom flush with the viewport edge, `scrollHeight`
+304 > `clientHeight` 268, genuinely scrollable). The cap works — Popper's
+clamping is what makes a viewport-relative height sufficient without
+knowing the anchor's own position — the original one-line rationale
+just described the wrong mechanism.
+
+**Verification:** this project has no automated test framework or CI
+browser harness — verified via `tsc`/`eslint` plus interactive checks
+against a real dev server using the `playwright` MCP tooling (the same
+tooling that became available this session, per "Browser-based visual
+verification" above): reproduced the Escape-from-trigger bug on the
+unfixed code first, then confirmed the fix on both the 6-item "Crew" and
+2-item "Ships" groups — Escape from both focus states, arrow-key
+wraparound in both directions, Home/End, the max-height/scroll fallback
+at a genuinely-overflowing viewport height, and the click-to-navigate
+regression path. The final reviewer independently re-derived the
+keyboard/focus state machine rather than trusting the report — in
+particular confirming `suppressTriggerFocusOpenRef` is consumed exactly
+once on every path that sets it, and that a stale `scheduleClose` timer
+racing against an `Escape`-triggered `setOpen(false)` can't reopen a
+closed panel (every reopen path calls `cancelClose()` first via
+`openNow()`).
+
+**Known, deliberately-deferred gaps (all Minor at final review):** no
+roving `tabindex` (the WAI-ARIA APG menu pattern expects exactly one
+tabbable item at a time, with `Tab` exiting the menu entirely — here
+every item is independently `Tab`-reachable, which degrades gracefully
+but isn't the full pattern); `handleTriggerFocus` (the wrapper's
+`onFocus`) is a slightly misleading name since it also fires for
+panel-item focus, not just the trigger's; `focusFirstItemRef` could
+theoretically be stranded `true` forever if `items` were ever empty
+(unreachable today — `NAV_ITEMS` is a fixed module constant). See
+"Deferred issues" below.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-06-navgroupitem-keyboard-aria-design.md`,
+`docs/superpowers/plans/2026-08-06-navgroupitem-keyboard-aria-plan.md`.
 
 ## Crew/ship image column (Phase 1 of 2 — frontend only)
 
@@ -2123,22 +2200,32 @@ doing:
   (`ShipsTable`) only ever receives `filterIncompleteShipsByRarity`'s
   output — but latent for the same reason as the item above.
 - **`NavGroupItem`'s `Escape` key only closes the flyout when focus is
-  already inside the panel, not when focus is still on the trigger (new,
-  from the Ships pages feature):** `handlePanelKeyDown` is attached to
-  the portaled `Paper`, which never receives a keydown that fired on the
-  trigger and never left it — the most common state right after Tab
-  lands on "Ships." Fix: move the `Escape` handling to the wrapper
-  `div`'s `onKeyDown` (both trigger and panel keydowns bubble there
-  through the React tree regardless of the DOM portal), guarded with an
-  `document.activeElement !== triggerRef.current` check so it doesn't
-  fight the existing focus-return logic.
-- **`NavGroupItem` has no ARIA menu semantics (new, from the Ships pages
-  feature):** no `role="menu"`/`"menuitem"`, no `aria-haspopup`/
-  `aria-expanded` on the trigger, no `ArrowUp`/`ArrowDown` movement
-  between panel items. The flyout is keyboard-*operable* after the
-  Task 4 fix round (see "Ships pages" above) but not screen-reader-
-  idiomatic. Worth pairing with the `Escape`-from-trigger fix above as
-  one small follow-up, not urgent for a single-user local tool.
+  already inside the panel — resolved 2026-08-06, see "NavGroupItem
+  Escape/ARIA/max-height follow-up" above.** (Kept here, struck through
+  in spirit, as a pointer for anyone who remembers this entry from
+  before — the fix is real, not just noted.)
+- **`NavGroupItem` has no ARIA menu semantics — resolved 2026-08-06, see
+  "NavGroupItem Escape/ARIA/max-height follow-up" above.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.) Also fixed as
+  part of the same branch, caught at its final review rather than
+  planned up front: activating a menu item used to drop focus to
+  `<body>` (now returns it to the trigger first), and the `role="menu"`
+  had no accessible name (now `aria-label={label}`).
+- **`NavGroupItem`'s panel items have no roving `tabindex` (new, from the
+  Escape/ARIA/max-height follow-up):** every item is independently
+  `Tab`-reachable rather than the WAI-ARIA APG menu pattern's "one
+  tabbable item, `Tab` exits the menu" convention. Degrades gracefully —
+  not a defect, just the remaining distance from the full pattern.
+- **`NavGroupItem`'s `handleTriggerFocus`/`focusFirstItemRef` naming and
+  edge-case robustness (new, from the Escape/ARIA/max-height
+  follow-up):** `handleTriggerFocus` is the wrapper's `onFocus` and also
+  fires for panel-item focus, not just the trigger's — correct today only
+  because the suppress flag is set and consumed synchronously, but the
+  name doesn't say so. Separately, `focusFirstItemRef` could in principle
+  be stranded `true` forever if a group's `items` were ever empty
+  (unreachable today — `NAV_ITEMS` is a fixed module constant). Both
+  cosmetic/robustness, not live bugs.
 - **`NavGroupItemProps.items` duplicates `AppLayout.tsx`'s `NavLink` shape
   (new, from the Ships pages feature):** both independently declare
   `{ label: string; path: string }`. Exporting `NavLink` from one file and
@@ -2186,12 +2273,11 @@ doing:
   the spec exactly as written, so not a defect — just the first thing
   likely to want a small `sx={{ mb: 0.5 }}` once seen against real data
   with the user's own session cookie.
-- **`NavGroupItem`'s flyout panel has no `max-height`/scroll fallback
-  (new, from the Crew nav group feature):** six default-height
-  `ListItemButton`s (~304px, the new "Crew" group's size) would clip on a
-  sub-450px-tall viewport. Not worth engineering around for a local
-  desktop app today, but it's the practical ceiling on how many children
-  one flyout group can hold before this needs revisiting.
+- **`NavGroupItem`'s flyout panel had no `max-height`/scroll fallback —
+  resolved 2026-08-06, see "NavGroupItem Escape/ARIA/max-height
+  follow-up" above.** (Kept here, struck through in spirit, as a pointer
+  for anyone who remembers this entry from before — the fix is real, not
+  just noted.)
 - **Phase 2 of the image column — resolved by the Asset cache proxy
   feature, see deep-dive above.** (Kept here, struck through in spirit, as
   a pointer for anyone who remembers this entry from before — the fix is
@@ -2354,12 +2440,13 @@ Phase 1's `ASSET_BASE_URL` seam was built to support, plus an independent
 "Refresh assets" button. Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
-already built:** the small paired `NavGroupItem` follow-up
-(Escape-from-trigger + ARIA menu semantics + the panel's `max-height`
-ceiling, all flagged across several recent features' final reviews) is
-the freshest small-scoped item remaining from before the image-column
-work — the `getShipSchematicsProgress` `NaN`-on-missing-field guard that
-used to sit alongside it shipped 2026-08-06; close behind it, extracting
+already built:** with both the `getShipSchematicsProgress` guard and the
+`NavGroupItem` Escape/ARIA/max-height follow-up now shipped (2026-08-06),
+the freshest remaining small-scoped items are the ones those two features
+just left behind — `NavGroupItem`'s roving-`tabindex` gap and its
+`handleTriggerFocus`/`focusFirstItemRef` naming/robustness notes (both
+above), and the sibling-reader/numeric-string notes on the schematics
+guard; extracting
 `combineComparators`/`Comparator<T>` to a domain-neutral module is now
 backed by a third consumer (`ships/sorters.ts`, alongside
 `collections/sorters.ts` and `CollectionsTable.tsx`); a handful of small,
