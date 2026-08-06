@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-05. This document is the durable, in-depth record of
+Last updated: 2026-08-06. This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -2171,17 +2171,41 @@ doing:
 - **A stray trailing blank line in `CrewTable.tsx` (new, from the Crew/ship
   image column feature):** purely cosmetic, caught at final review, not
   worth a standalone diff.
-- **This sandbox has no working headless-browser tooling (new, from the
-  Crew/ship image column feature):** no `chromium-cli`, Playwright's
-  headless Chromium binary is missing a system library
-  (`libnspr4.so`), and an `react-dom/server` SSR fallback hit a
-  JSX-transform resolution issue that wasn't chased further. This affected
-  verification depth for this one feature (see the deep-dive above) and
-  will affect any future feature that specifically needs to *see* rendered
-  output rather than reason about it statically — worth fixing the
-  environment (installing the missing system library, or getting
-  `chromium-cli` available) before a feature where that matters more (e.g.
-  anything with real layout/CSS risk, not just a typed prop wiring change).
+- **This sandbox's missing headless-browser tooling — resolved 2026-08-06,
+  see below.** (Kept here, struck through in spirit, as a pointer for
+  anyone who remembers this entry from before — the fix is real, not just
+  noted.) Originally: no `chromium-cli`, Playwright's headless Chromium
+  binary missing a system library (`libnspr4.so`), and an `react-dom/server`
+  SSR fallback hit a JSX-transform resolution issue. This affected
+  verification depth for both halves of the crew/ship image feature (see
+  the deep-dives above, which are left as-written — they're an accurate
+  record of what verification was actually possible at the time, not
+  something to retroactively rewrite).
+
+  **Root cause, found via `systematic-debugging`:** `ldd` against the real
+  binary (`~/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell`
+  — note the actual on-disk path/binary name differs from what earlier
+  entries assumed, `chrome-linux/headless_shell`; that was itself stale
+  info from an older Playwright layout) showed four missing shared
+  libraries: `libnspr4.so`, `libnss3.so`, `libnssutil3.so` (shipped inside
+  the `libnss3` package), and `libasound.so.2` (provided by
+  `libasound2t64` on Ubuntu 24.04's post-time64-transition package
+  naming). `apt-cache policy` confirmed all were available in the standard
+  Ubuntu repos but simply not installed — a real system-package gap, not a
+  Playwright or project config issue.
+
+  **Fix:** `sudo apt-get install -y libnspr4 libnss3 libasound2t64`, run by
+  the user (needs an interactive sudo password, which this sandbox's `sudo`
+  requires — confirmed `sudo -n true` fails non-interactively, so this
+  can't be automated from a Bash tool call; the user ran it themselves).
+
+  **Verification:** `ldd` on both `chrome-headless-shell` and the full
+  `chrome` binary (`chromium-1234/chrome-linux64/chrome`) now resolve every
+  dependency (zero "not found" lines), and an actual Playwright
+  `chromium.launch()` → new page → `setContent` → `textContent` → `close`
+  round trip completed successfully end-to-end. Headless-browser
+  verification is available again for any future feature that needs it —
+  no need to re-diagnose this from scratch.
 - **Asset cache writes are not atomic (new, from the Asset cache proxy
   feature):** `writeAssetCache` (`server/src/assetCache.ts`) writes
   directly to the final path via `writeFileSync`. A concurrent request for
@@ -2290,9 +2314,11 @@ threshold every prior review named), reconsidering whether frozen-crew
 exclusion should broaden to the 4 crew pages now that its correctness is
 proven rather than merely plausible, moving `getFrozenCrewArchetypeIds` to
 `crew/getters.ts` now that the placement friction has actually triggered
-rather than staying hypothetical, fixing this sandbox's missing
-headless-browser tooling before a feature with real layout/CSS risk needs
-it, extending the image column to a new asset kind now that two features
-have proven the design (items? rewards?), or binding the server to
-`127.0.0.1` as a standalone hardening pass covering all three
-currently-unauthenticated endpoints at once.
+rather than staying hypothetical, extending the image column to a new
+asset kind now that two features have proven the design (items? rewards?),
+or binding the server to `127.0.0.1` as a standalone hardening pass
+covering all three currently-unauthenticated endpoints at once. The
+sandbox's headless-browser tooling gap (fixed 2026-08-06, see the deferred-
+issues entry above) no longer constrains any of these — real browser-based
+visual verification is available again if a future feature's risk profile
+warrants it.
