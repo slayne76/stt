@@ -5,10 +5,9 @@ import type { DatacoreAsset } from '../types/asset';
 
 export interface ThumbnailProps {
   asset: DatacoreAsset | undefined;
-  alt: string;
 }
 
-function Thumbnail({ asset, alt }: ThumbnailProps) {
+function Thumbnail({ asset }: ThumbnailProps) {
   const [failed, setFailed] = useState(false);
   const url = getAssetUrl(asset);
 
@@ -20,7 +19,7 @@ function Thumbnail({ asset, alt }: ThumbnailProps) {
     <Box
       component="img"
       src={url}
-      alt={alt}
+      alt=""
       onError={() => setFailed(true)}
       loading="lazy"
       decoding="async"

@@ -31,7 +31,7 @@ function CrewTable({ crew, collections }: CrewTableProps) {
             <TableRow key={c.id}>
               <TableCell>{index + 1}</TableCell>
               <TableCell>
-                <Thumbnail asset={c.portrait} alt={c.name} />
+                <Thumbnail asset={c.portrait} />
               </TableCell>
               <TableCell>
                 <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />

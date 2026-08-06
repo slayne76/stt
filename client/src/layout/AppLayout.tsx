@@ -49,12 +49,15 @@ function AppLayout() {
   const { refresh, loading } = usePlayerData();
   const [refreshingAssets, setRefreshingAssets] = useState(false);
   const [assetsError, setAssetsError] = useState<string | null>(null);
+  const [assetsSuccess, setAssetsSuccess] = useState(false);
 
   async function handleRefreshAssets() {
     setRefreshingAssets(true);
     setAssetsError(null);
+    setAssetsSuccess(false);
     try {
       await refreshAssets();
+      setAssetsSuccess(true);
     } catch (err) {
       setAssetsError(err instanceof Error ? err.message : 'Failed to refresh asset cache');
     } finally {
@@ -121,6 +124,11 @@ function AppLayout() {
       <Snackbar open={assetsError !== null} autoHideDuration={6000} onClose={() => setAssetsError(null)}>
         <Alert severity="error" onClose={() => setAssetsError(null)}>
           {assetsError}
+        </Alert>
+      </Snackbar>
+      <Snackbar open={assetsSuccess} autoHideDuration={6000} onClose={() => setAssetsSuccess(false)}>
+        <Alert severity="success" onClose={() => setAssetsSuccess(false)}>
+          Asset cache refreshed
         </Alert>
       </Snackbar>
     </Box>

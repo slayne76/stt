@@ -27,7 +27,7 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
             <TableRow key={s.id}>
               <TableCell>{index + 1}</TableCell>
               <TableCell>
-                <Thumbnail asset={s.icon} alt={s.name} />
+                <Thumbnail asset={s.icon} />
               </TableCell>
               <TableCell>{s.name}</TableCell>
               <TableCell align="right">{getShipDisplayLevel(s)}</TableCell>
