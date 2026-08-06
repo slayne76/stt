@@ -27,6 +27,7 @@ export function getShipSchematicsDisplay(ship: Ship, items: OwnedItem[]): string
 
 export function getShipSchematicsProgress(ship: Ship, items: OwnedItem[]): number {
   const needed = ship.schematic_gain_cost_next_level;
-  if (needed <= 0) return 100;
+  if (!Number.isFinite(needed)) return 0; // missing/malformed data — fail closed, not "maxed"
+  if (needed <= 0) return 100; // legitimate already-maxed sentinel (verified: always exactly -1)
   return Math.min(100, (getShipSchematicsOwned(ship, items) / needed) * 100);
 }
