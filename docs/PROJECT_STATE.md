@@ -72,6 +72,9 @@ client/src/
                                  `usePlayerData()` consumer
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
+  lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
+                                 composition, extracted from crew/sorters.ts (see
+                                 "Sorting design")
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
     crew.ts                    CrewMember interface (see below; `portrait?` added for the image column)
@@ -87,7 +90,9 @@ client/src/
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
-    sorters.ts                 Composable comparators (see "Sorting design")
+    sorters.ts                 Composable comparators (see "Sorting design";
+                                Comparator<T>/combineComparators now live in
+                                lib/comparator.ts)
     CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
   collections/                  Crew↔collection logic + the Collections page's own components
@@ -105,7 +110,7 @@ client/src/
                                 getShipSchematicsProgress
     filters.ts                 filterIncompleteShipsByRarity
     sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
-                                byNameAsc, sortShips (reuses crew/sorters.ts's Comparator/combineComparators)
+                                byNameAsc, sortShips (reuses lib/comparator.ts's Comparator/combineComparators)
     ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
@@ -752,7 +757,14 @@ acyclic by two independent reviewers reading the actual import lists:
 `collections/sorters.ts`, so the new edges
 (`collections/sorters.ts → crew/sorters.ts → collections/getters.ts →
 crew/getters.ts`, and `collections/sorters.ts → collections/getters.ts`
-directly) form a DAG.
+directly) form a DAG. **Historical note:** the `collections/sorters.ts →
+crew/sorters.ts` edge described here no longer exists — the 2026-08-06
+comparator extraction (see "Sorting design" below) moved
+`combineComparators`/`Comparator` to `lib/comparator.ts`, so
+`collections/sorters.ts` now imports that instead. The DAG conclusion
+still holds; this paragraph is left as-written because it's an accurate
+record of the reasoning at the time, not a claim about today's import
+graph.
 
 **Chip:** `<Chip label="Upgradable" size="small" color="info" sx={{ ml: 1 }} />`,
 rendered inline immediately after the collection name in the same
@@ -963,12 +975,14 @@ Started as one named function per sort combination (`sortByName`, then
 `sortByLevelThenName`), and this was explicitly refactored to composable
 comparators once a third sort factor arrived, specifically to stop
 accumulating dead/unused named functions (`sortByName` was already unused
-by the time it was noticed). Current design, entirely in
-`crew/sorters.ts`:
+by the time it was noticed). Current design:
 
 ```ts
+// lib/comparator.ts — extracted 2026-08-06, see below
 type Comparator<T> = (a: T, b: T) => number;
 combineComparators<T>(...comparators): Comparator<T>   // short-circuits on first non-zero
+
+// crew/sorters.ts
 byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc    // single-key comparators, self-contained on one CrewMember
 byCollectionCountDesc(collections): Comparator<CrewMember>  // factory — needs external context, see below
 sortCrew(crew, comparator): CrewMember[]                 // non-mutating apply
@@ -1016,23 +1030,28 @@ out of `crew/sorters.ts` since it operates on a different type entirely.
 composition need") no longer holds and is kept here only as history, not
 current fact. `collections/sorters.ts` now has two consumers
 (`CollectionsPage` *and* `CollectionsTable`, the latter for
-`isCollectionUpgradable`) and does use `combineComparators` — imported
-from `crew/sorters.ts` — to compose `byUpgradableThenCompletionThenNameAsc`
-with the existing `byCompletionThenNameAsc` (see "The 'Upgradable' chip
-and upgradable-first sort" above for the full deep-dive, including why
-this is still acyclic). **A Minor architectural smell flagged at final
-review, deferred rather than fixed:** `combineComparators`/`Comparator<T>`
-are fully generic and domain-neutral, but living in `crew/sorters.ts`
-forces this new `collections/ → crew/` edge for what's really a
-crew-agnostic utility. Extracting them to a shared, domain-neutral module
-(e.g. `types/comparator.ts` or `sorters/compose.ts`) would delete that
-edge entirely, leaving a clean one-directional
-`collections/sorters.ts → collections/getters.ts → crew/getters.ts`
-chain, and would pre-empt the actual cycle risk this creates: `crew/sorters.ts`
-already imports `collections/getters.ts`, so the day anything in
-`crew/sorters.ts` needs something from `collections/sorters.ts`, there is
-a real cycle, not just a smell. Zero-behavior-change move, not yet done —
-see "Deferred issues" below.
+`isCollectionUpgradable`) and uses `combineComparators` to compose
+`byUpgradableThenCompletionThenNameAsc` with the existing
+`byCompletionThenNameAsc` (see "The 'Upgradable' chip and
+upgradable-first sort" above for the full deep-dive, including why this
+is still acyclic).
+
+**Fixed 2026-08-06 — `combineComparators`/`Comparator<T>` moved to
+`lib/comparator.ts`.** Both were fully generic and domain-neutral, but
+lived in `crew/sorters.ts`, which forced every non-crew consumer
+(`collections/sorters.ts`, `collections/CollectionsTable.tsx`, and later
+`ships/sorters.ts` — three consumers by the time this was finally done)
+to import from a crew-domain module just to reuse them, and pre-empted a
+real cycle risk: `crew/sorters.ts` already imports
+`collections/getters.ts`, so the day anything in `crew/sorters.ts` needed
+something from `collections/sorters.ts`, that would have been a genuine
+cycle, not just a smell. `crew/sorters.ts` now imports only the
+`Comparator` *type* from `lib/comparator.ts` (still needed by
+`byCollectionCountDesc`/`byTierAsc`/`sortCrew`'s own signatures) and does
+not re-export `combineComparators` — every consumer imports it from
+`lib/comparator.ts` directly. Zero behavior change, a pure move — see
+`docs/superpowers/specs/2026-08-06-comparator-extraction-design.md` and
+`docs/superpowers/plans/2026-08-06-comparator-extraction-plan.md`.
 
 ## The shared rendering layer
 
@@ -1237,9 +1256,10 @@ app.
 `combineComparators(byLevelDesc, byLevelProgressDesc,
 byMissingSchematicsAsc(items), byNameAsc)` (`ships/sorters.ts`, reusing
 `Comparator<T>`/`combineComparators` imported from `crew/sorters.ts`
-as-is — not extracted to a shared module, an explicit decision reaffirmed
-during this feature; see "Deferred issues" below for why that's now more
-motivated than before) — level first (higher first), then
+as-is at the time this feature shipped — not extracted to a shared module
+then, an explicit decision reaffirmed during this feature; both were
+later moved to `lib/comparator.ts` by the 2026-08-06 comparator
+extraction, see "Sorting design" above) — level first (higher first), then
 level-completion fraction (`level / max_level`, closer to its own ceiling
 first), then remaining schematics (fewer first), then name as the final
 tiebreak.
@@ -2070,15 +2090,13 @@ doing:
   threaded into `CollectionsTable` as a prop, deleting the per-row
   `isCollectionUpgradable` call entirely — halves the `getCollectionCrew`
   calls and removes the dual-source-of-truth risk in one move.
-- **`combineComparators`/`Comparator<T>` living in `crew/sorters.ts` (new,
-  from the Upgradable chip feature):** both are fully generic and
-  domain-neutral, but their location forces `collections/sorters.ts` to
-  import from a crew-domain module just to reuse them, and pre-empts a
-  real future cycle (`crew/sorters.ts` already imports
-  `collections/getters.ts`; if it ever needs anything from
-  `collections/sorters.ts`, that's a genuine cycle, not just a smell).
-  Fix: extract both to a shared, domain-neutral module (e.g.
-  `types/comparator.ts`) — zero behavior change, pure move.
+- **`combineComparators`/`Comparator<T>` living in `crew/sorters.ts` —
+  resolved 2026-08-06, see "Sorting design" above.** (Kept here, struck
+  through in spirit, as a pointer for anyone who remembers this entry
+  from before — the fix is real, not just noted.) The shipped location is
+  `lib/comparator.ts`, not the `types/comparator.ts` this entry
+  originally suggested — see "Sorting design" above for why `lib/` fits
+  this project's conventions better.
 - **`isCollectionUpgradable`'s eligible-crew count assumes no duplicate
   `archetype_id`s among a collection's eligible crew (new, from the
   Upgradable chip feature):** if a player ever holds two un-immortalized
@@ -2171,17 +2189,13 @@ doing:
   nothing to do with collections that imports from `collections/getters.ts`
   purely for this getter. Cheap to move to `crew/getters.ts` whenever
   it's next touched; not worth a standalone diff just for this.
-- **`combineComparators`/`Comparator<T>` cross-domain reliance is now
-  stronger, not weaker (new, from the Ships pages feature):** the
-  deferred item above (from the Upgradable chip feature) about extracting
-  these to a domain-neutral module was reconsidered during Ships and
-  explicitly left as-is — reusing them from `crew/sorters.ts` was judged
-  the right call for this feature specifically, since `ships/` is a new
-  module and extracting mid-feature would have touched files the plan
-  explicitly froze. But `ships/sorters.ts` is now the **third** consumer
-  of a crew-housed utility (`collections/sorters.ts` and
-  `collections/CollectionsTable.tsx` were already importing it), which
-  makes the eventual extraction more clearly worthwhile, not less.
+- **`combineComparators`/`Comparator<T>` cross-domain reliance — resolved
+  2026-08-06, see "Sorting design" above.** (Kept here, struck through in
+  spirit, as a pointer for anyone who remembers this entry from before —
+  the fix is real, not just noted.) `ships/sorters.ts` being the third
+  consumer of the crew-housed utility (alongside `collections/sorters.ts`
+  and `collections/CollectionsTable.tsx`) is exactly what tipped this
+  from "worth noting" to "worth doing."
 - **`ships/sorters.ts`'s comparators assume pre-filtered (non-maxed) input
   (new, from the Ships pages feature):** `byMissingSchematicsAsc` and
   `byLevelProgressDesc` both silently rely on being called only on
@@ -2446,10 +2460,8 @@ the freshest remaining small-scoped items are the ones those two features
 just left behind — `NavGroupItem`'s roving-`tabindex` gap and its
 `handleTriggerFocus`/`focusFirstItemRef` naming/robustness notes (both
 above), and the sibling-reader/numeric-string notes on the schematics
-guard; extracting
-`combineComparators`/`Comparator<T>` to a domain-neutral module is now
-backed by a third consumer (`ships/sorters.ts`, alongside
-`collections/sorters.ts` and `CollectionsTable.tsx`); a handful of small,
+guard; with the `combineComparators`/`Comparator<T>` extraction to
+`lib/comparator.ts` also now shipped (2026-08-06), a handful of small,
 independently-scoped follow-ups from the Asset cache proxy feature itself
 (the `sendFile`-error-callback fix, atomic cache writes, settling the
 `Thumbnail` `alt`/placeholder accessibility semantics, a success `Snackbar`
