@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const CACHE_DIR = 'data/assets';
 
@@ -22,7 +23,10 @@ export function isKnownMissing(filename: string): boolean {
 
 export function writeAssetCache(filename: string, data: Buffer): void {
   mkdirSync(CACHE_DIR, { recursive: true });
-  writeFileSync(cachedFilePath(filename), data);
+  const finalPath = cachedFilePath(filename);
+  const tempPath = `${finalPath}.tmp-${randomUUID()}`;
+  writeFileSync(tempPath, data);
+  renameSync(tempPath, finalPath);
 }
 
 export function markAssetMissing(filename: string): void {

@@ -17,7 +17,11 @@ export function createAssetsRouter(): Router {
 
     const cachedPath = getCachedAssetPath(filename);
     if (cachedPath !== null) {
-      res.type('image/png').sendFile(cachedPath, { root: process.cwd() });
+      res.type('image/png').sendFile(cachedPath, { root: process.cwd() }, (err) => {
+        if (err && !res.headersSent) {
+          res.status(404).json({ error: 'Asset not found' });
+        }
+      });
       return;
     }
 
