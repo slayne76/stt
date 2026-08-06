@@ -1357,7 +1357,8 @@ text. New getter in `ships/getters.ts`:
 ```ts
 export function getShipSchematicsProgress(ship: Ship, items: OwnedItem[]): number {
   const needed = ship.schematic_gain_cost_next_level;
-  if (needed <= 0) return 100;
+  if (!Number.isFinite(needed)) return 0; // missing/malformed data — fail closed, not "maxed"
+  if (needed <= 0) return 100; // legitimate already-maxed sentinel (verified: always exactly -1)
   return Math.min(100, (getShipSchematicsOwned(ship, items) / needed) * 100);
 }
 ```
@@ -1369,20 +1370,34 @@ text's natural width and the bar (which fills 100% of its container)
 would render at an inconsistent width per row. **Both the bar and the
 existing text read from the same `getShipSchematicsOwned`/
 `schematic_gain_cost_next_level` values, so they cannot disagree** — no
-second source of truth was introduced.
+second source of truth was introduced. (This got slightly weaker once the
+missing-field guard below shipped: the bar now fails closed to 0% on
+malformed data, but `getShipSchematicsDisplay`'s text does not have the
+same guard — see the new deferred-issues entry below.)
 
-**A real latent gap flagged at final review, not yet fixed:** the
-`needed <= 0` guard only catches a non-positive value, not a genuinely
-*missing* one. `getShipList` casts unvalidated JSON, so if the API ever
-omits `schematic_gain_cost_next_level` entirely, `undefined <= 0` is
-`false` and the function falls through to `(owned / undefined) * 100`,
-which is `NaN` — MUI renders that as an invalid `translateX(NaN%)`
-transform, which browsers silently drop, so the bar would render as if
-100% full for a ship that isn't. Never observed in the real sample (the
-field is always present, verified with zero exceptions across all 128
-ships), so this is the same category of accepted, unexercised gap as the
-already-documented `getShipSchematicsDisplay` `"0/-1"` case. See
-"Deferred issues" below for the one-line fix.
+**Fixed 2026-08-06 — see `docs/superpowers/specs/2026-08-06-ship-schematics-progress-guard-design.md`
+and `docs/superpowers/plans/2026-08-06-ship-schematics-progress-guard-plan.md`.** The
+`needed <= 0` guard originally only caught a non-positive value, not a
+genuinely *missing* one. `getShipList` casts unvalidated JSON, so if the
+API ever omitted `schematic_gain_cost_next_level` entirely, `undefined <=
+0` was `false` and the function fell through to `(owned / undefined) *
+100`, which is `NaN` — MUI renders that as an invalid `translateX(NaN%)`
+transform, silently dropped by the browser, so the bar would have
+rendered as if 100% full for a ship that isn't. Never observed in the
+real sample (the field is always present, verified with zero exceptions
+across all 128 ships) — this was always a defensive fix for a shape real
+data doesn't contain, not a live bug. **The fix returns `0`, not `100`,
+for the missing/invalid case** — a deliberate reversal of this backlog
+entry's own original one-line suggestion (`if (!(needed > 0)) return
+100;`), reconsidered during brainstorming as more consistent with this
+project's fail-closed instinct elsewhere (e.g. the equipment-slot guards
+in `crew/getters.ts`): folding "can't evaluate" into "definitely maxed"
+would have looked identical to the correctly-maxed case, defeating the
+point of the guard. Verified via a throwaway script that ran an inlined
+copy of the old logic against the new logic across all 128 real ships
+(identical output for every one, proving the fix is a pure addition for
+real data) plus hand-constructed `undefined`/`NaN` cases the real sample
+doesn't contain — see the plan for the exact script.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-crew-nav-group-and-schematics-bar-design.md`,
 `docs/superpowers/plans/2026-08-04-crew-nav-group-and-schematics-bar-plan.md`.
@@ -2130,15 +2145,33 @@ doing:
   importing it in the other would remove the duplication — zero behavior
   change.
 - **`getShipSchematicsProgress`'s guard doesn't catch a missing
-  `schematic_gain_cost_next_level`, only a non-positive one (new, from the
-  Crew nav group / schematics bar feature):** `getShipList` casts
-  unvalidated JSON, so if the field is ever absent, `undefined <= 0` is
-  `false` and the function falls through to a `NaN` result — MUI would
-  render an invalid `translateX(NaN%)` transform (silently dropped by the
-  browser), showing the bar as if 100% full for a ship that isn't. Never
-  observed in the real sample (verified present on all 128 ships). Fix:
-  `if (!(needed > 0)) return 100;` or a `Number.isFinite` check — one
-  token, no behavior change for real data.
+  `schematic_gain_cost_next_level` — resolved 2026-08-06, see the
+  "Schematics progress bar" deep-dive above.** (Kept here, struck through
+  in spirit, as a pointer for anyone who remembers this entry from
+  before — the fix is real, not just noted.) The shipped fix returns `0`
+  for missing/invalid data, not the `100` this entry originally
+  suggested — see the deep-dive above for why that reversal is correct.
+- **Sibling readers of `schematic_gain_cost_next_level` remain unguarded
+  (new, from the schematics-progress-guard fix):** the fix above is
+  scoped to `getShipSchematicsProgress` only, by explicit design-spec
+  decision. Two other readers of the same field have no equivalent guard:
+  `getShipSchematicsDisplay` (`ships/getters.ts`) would render
+  `"1755/undefined"` rather than fail closed, and `ships/sorters.ts`'s
+  `byMissingSchematicsAsc` comparator would compute `needed - owned` as
+  `NaN`, which `Array.prototype.sort` treats as an inconsistent
+  comparator (unspecified resulting order, not a throw). Both are latent,
+  not live — never observed in the real 128-ship sample. Worth revisiting
+  together if this field's validation is ever centralized, rather than
+  guarding each reader independently.
+- **`getShipSchematicsProgress`'s guard fails closed on a numeric-*string*
+  value too, not just genuinely missing data (new, from the
+  schematics-progress-guard fix):** `Number.isFinite("1800")` is `false`,
+  so a hypothetical stringified-number API response would now return `0`
+  where the old coercing division would have produced the correct
+  percentage. Vanishingly unlikely from this API's real shape (every
+  observed value is a genuine `number`); recorded so a future reader
+  doesn't mistake this for a regression bug rather than an accepted,
+  intentional trade-off of the fail-closed design.
 - **The Schematics progress bar has no accessible label (new, from the
   Crew nav group / schematics bar feature):** MUI's determinate
   `LinearProgress` emits an unlabeled `role="progressbar"` immediately
@@ -2321,11 +2354,12 @@ Phase 1's `ASSET_BASE_URL` seam was built to support, plus an independent
 "Refresh assets" button. Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
-already built:** the `getShipSchematicsProgress` `NaN`-on-missing-field
-guard and the small paired `NavGroupItem` follow-up (Escape-from-trigger +
-ARIA menu semantics + the panel's `max-height` ceiling, all flagged across
-several recent features' final reviews) remain the freshest small-scoped
-items from before the image-column work; close behind them, extracting
+already built:** the small paired `NavGroupItem` follow-up
+(Escape-from-trigger + ARIA menu semantics + the panel's `max-height`
+ceiling, all flagged across several recent features' final reviews) is
+the freshest small-scoped item remaining from before the image-column
+work — the `getShipSchematicsProgress` `NaN`-on-missing-field guard that
+used to sit alongside it shipped 2026-08-06; close behind it, extracting
 `combineComparators`/`Comparator<T>` to a domain-neutral module is now
 backed by a third consumer (`ships/sorters.ts`, alongside
 `collections/sorters.ts` and `CollectionsTable.tsx`); a handful of small,
