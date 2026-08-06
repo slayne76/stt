@@ -22,9 +22,9 @@ import {
   byMaxRarityDesc,
   byNameAsc,
   byTierAsc,
-  combineComparators,
   sortCrew,
 } from '../crew/sorters';
+import { combineComparators } from '../lib/comparator';
 import CollectionCrewList from './CollectionCrewList';
 
 export interface CollectionsTableProps {

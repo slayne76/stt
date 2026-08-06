@@ -1,20 +1,9 @@
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
+import type { Comparator } from '../lib/comparator';
 import { getEquipmentSlotsRemaining, getCrewTier, type CrewTier } from './getters';
 import { getCollectionCount } from '../collections/getters';
-
-export type Comparator<T> = (a: T, b: T) => number;
-
-export function combineComparators<T>(...comparators: Comparator<T>[]): Comparator<T> {
-  return (a, b) => {
-    for (const compare of comparators) {
-      const result = compare(a, b);
-      if (result !== 0) return result;
-    }
-    return 0;
-  };
-}
 
 export function byLevelDesc(a: CrewMember, b: CrewMember): number {
   return b.level - a.level;

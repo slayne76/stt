@@ -2,7 +2,7 @@ import type { Collection } from '../types/collection';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
 import { getCrewTier } from '../crew/getters';
-import { combineComparators, type Comparator } from '../crew/sorters';
+import { combineComparators, type Comparator } from '../lib/comparator';
 import { getCollectionCrew } from './getters';
 
 export function isMaxedOut(collection: Collection): boolean {

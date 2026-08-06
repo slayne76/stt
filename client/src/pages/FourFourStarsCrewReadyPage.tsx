@@ -2,7 +2,8 @@ import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/materia
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
 import { filterByRarity, filterReadyToImmortalize } from '../crew/filters';
-import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, combineComparators, sortCrew } from '../crew/sorters';
+import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
+import { combineComparators } from '../lib/comparator';
 import { getCollectionsList } from '../collections/getters';
 import CrewTable from '../crew/CrewTable';
 

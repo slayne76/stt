@@ -1,6 +1,6 @@
 import type { Ship } from '../types/ship';
 import type { OwnedItem } from '../types/item';
-import type { Comparator } from '../crew/sorters';
+import type { Comparator } from '../lib/comparator';
 import { getShipSchematicsOwned } from './getters';
 
 export function byLevelDesc(a: Ship, b: Ship): number {

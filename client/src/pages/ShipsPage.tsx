@@ -1,7 +1,7 @@
 import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getOwnedItems } from '../crew/getters';
-import { combineComparators } from '../crew/sorters';
+import { combineComparators } from '../lib/comparator';
 import { getShipList } from '../ships/getters';
 import { filterIncompleteShipsByRarity } from '../ships/filters';
 import { byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc, byNameAsc, sortShips } from '../ships/sorters';
