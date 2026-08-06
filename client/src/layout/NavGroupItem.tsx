@@ -12,7 +12,7 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const firstItemRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const focusFirstItemRef = useRef(false);
   const suppressTriggerFocusOpenRef = useRef(false);
@@ -50,9 +50,9 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
   // its content on a delayed internal effect, so a plain useEffect keyed on
   // `open` can run before the first item's DOM node exists; a callback ref
   // fires exactly when that node actually attaches, regardless of timing.
-  const setFirstItemRef = (node: HTMLDivElement | null) => {
-    firstItemRef.current = node;
-    if (node && focusFirstItemRef.current) {
+  const setItemRef = (index: number) => (node: HTMLDivElement | null) => {
+    itemRefs.current[index] = node;
+    if (index === 0 && node && focusFirstItemRef.current) {
       focusFirstItemRef.current = false;
       node.focus();
     }
@@ -69,25 +69,55 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
     // callback ref above won't fire again. Focus directly when it's already
     // there; otherwise fall back to the pending-flag + callback-ref path for
     // the case where the panel genuinely isn't open yet.
-    if (firstItemRef.current) {
-      firstItemRef.current.focus();
+    if (itemRefs.current[0]) {
+      itemRefs.current[0].focus();
     } else {
       focusFirstItemRef.current = true;
       openNow();
     }
   };
 
-  const handlePanelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelClose();
-      setOpen(false);
-      // Returning focus to the trigger fires its own onFocus (openNow), which
-      // would immediately reopen the panel we just closed. Suppress that one
-      // resulting focus event only.
+  // Escape is handled once, here, rather than only on the portaled panel —
+  // the Popper's content is a React child of this wrapper (even though
+  // portaled elsewhere in the DOM), so keydowns from both the trigger and
+  // every panel item already bubble to this handler. This is what lets
+  // Escape close the flyout even when focus never left the trigger (e.g.
+  // opened via hover, or via ArrowDown/Enter without tabbing further).
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    cancelClose();
+    setOpen(false);
+    if (document.activeElement !== triggerRef.current) {
+      // Focus was inside the panel — move it back and suppress the
+      // trigger's own onFocus (which would otherwise immediately reopen
+      // the panel we just closed).
       suppressTriggerFocusOpenRef.current = true;
       triggerRef.current?.focus();
     }
+  };
+
+  // Arrow-key roving focus + Home/End inside the open panel — without this,
+  // role="menu" below would be dishonest: a menu whose items aren't
+  // arrow-key navigable doesn't behave like one.
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
+    const count = itemRefs.current.length;
+    if (count === 0) return;
+    const current = itemRefs.current.findIndex((node) => node === document.activeElement);
+    let nextIndex: number;
+    if (event.key === 'ArrowDown') {
+      nextIndex = current === -1 ? 0 : (current + 1) % count;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = current === -1 ? count - 1 : (current - 1 + count) % count;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = count - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    itemRefs.current[nextIndex]?.focus();
   };
 
   const handleTriggerFocus = () => {
@@ -99,8 +129,21 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
   };
 
   return (
-    <div ref={anchorRef} onMouseEnter={openNow} onMouseLeave={scheduleClose} onFocus={handleTriggerFocus} onBlur={scheduleClose}>
-      <ListItemButton ref={triggerRef} sx={{ cursor: 'default' }} onKeyDown={handleTriggerKeyDown}>
+    <div
+      ref={anchorRef}
+      onMouseEnter={openNow}
+      onMouseLeave={scheduleClose}
+      onFocus={handleTriggerFocus}
+      onBlur={scheduleClose}
+      onKeyDown={handleKeyDown}
+    >
+      <ListItemButton
+        ref={triggerRef}
+        sx={{ cursor: 'default' }}
+        onKeyDown={handleTriggerKeyDown}
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
         <ListItemText primary={label} />
         <ChevronRight fontSize="small" />
       </ListItemButton>
@@ -111,13 +154,14 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
           onMouseLeave={scheduleClose}
           onFocus={openNow}
           onBlur={scheduleClose}
-          onKeyDown={handlePanelKeyDown}
+          sx={{ maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}
         >
-          <List>
+          <List role="menu" onKeyDown={handleMenuKeyDown}>
             {items.map((item, index) => (
               <ListItemButton
                 key={item.path}
-                ref={index === 0 ? setFirstItemRef : undefined}
+                ref={setItemRef(index)}
+                role="menuitem"
                 onClick={() => {
                   navigate(item.path);
                   setOpen(false);
