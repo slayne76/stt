@@ -154,11 +154,16 @@ interface CrewMember {
   symbol: string;                                 // NOT safe as a unique key (2 duplicates found in sample)
   name: string;
   short_name: string;
+  archetype_id: number;                           // shared across every player who owns this crew type (see collections membership logic)
   rarity: number;                                 // current star rating, 1..max_rarity
   max_rarity: number;                             // the crew's ceiling (1..5 typically)
   level: number;                                  // 1..100
   equipment: [number, number][];                  // FILLED slots only: [slotIndex, itemArchetypeId]
   equipment_slots: { level: number; archetype: number }[]; // ALWAYS exactly 4 entries — what's REQUIRED per slot
+  traits: string[];
+  traits_hidden: string[];
+  portrait?: DatacoreAsset;                       // added for the crew/ship image column
+  q_bits: number;                                 // Q Bit points, added for the QPs page — see "QPs page" below
 }
 ```
 
@@ -1949,6 +1954,135 @@ used), but real enough to flag — see the comment added at
 `docs/superpowers/specs/2026-08-07-server-localhost-binding-design.md`,
 `docs/superpowers/plans/2026-08-07-server-localhost-binding-plan.md`.
 
+## QPs page
+
+A new page and a genuinely new data domain: `crew.q_bits`, never
+previously read by this app. Surfaces which already-immortalized crew
+are closest to their next Q Bit level (QL), so the player can prioritize
+which crew to run Q Bit missions for. Requested directly by the user in
+plain language, including a hand-tracked reference list of ~63 real crew
+("there may be errors" — the user's own words) rather than a spec
+derived from existing code.
+
+**The mechanic, verified against a fresh live pull, not the older
+`example-data.json`:** `q_bits` exists on every crew object but is
+non-zero on immortalized crew only (131 of 132 immortalized crew had
+`q_bits > 0` in the verification pull; the one exception was genuinely
+at `0`; 0 of 509 non-immortalized crew had any non-zero value). It's
+cumulative and **uncapped** — real values were observed up to 42,165,
+well past the "maxed" threshold, so QL4 means "at or past 1300," not
+"exactly 1300." Every real value observed is a multiple of 5, consistent
+with the user's stated mission rewards (25 on success, 5 on failure).
+
+**QL boundaries — verified twice, independently, against real crew, not
+assumed from the user's description alone:**
+
+| QL | Cumulative `q_bits` range |
+|---|---|
+| 0 | 0 – 99 |
+| 1 | 100 – 199 |
+| 2 | 200 – 499 |
+| 3 | 500 – 1299 |
+| 4 (excluded from this page) | ≥ 1300 |
+
+First at design time, against a fresh `POST /api/player/refresh` pull —
+this caught and corrected two real errors in the user's hand-tracked
+list (one crew's QL was wrong; one crew's `q_bits` value was wrong) plus
+one omission, none of which were flaws in the mechanic description
+itself. Second, independently, at final review — the reviewer
+re-implemented the thresholds from scratch against another fresh pull
+and diffed the result against the rendered page: all 63 rows matched
+exactly, including every `QL`/`QPs`/`Points left`/`Rounds left` string.
+Every threshold boundary case (`q_bits` at exactly 100, 200, 500, 1299,
+1300) was checked by hand and confirmed correct, and `Rounds left` was
+proven — by exhausting every integer 0–1299, not by sampling — to never
+be able to render `0` for an eligible crew.
+
+**Confirmed rarity-independent, directly by the user, not assumed:**
+every immortalized crew in the verification data happened to be 5★
+(`max_rarity: 5`), which the final review flagged as a real open
+question — the app's own "4/4 Stars crew (ready)" page lists 17 crew
+close to a 4★ immortalization, and there's no threshold config anywhere
+in the payload to check whether the levels are the same for 4★ crew.
+Asked directly; confirmed the same thresholds apply regardless of
+rarity — see the code comment at `crew/getters.ts`'s
+`QP_LEVEL_THRESHOLDS`.
+
+**Eligibility requires BOTH `isImmortalized(crew)` AND `getQPLevel(crew)
+< QP_MAX_LEVEL`** — `filterQPEligible` (`crew/filters.ts`). The
+`isImmortalized` gate is required even though `q_bits > 0` never occurs
+on a non-immortalized crew in real data: without it, every one of the
+roughly 500 not-yet-immortalized crew in a typical roster would
+incorrectly appear as "QL0, needs 100," since their `q_bits` (always 0)
+is below the QL1 threshold too.
+
+**Sort order, reproduced exactly against live data at both design time
+and final review:** crew needing ≤25 points ("on hold" — the user
+deliberately holds crew at this threshold to finish them during specific
+in-game events, rather than spending the last run immediately) sort
+*after* crew needing more, then QL descending, then `q_bits` descending,
+then name ascending —
+`combineComparators(byQPOnHoldAsc, byQPLevelDesc, byQPBitsDesc,
+byNameAsc)` (`crew/sorters.ts`, `pages/QPsPage.tsx`), the same
+composition pattern every other page already uses.
+
+**New logic, `crew/getters.ts`:**
+
+```ts
+export const QP_MAX_LEVEL = QP_LEVEL_THRESHOLDS.length; // 4
+
+export function getQPLevel(crew: CrewMember): number { ... }         // 0-4
+export function getQPProgressDisplay(crew: CrewMember): string { ... } // "1275/1300"
+export function getQPPointsNeeded(crew: CrewMember): number { ... }
+export function getQPRoundsLeft(crew: CrewMember): number { ... }    // Math.ceil(needed / 25)
+```
+
+`QP_MAX_LEVEL` is exported (added after final review, which flagged the
+literal `4` as duplicated in three places — `filters.ts`'s
+`getQPLevel(c) < 4` check and `QPsTable`'s `` `${getQPLevel(c)}/4` ``
+display — with no shared source of truth if the threshold list's length
+ever changed) so both other call sites reference the same constant
+instead of a repeated literal.
+
+**New table, `crew/QPsTable.tsx`** — its own dedicated component, not a
+`CrewTable` reuse (this project's established convention: one table per
+distinct column set). Columns: `#`, `Image` (`Thumbnail`, `crew.portrait`),
+`Stars` (`StarRating` — always fully-lit here, same as every other
+already-immortalized-only page), `Name`, `QL`, `QPs`
+(`getQPProgressDisplay`), `Points left`, `Rounds left` — the last two
+rendered as negative numbers (`` `-${getQPPointsNeeded(c)}` ``,
+`` `-${getQPRoundsLeft(c)}` ``), an explicit user choice matching their
+own tracking convention rather than this app's usual positive-number
+display.
+
+**New page, `pages/QPsPage.tsx`** — uses the existing `PageShell`
+(`layout/PageShell.tsx`), the same shape as every other list page.
+Route `/qps`; nav entry `{ label: 'QPs', path: '/qps' }` appended to the
+end of the existing "Crew" flyout group's children (now 7, up from 6) —
+zero `NavGroupItem` changes needed, the same "prove reusability by
+adding a page with zero component changes" story every prior addition
+to that group has had.
+
+**Verification, this project's usual pattern, doubled up for a new data
+domain:** a throwaway `crew/__verify.ts` script (deleted before commit)
+against real `example-data.json` examples (Minuet at QL0, Morphing Vadic
+at QL3, Augment Picard as a real QL4-exclusion case, Dancing Chekov as a
+real non-immortalized-exclusion case) plus hand-constructed QL1/QL2
+cases, since the real sample has no crew currently in those ranges — the
+same category as this project's original hand-constructed
+missing-4-equipment-slots test case. Then, separately, interactive
+`playwright` MCP browser checks against a real running dev server with
+freshly-refreshed live data. The final review went a step further than
+either: it independently re-implemented the entire feature from a third
+fresh pull and diff-checked the live-rendered page against it row for
+row, rather than spot-checking — the strongest verification pass this
+project has done for a *new* feature (as opposed to a provably
+zero-behavior-change refactor, where a similar A/B technique was used
+for the Page shell extraction).
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-07-qps-page-design.md`,
+`docs/superpowers/plans/2026-08-07-qps-page-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -2163,6 +2297,21 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     (unauthenticated `/api/assets/refresh`) rather than reflexively listing
     it as a gap — reasoning that it doesn't widen this server's existing
     trust boundary, since `/api/player` was already unauthenticated too.
+21. **QPs page** (`2026-08-07-qps-page`) — deep dive above. The first
+    genuinely new data domain added since the original crew/collections/
+    ships model was established: `crew.q_bits`, surfaced as a new page
+    under the "Crew" flyout showing which immortalized crew are closest
+    to their next Q Bit level. First feature whose spec came from a
+    user's plain-language mechanic description plus a hand-tracked
+    reference list rather than from reading existing code — and the
+    first time that verification against fresh live data (not
+    `example-data.json`) caught real errors in the user's own manual
+    tracking before any code was written. Final review independently
+    re-implemented the whole feature from a third fresh data pull and
+    diffed it against the rendered page row-for-row rather than
+    spot-checking, and surfaced one genuine open domain question (do
+    Q Bit thresholds vary by crew rarity?) that no amount of code review
+    could answer — resolved by asking the requester directly.
 
 ## Current routes / nav (in order)
 
@@ -2175,6 +2324,7 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Crew → 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
 | Crew → 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
 | Crew → 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
+| Crew → QPs | `/qps` | immortalized, QL<4, sorted by on-hold/QL/q_bits/name |
 | Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
@@ -2398,6 +2548,21 @@ doing:
   the `-1` sentinel. Unreachable today — the only call site
   (`ShipsTable`) only ever receives `filterIncompleteShipsByRarity`'s
   output — but latent for the same reason as the item above.
+- **`getQPProgressDisplay` renders a nonsense string for a QL4 crew (new,
+  from the QPs page feature, same category as the two items directly
+  above):** e.g. `"42165/1300"` for a heavily-banked maxed crew, since
+  the getter doesn't special-case "already past every threshold."
+  Unreachable today — the only call site (`QPsTable`) only ever receives
+  `filterQPEligible`'s output (QL < `QP_MAX_LEVEL`).
+- **`crew/sorters.ts`'s QP comparators (`byQPOnHoldAsc`/`byQPLevelDesc`/
+  `byQPBitsDesc`) and `QPsTable` assume pre-filtered (QL < `QP_MAX_LEVEL`)
+  input (new, from the QPs page feature):** a QL4 crew's high `q_bits`
+  would sort to the top via `byQPBitsDesc`, and its
+  `getQPPointsNeeded`/`getQPRoundsLeft` would both render `0` in
+  `QPsTable`. True today only because `QPsPage` always calls
+  `filterQPEligible` first — a scoped comment was added directly above
+  the three comparators in `crew/sorters.ts` at final review, matching
+  the fix already applied to the equivalent Ships-domain finding.
 - **`NavGroupItem`'s `Escape` key only closes the flyout when focus is
   already inside the panel — resolved 2026-08-06, see "NavGroupItem
   Escape/ARIA/max-height follow-up" above.** (Kept here, struck through
@@ -2691,7 +2856,10 @@ image column to a new asset kind now that two features have proven the
 design (items? rewards?). Binding the server to `127.0.0.1` shipped
 2026-08-07, closing the last of this round's three small backlog
 cleanups (alongside the `getFrozenCrewArchetypeIds` move and the page
-shell extraction). The sandbox's headless-browser tooling gap (fixed
+shell extraction). Most recently, the QPs page shipped 2026-08-07 too —
+the first genuinely new data domain since crew/collections/ships,
+requested directly by the user and verified against fresh live data at
+every stage. The sandbox's headless-browser tooling gap (fixed
 2026-08-06, see the deferred-issues entry above) no longer constrains
 any of these — real browser-based visual verification is available
 again if a future feature's risk profile warrants it.

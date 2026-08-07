@@ -1,6 +1,6 @@
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
-import { getQPLevel, isImmortalized, isReadyToImmortalize } from './getters';
+import { getQPLevel, isImmortalized, isReadyToImmortalize, QP_MAX_LEVEL } from './getters';
 
 export function filterByRarity(
   crew: CrewMember[],
@@ -22,5 +22,5 @@ export function filterFrozenDuplicates(crew: CrewMember[], frozenArchetypeIds: S
 }
 
 export function filterQPEligible(crew: CrewMember[]): CrewMember[] {
-  return crew.filter((c) => isImmortalized(c) && getQPLevel(c) < 4);
+  return crew.filter((c) => isImmortalized(c) && getQPLevel(c) < QP_MAX_LEVEL);
 }

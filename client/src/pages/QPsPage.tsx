@@ -1,7 +1,7 @@
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList } from '../crew/getters';
 import { filterQPEligible } from '../crew/filters';
-import { byQPOnHoldAsc, byQPLevelDesc, byQPPointsDesc, byNameAsc, sortCrew } from '../crew/sorters';
+import { byQPOnHoldAsc, byQPLevelDesc, byQPBitsDesc, byNameAsc, sortCrew } from '../crew/sorters';
 import { combineComparators } from '../lib/comparator';
 import QPsTable from '../crew/QPsTable';
 import PageShell from '../layout/PageShell';
@@ -12,7 +12,7 @@ function QPsPage() {
   const crew = data
     ? sortCrew(
         filterQPEligible(getCrewList(data)),
-        combineComparators(byQPOnHoldAsc, byQPLevelDesc, byQPPointsDesc, byNameAsc)
+        combineComparators(byQPOnHoldAsc, byQPLevelDesc, byQPBitsDesc, byNameAsc)
       )
     : [];
 

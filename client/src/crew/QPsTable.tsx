@@ -1,6 +1,6 @@
 import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import type { CrewMember } from '../types/crew';
-import { getQPLevel, getQPProgressDisplay, getQPPointsNeeded, getQPRoundsLeft } from './getters';
+import { getQPLevel, getQPProgressDisplay, getQPPointsNeeded, getQPRoundsLeft, QP_MAX_LEVEL } from './getters';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
 
@@ -35,7 +35,7 @@ function QPsTable({ crew }: QPsTableProps) {
                 <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
               </TableCell>
               <TableCell>{c.name}</TableCell>
-              <TableCell align="right">{getQPLevel(c)}/4</TableCell>
+              <TableCell align="right">{getQPLevel(c)}/{QP_MAX_LEVEL}</TableCell>
               <TableCell align="right">{getQPProgressDisplay(c)}</TableCell>
               <TableCell align="right">-{getQPPointsNeeded(c)}</TableCell>
               <TableCell align="right">-{getQPRoundsLeft(c)}</TableCell>

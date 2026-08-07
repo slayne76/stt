@@ -63,7 +63,13 @@ export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
   return new Set(list.map((s) => s.id));
 }
 
-const QP_LEVEL_THRESHOLDS = [100, 200, 500, 1300]; // cumulative q_bits to REACH QL1/2/3/4
+// Cumulative q_bits to REACH QL1/2/3/4. Confirmed rarity-independent
+// directly by the player (2026-08-07) — the same thresholds apply
+// whether the crew's max_rarity is 4 or 5, even though every
+// immortalized crew in this app's verification data happened to be 5★.
+const QP_LEVEL_THRESHOLDS = [100, 200, 500, 1300];
+
+export const QP_MAX_LEVEL = QP_LEVEL_THRESHOLDS.length;
 
 export function getQPLevel(crew: CrewMember): number {
   for (let i = 0; i < QP_LEVEL_THRESHOLDS.length; i++) {

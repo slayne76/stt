@@ -35,6 +35,11 @@ export function sortCrew(crew: CrewMember[], comparator: Comparator<CrewMember>)
   return [...crew].sort(comparator);
 }
 
+// These three comparators assume they're only ever called on crew already
+// filtered by filterQPEligible (QL < QP_MAX_LEVEL) — an unfiltered QL4
+// crew's high q_bits would sort byQPBitsDesc to the top, and
+// getQPPointsNeeded/getQPRoundsLeft would render 0 in QPsTable. True
+// today only because QPsPage always filters first, not enforced here.
 export function byQPOnHoldAsc(a: CrewMember, b: CrewMember): number {
   const aOnHold = getQPPointsNeeded(a) <= 25 ? 1 : 0;
   const bOnHold = getQPPointsNeeded(b) <= 25 ? 1 : 0;
@@ -45,6 +50,6 @@ export function byQPLevelDesc(a: CrewMember, b: CrewMember): number {
   return getQPLevel(b) - getQPLevel(a);
 }
 
-export function byQPPointsDesc(a: CrewMember, b: CrewMember): number {
+export function byQPBitsDesc(a: CrewMember, b: CrewMember): number {
   return b.q_bits - a.q_bits;
 }
