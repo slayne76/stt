@@ -97,8 +97,7 @@ client/src/
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
-                                getCollectionCount, getCollectionCrew (reverse direction),
-                                getFrozenCrewArchetypeIds
+                                getCollectionCount, getCollectionCrew (reverse direction)
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
@@ -821,7 +820,7 @@ export interface StoredImmortal {
 ```
 
 ```ts
-// collections/getters.ts
+// crew/getters.ts — moved here 2026-08-07, see "Deferred issues" below
 export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
   const player = data.player as Record<string, unknown> | undefined;
   const character = player?.character as Record<string, unknown> | undefined;
@@ -957,14 +956,17 @@ below (adding two routes cost one shell copy, not two).
 parameter** rather than importing `getFrozenCrewArchetypeIds` itself —
 `crew/filters.ts` stays oblivious to where the set came from, same
 module-boundary discipline as `getCollectionCrew`'s call-site-composed
-sorting. `FrozenDuplicatesPage.tsx` itself does import from
-`collections/getters.ts` (for `getFrozenCrewArchetypeIds` and
-`getCollectionsList`), which is unremarkable — every crew page already
-imports `getCollectionsList` for `byCollectionCountDesc` — but see the
-deferred-issues entry below: this is the first page with nothing to do
-with collections that needs a `collections/` import, which is exactly
-the condition a prior review flagged as the point where
-`getFrozenCrewArchetypeIds`'s placement would start to matter.
+sorting. **At the time this feature shipped**, `FrozenDuplicatesPage.tsx`
+imported both `getFrozenCrewArchetypeIds` and `getCollectionsList` from
+`collections/getters.ts` — unremarkable on its own (every crew page
+already imports `getCollectionsList` for `byCollectionCountDesc`), but
+this was the first page with nothing to do with collections that needed
+a `collections/` import at all, which a prior review had flagged as the
+condition where `getFrozenCrewArchetypeIds`'s placement would start to
+matter. **It did — see "Deferred issues" below: `getFrozenCrewArchetypeIds`
+moved to `crew/getters.ts` on 2026-08-07**, so `FrozenDuplicatesPage.tsx`
+now imports it from there instead, alongside `getCollectionsList` still
+from `collections/getters.ts`.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-duplicates-pages-design.md`,
 `docs/superpowers/plans/2026-08-03-frozen-duplicates-pages-plan.md`.
@@ -2201,17 +2203,18 @@ doing:
   bare number under "Milestone" invites misreading as a second progress
   figure. A header tooltip or relabeling to "Claimed" was suggested but
   not acted on.
-- **`getFrozenCrewArchetypeIds` lives in `collections/getters.ts` but
-  reads crew-domain data — the friction this was flagged as hypothetical
-  for has now actually arrived.** It takes `PlayerData` and knows
-  nothing about collections, structurally a sibling of `getCrewList`/
-  `getOwnedItems` in `crew/getters.ts`. Still doesn't threaten the
-  acyclicity constraint above (it only needs `PlayerData` and a type, no
-  import from `crew/`), and still not urgent — but `FrozenDuplicatesPage`
-  (see "Frozen duplicates pages" above) is now the first page with
-  nothing to do with collections that imports from `collections/getters.ts`
-  purely for this getter. Cheap to move to `crew/getters.ts` whenever
-  it's next touched; not worth a standalone diff just for this.
+- **`getFrozenCrewArchetypeIds` lived in `collections/getters.ts` but
+  read crew-domain data — resolved 2026-08-07, see the "Frozen crew and
+  duplicate exclusion" deep-dive above (code block now labeled
+  `crew/getters.ts`).** (Kept here, struck through in spirit, as a
+  pointer for anyone who remembers this entry from before — the fix is
+  real, not just noted.) It now lives in `crew/getters.ts`, alongside
+  its structural siblings `getCrewList`/`getOwnedItems`, and
+  `collections/getters.ts` does not re-export it — both consumers
+  (`CollectionsPage.tsx`, `FrozenDuplicatesPage.tsx`) import it directly
+  from `crew/getters.ts`. See
+  `docs/superpowers/specs/2026-08-07-frozen-crew-archetype-ids-move-design.md`
+  and `docs/superpowers/plans/2026-08-07-frozen-crew-archetype-ids-move-plan.md`.
 - **`combineComparators`/`Comparator<T>` cross-domain reliance — resolved
   2026-08-06, see "Sorting design" above.** (Kept here, struck through in
   spirit, as a pointer for anyone who remembers this entry from before —
@@ -2504,29 +2507,27 @@ Phase 1's `ASSET_BASE_URL` seam was built to support, plus an independent
 "Refresh assets" button. Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
-already built:** with both the `getShipSchematicsProgress` guard and the
-`NavGroupItem` Escape/ARIA/max-height follow-up now shipped (2026-08-06),
-the freshest remaining small-scoped items are the ones those two features
-just left behind — `NavGroupItem`'s roving-`tabindex` gap and its
-`handleTriggerFocus`/`focusFirstItemRef` naming/robustness notes (both
-above), and the sibling-reader/numeric-string notes on the schematics
-guard; with the `combineComparators`/`Comparator<T>` extraction to
-`lib/comparator.ts` also now shipped (2026-08-06), a handful of small,
-independently-scoped follow-ups from the Asset cache proxy feature itself
-(the `sendFile`-error-callback fix, atomic cache writes, settling the
-`Thumbnail` `alt`/placeholder accessibility semantics, a success `Snackbar`
-for "Refresh assets") are each a few lines whenever one is worth a
-standalone diff; beyond those, unifying the dual upgradable-status
-computation between the Collections sort and chip, another crew
-classification factor (skills? traits?), finally tackling the page-shell
-duplication (7 pages now share the identical shell, well past the
-threshold every prior review named), reconsidering whether frozen-crew
-exclusion should broaden to the 4 crew pages now that its correctness is
-proven rather than merely plausible, moving `getFrozenCrewArchetypeIds` to
-`crew/getters.ts` now that the placement friction has actually triggered
-rather than staying hypothetical, extending the image column to a new
-asset kind now that two features have proven the design (items? rewards?),
-or binding the server to `127.0.0.1` as a standalone hardening pass
+already built:** with the `getShipSchematicsProgress` guard, the
+`NavGroupItem` Escape/ARIA/max-height follow-up, the
+`combineComparators`/`Comparator<T>` extraction, all four Asset cache
+proxy follow-ups, and the `getFrozenCrewArchetypeIds` move all now
+shipped (2026-08-06 through 2026-08-07), the freshest remaining
+small-scoped items are the ones those features left behind —
+`NavGroupItem`'s roving-`tabindex` gap and its
+`handleTriggerFocus`/`focusFirstItemRef` naming/robustness notes, the
+sibling-reader/numeric-string notes on the schematics guard, and the
+asset-cache-proxy fixes' own residual notes (a
+`renameSync`-can-throw-on-concurrent-refresh race, no temp-file cleanup
+on failure, the two `Snackbar`s sharing a default anchor position — all
+above); beyond those, unifying the dual upgradable-status computation
+between the Collections sort and chip, another crew classification
+factor (skills? traits?), finally tackling the page-shell duplication (7
+pages now share the identical shell, well past the threshold every prior
+review named), reconsidering whether frozen-crew exclusion should
+broaden to the 4 crew pages now that its correctness is proven rather
+than merely plausible, extending the image column to a new asset kind
+now that two features have proven the design (items? rewards?), or
+binding the server to `127.0.0.1` as a standalone hardening pass
 covering all three currently-unauthenticated endpoints at once. The
 sandbox's headless-browser tooling gap (fixed 2026-08-06, see the deferred-
 issues entry above) no longer constrains any of these — real browser-based
