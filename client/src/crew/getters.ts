@@ -62,3 +62,30 @@ export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
   const list = Array.isArray(storedImmortals) ? (storedImmortals as StoredImmortal[]) : [];
   return new Set(list.map((s) => s.id));
 }
+
+const QP_LEVEL_THRESHOLDS = [100, 200, 500, 1300]; // cumulative q_bits to REACH QL1/2/3/4
+
+export function getQPLevel(crew: CrewMember): number {
+  for (let i = 0; i < QP_LEVEL_THRESHOLDS.length; i++) {
+    if (crew.q_bits < QP_LEVEL_THRESHOLDS[i]) return i;
+  }
+  return QP_LEVEL_THRESHOLDS.length;
+}
+
+function getQPLevelThreshold(crew: CrewMember): number {
+  const level = getQPLevel(crew);
+  return QP_LEVEL_THRESHOLDS[level] ?? QP_LEVEL_THRESHOLDS[QP_LEVEL_THRESHOLDS.length - 1];
+}
+
+export function getQPProgressDisplay(crew: CrewMember): string {
+  return `${crew.q_bits}/${getQPLevelThreshold(crew)}`;
+}
+
+export function getQPPointsNeeded(crew: CrewMember): number {
+  if (getQPLevel(crew) >= QP_LEVEL_THRESHOLDS.length) return 0;
+  return getQPLevelThreshold(crew) - crew.q_bits;
+}
+
+export function getQPRoundsLeft(crew: CrewMember): number {
+  return Math.ceil(getQPPointsNeeded(crew) / 25);
+}

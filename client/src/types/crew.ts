@@ -14,4 +14,5 @@ export interface CrewMember {
   traits: string[];
   traits_hidden: string[];
   portrait?: DatacoreAsset;
+  q_bits: number;
 }
