@@ -1859,9 +1859,9 @@ unauthenticated — explicitly judged acceptable and *not* worth fixing,
 since the proxy has a fixed upstream host and no path control (no
 SSRF/open-relay surface), and this is strictly less sensitive than the
 pre-existing unauthenticated `/api/player`/`/api/player/refresh` endpoints
-already on this server; if that trust boundary is ever revisited, binding
-the server to `127.0.0.1` would harden all of these at once, not just this
-route. See "Deferred issues" below.
+already on this server. **The server was bound to `127.0.0.1` on
+2026-08-07, hardening all of these at once — see "Server bound to
+127.0.0.1" below.** See "Deferred issues" below.
 
 **Asset cache proxy follow-ups (2026-08-07):** a fix wave addressing four
 items from the gaps above and the client-side gaps noted in "Deferred
@@ -1887,6 +1887,67 @@ Spec/plan: `docs/superpowers/specs/2026-08-06-asset-cache-proxy-follow-ups-desig
 **Spec/plan:**
 `docs/superpowers/specs/2026-08-05-asset-cache-proxy-design.md`,
 `docs/superpowers/plans/2026-08-05-asset-cache-proxy.md`.
+
+## Server bound to 127.0.0.1
+
+`server/src/index.ts`'s `app.listen(PORT, callback)` (no host argument)
+bound Express to all network interfaces, making every endpoint on this
+server — `/api/player`, `/api/player/refresh`, and both asset-proxy
+routes — reachable from any device on the local network, not just this
+machine. Flagged as a standalone hardening pass across multiple prior
+reviews (see the now-resolved deferred-issues entries above and below).
+Fixed 2026-08-07:
+
+```ts
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`STT tracker server listening on http://127.0.0.1:${PORT}`);
+});
+```
+
+One line changed, one improved: the startup log now states the actual
+bound address, making the binding visible at runtime instead of an
+invisible default. No impact on local dev — the client's Vite proxy
+already targets `http://localhost:3001`, which resolves to loopback.
+
+**Verified as a real before/after regression test, not just a code
+read:** the task's own verification confirmed the server *was* reachable
+on the machine's non-loopback interface before the fix (`200` on
+`/health`), then confirmed the identical request failed to connect at
+all after the fix (curl exit 7, connection refused) — while loopback
+access continued to work unchanged throughout. The final reviewer
+independently reproduced this against the actual protected endpoints
+(`/api/player`, not just `/health`) and confirmed there is exactly one
+`app.listen` call in the codebase, with both routers mounted on that
+same `app` instance — so "hardens all three endpoints" is a verified
+property of the route topology, not an assumption.
+
+**A real nuance about what this environment's test actually proved,
+worth recording so a future reader doesn't have to re-derive it:** this
+sandbox runs under WSL2 in NAT mode (confirmed: `eth0` at
+`172.22.210.176/20` behind gateway `172.22.208.1`, `10.255.255.254`
+aliased on `lo`, no `[network]` stanza forcing mirrored mode in
+`wsl.conf`). The "LAN IP" the verification used is WSL's own virtual
+NIC, not a physical LAN address — so what was empirically proven is that
+the fix removes reachability from the Windows host (and anything a
+`netsh portproxy` rule forwards), which is exactly the class of
+adjacent-process exposure the deferred-issues entries above were
+worried about. The fix would become reachability-relevant to an actual
+physical LAN the moment WSL is ever switched to `networkingMode=mirrored`
+— worth knowing, not worth engineering around today.
+
+**One residual path this fix does not cover, deliberately out of
+scope:** if the client's Vite dev server is ever started with `--host`
+(or a `server.host` config), it becomes LAN-reachable itself, and its
+`/api` proxy would forward straight into the loopback-only backend —
+undoing this hardening for all three endpoints without touching
+`server/src/index.ts` at all. Not a gap in this fix (a dev server bound
+to all interfaces is a separate, explicit opt-in this project has never
+used), but real enough to flag — see the comment added at
+`client/vite.config.ts`.
+
+**Spec/plan:**
+`docs/superpowers/specs/2026-08-07-server-localhost-binding-design.md`,
+`docs/superpowers/plans/2026-08-07-server-localhost-binding-plan.md`.
 
 ## Feature history (chronological)
 
@@ -2525,16 +2586,18 @@ doing:
   clears everything. Bounded and tiny for legitimate traffic (~1300 real
   asset paths), only a nuisance vector for junk requests — not worth
   engineering around today.
-- **`POST /api/assets/refresh` is unauthenticated (new, from the Asset
-  cache proxy feature) — explicitly judged acceptable, not a gap to
-  close on its own.** This server already has two unauthenticated
-  endpoints more sensitive than this one (`GET /api/player` returns real
-  player data, `POST /api/player/refresh` spends the session cookie
-  upstream), and the asset proxy has a fixed upstream host with no path
-  control, so there's no SSRF/open-relay surface either. If this trust
-  boundary is ever revisited, binding the server to `127.0.0.1`
-  (`app.listen(PORT, '127.0.0.1')` in `server/src/index.ts`) would harden
-  all three endpoints in one line, rather than adding auth to just this one.
+- **`POST /api/assets/refresh` is unauthenticated — still explicitly
+  judged acceptable, reasoning strengthened rather than invalidated by
+  the 2026-08-07 `127.0.0.1` bind (see "Server bound to 127.0.0.1"
+  above).** This server already has two unauthenticated endpoints more
+  sensitive than this one (`GET /api/player` returns real player data,
+  `POST /api/player/refresh` spends the session cookie upstream), and
+  the asset proxy has a fixed upstream host with no path control, so
+  there's no SSRF/open-relay surface either. The trust boundary this
+  entry originally deferred to ("if ever revisited...") has now moved:
+  all three endpoints are loopback-only, not just reachable-but-hopefully-
+  ignored on the LAN. Still not worth adding auth to just this one route
+  on top of that.
 - **Success feedback on "Refresh assets" — resolved by the Asset cache
   proxy follow-ups fix wave, see deep-dive above.** (Kept here, struck
   through in spirit, as a pointer for anyone who remembers this entry from
@@ -2623,12 +2686,12 @@ factor (skills? traits?), building the `usePageData(...)` hook /
 `DEFAULT_CREW_COMPARATOR` helper the Page shell extraction's own final
 review surfaced as its natural next increment, reconsidering whether
 frozen-crew exclusion should broaden to the 4 crew pages now that its
-correctness is proven rather than merely plausible, extending the image
-column to a new asset kind
-now that two features have proven the design (items? rewards?), or
-binding the server to `127.0.0.1` as a standalone hardening pass
-covering all three currently-unauthenticated endpoints at once. The
-sandbox's headless-browser tooling gap (fixed 2026-08-06, see the deferred-
-issues entry above) no longer constrains any of these — real browser-based
-visual verification is available again if a future feature's risk profile
-warrants it.
+correctness is proven rather than merely plausible, or extending the
+image column to a new asset kind now that two features have proven the
+design (items? rewards?). Binding the server to `127.0.0.1` shipped
+2026-08-07, closing the last of this round's three small backlog
+cleanups (alongside the `getFrozenCrewArchetypeIds` move and the page
+shell extraction). The sandbox's headless-browser tooling gap (fixed
+2026-08-06, see the deferred-issues entry above) no longer constrains
+any of these — real browser-based visual verification is available
+again if a future feature's risk profile warrants it.
