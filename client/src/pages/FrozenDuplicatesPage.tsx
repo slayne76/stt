@@ -1,4 +1,3 @@
-import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getFrozenCrewArchetypeIds } from '../crew/getters';
 import { filterFrozenDuplicates } from '../crew/filters';
@@ -6,6 +5,7 @@ import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNa
 import { combineComparators } from '../lib/comparator';
 import { getCollectionsList } from '../collections/getters';
 import CrewTable from '../crew/CrewTable';
+import PageShell from '../layout/PageShell';
 
 export interface FrozenDuplicatesPageProps {
   maxRarity: number;
@@ -24,34 +24,20 @@ function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
       )
     : [];
 
-  const loaded = !loading && !error && data;
+  const loaded = !loading && !error && !!data;
 
   return (
-    <Stack spacing={2}>
-      <Typography variant="h4">{title}{loaded ? ` (${crew.length})` : ''}</Typography>
-
-      {loading && <CircularProgress />}
-      {error && (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          }
-        >
-          {error}
-        </Alert>
-      )}
-
-      {loaded && (
-        crew.length === 0 ? (
-          <Typography color="text.secondary">No duplicate crew at this rarity.</Typography>
-        ) : (
-          <CrewTable crew={crew} collections={collections} />
-        )
-      )}
-    </Stack>
+    <PageShell
+      title={title}
+      loading={loading}
+      error={error}
+      onRetry={() => void refresh()}
+      loaded={loaded}
+      count={crew.length}
+      emptyMessage="No duplicate crew at this rarity."
+    >
+      <CrewTable crew={crew} collections={collections} />
+    </PageShell>
   );
 }
 

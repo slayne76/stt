@@ -1,4 +1,3 @@
-import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getOwnedItems } from '../crew/getters';
 import { combineComparators } from '../lib/comparator';
@@ -6,6 +5,7 @@ import { getShipList } from '../ships/getters';
 import { filterIncompleteShipsByRarity } from '../ships/filters';
 import { byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc, byNameAsc, sortShips } from '../ships/sorters';
 import ShipsTable from '../ships/ShipsTable';
+import PageShell from '../layout/PageShell';
 
 export interface ShipsPageProps {
   rarity: number;
@@ -23,34 +23,20 @@ function ShipsPage({ rarity, title }: ShipsPageProps) {
       )
     : [];
 
-  const loaded = !loading && !error && data;
+  const loaded = !loading && !error && !!data;
 
   return (
-    <Stack spacing={2}>
-      <Typography variant="h4">{title}{loaded ? ` (${ships.length})` : ''}</Typography>
-
-      {loading && <CircularProgress />}
-      {error && (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          }
-        >
-          {error}
-        </Alert>
-      )}
-
-      {loaded && (
-        ships.length === 0 ? (
-          <Typography color="text.secondary">No incomplete ships at this rarity.</Typography>
-        ) : (
-          <ShipsTable ships={ships} items={items} />
-        )
-      )}
-    </Stack>
+    <PageShell
+      title={title}
+      loading={loading}
+      error={error}
+      onRetry={() => void refresh()}
+      loaded={loaded}
+      count={ships.length}
+      emptyMessage="No incomplete ships at this rarity."
+    >
+      <ShipsTable ships={ships} items={items} />
+    </PageShell>
   );
 }
 

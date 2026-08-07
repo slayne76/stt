@@ -1,4 +1,3 @@
-import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList } from '../crew/getters';
 import { filterByRarity } from '../crew/filters';
@@ -6,6 +5,7 @@ import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNa
 import { combineComparators } from '../lib/comparator';
 import { getCollectionsList } from '../collections/getters';
 import CrewTable from '../crew/CrewTable';
+import PageShell from '../layout/PageShell';
 
 function FourFiveStarsCrewPage() {
   const { data, loading, error, refresh } = usePlayerData();
@@ -18,34 +18,20 @@ function FourFiveStarsCrewPage() {
       )
     : [];
 
-  const loaded = !loading && !error && data;
+  const loaded = !loading && !error && !!data;
 
   return (
-    <Stack spacing={2}>
-      <Typography variant="h4">4/5 Stars crew{loaded ? ` (${crew.length})` : ''}</Typography>
-
-      {loading && <CircularProgress />}
-      {error && (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          }
-        >
-          {error}
-        </Alert>
-      )}
-
-      {loaded && (
-        crew.length === 0 ? (
-          <Typography color="text.secondary">No crew at 4/5 stars.</Typography>
-        ) : (
-          <CrewTable crew={crew} collections={collections} />
-        )
-      )}
-    </Stack>
+    <PageShell
+      title="4/5 Stars crew"
+      loading={loading}
+      error={error}
+      onRetry={() => void refresh()}
+      loaded={loaded}
+      count={crew.length}
+      emptyMessage="No crew at 4/5 stars."
+    >
+      <CrewTable crew={crew} collections={collections} />
+    </PageShell>
   );
 }
 
