@@ -37,6 +37,6 @@ export function markAssetMissing(filename: string): void {
 export function clearAssetCache(): void {
   if (!existsSync(CACHE_DIR)) return;
   for (const entry of readdirSync(CACHE_DIR)) {
-    rmSync(join(CACHE_DIR, entry));
+    rmSync(join(CACHE_DIR, entry), { force: true });
   }
 }

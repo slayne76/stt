@@ -1759,20 +1759,43 @@ rather than finding a defect:
 looped into the branch):** cache writes aren't atomic (`writeFileSync` in
 place rather than write-temp-then-rename, so a concurrent request for the
 same uncached filename during the write window could theoretically serve a
-truncated image — self-healing on reload); no in-flight de-duplication for
-concurrent misses of the same filename (correct outcome, just occasionally
-wasteful); `res.sendFile` has no error callback, so deleting a file between
-the cache-check and the send (e.g. clicking "Refresh assets" while a
-thumbnail-heavy page is still loading) falls through to Express's default
-error handler instead of a clean 404; `.missing` markers accumulate with no
-eviction/TTL; `POST /api/assets/refresh` is unauthenticated — explicitly
-judged acceptable and *not* worth fixing, since the proxy has a fixed
-upstream host and no path control (no SSRF/open-relay surface), and this is
-strictly less sensitive than the pre-existing unauthenticated
-`/api/player`/`/api/player/refresh` endpoints already on this server; if
-that trust boundary is ever revisited, binding the server to `127.0.0.1`
-would harden all of these at once, not just this route. See "Deferred
-issues" below.
+truncated image — self-healing on reload) — **resolved 2026-08-07, see the
+Asset cache proxy follow-ups fix wave below.**; no in-flight de-duplication
+for concurrent misses of the same filename (correct outcome, just
+occasionally wasteful); `res.sendFile` has no error callback, so deleting a
+file between the cache-check and the send (e.g. clicking "Refresh assets"
+while a thumbnail-heavy page is still loading) falls through to Express's
+default error handler instead of a clean 404 — **resolved 2026-08-07, see
+the Asset cache proxy follow-ups fix wave below.**; `.missing` markers
+accumulate with no eviction/TTL; `POST /api/assets/refresh` is
+unauthenticated — explicitly judged acceptable and *not* worth fixing,
+since the proxy has a fixed upstream host and no path control (no
+SSRF/open-relay surface), and this is strictly less sensitive than the
+pre-existing unauthenticated `/api/player`/`/api/player/refresh` endpoints
+already on this server; if that trust boundary is ever revisited, binding
+the server to `127.0.0.1` would harden all of these at once, not just this
+route. See "Deferred issues" below.
+
+**Asset cache proxy follow-ups (2026-08-07):** a fix wave addressing four
+items from the gaps above and the client-side gaps noted in "Deferred
+issues" below — atomic cache writes (`writeAssetCache` now writes to a
+`.tmp-<uuid>` file and `renameSync`s it into place), a `sendFile` error
+callback on the proxy route (answers a clean 404 instead of falling through
+to Express's default handler), `Thumbnail`'s `alt` text changed to `alt=""`
+(the image is decorative next to its own text label; also moots the
+placeholder-`aria-label` gap since an unlabeled decorative placeholder is
+correct), and a success `Snackbar` on "Refresh assets" (mirroring the
+existing error one). A final whole-branch review of that fix wave then
+found one more Important bug — the new 404's JSON body was served under
+`Content-Type: image/png` because `res.type('image/png')` ran before
+`res.json()` and Express's `res.json()` only sets `Content-Type` if none is
+already present — fixed by an explicit `.type('application/json')` before
+the `.json()` call, plus one cheap, closely-related Minor fix folded in:
+`clearAssetCache` now passes `{ force: true }` to `rmSync` so a `.tmp-*`
+file vanishing mid-clear (raced away by a concurrent `writeAssetCache`)
+can't throw `ENOENT` and turn `POST /api/assets/refresh` into a 500.
+Spec/plan: `docs/superpowers/specs/2026-08-06-asset-cache-proxy-follow-ups-design.md`,
+`docs/superpowers/plans/2026-08-06-asset-cache-proxy-follow-ups-plan.md`.
 
 **Spec/plan:**
 `docs/superpowers/specs/2026-08-05-asset-cache-proxy-design.md`,
@@ -2298,19 +2321,20 @@ doing:
   real, not just noted.) `ASSET_BASE_URL` is now `/api/assets`; images load
   from the local server's cache, fetching from `assets.datacore.app` only
   on a genuine miss.
-- **`Thumbnail`'s placeholder box has no `aria-label`/`role` (new, from the
-  Crew/ship image column feature):** a screen-reader user gets nothing
-  identifying an empty grey square as "portrait for {name}." Low priority
-  for a single-user local tool; also see the next item, which may resolve
-  both at once.
-- **`Thumbnail`'s `alt` text may be the wrong semantic choice (new, from
-  the Crew/ship image column feature):** `alt={crew.name}` /
-  `alt={ship.name}` duplicates the adjacent Name/Ship text cell — a screen
-  reader announces the name twice per row. For a decorative thumbnail next
-  to its own text label, `alt=""` may be more correct, which would also
-  moot the aria-label item above (an unlabeled placeholder is exactly right
-  if the image is decorative). Not acted on — the two items are actually
-  one semantic decision, deferred together.
+- **`Thumbnail`'s placeholder box has no `aria-label`/`role`, and its `alt`
+  text may be the wrong semantic choice — resolved by the Asset cache
+  proxy follow-ups fix wave, see deep-dive above.** (Kept here, struck
+  through in spirit, as a pointer for anyone who remembers this entry from
+  before — the fix is real, not just noted.) Originally two items (a
+  screen reader announcing a portrait's `alt={crew.name}`/`alt={ship.name}`
+  redundantly alongside the adjacent Name/Ship text cell, and the
+  placeholder box having no `aria-label`/`role` at all), always understood
+  to be one semantic decision. The shipped fix is `alt=""` (the `alt` prop
+  was removed from `ThumbnailProps` entirely, hardcoded in
+  `Thumbnail.tsx`) — correct for a decorative thumbnail next to its own
+  text label, and it moots the placeholder item too: an unlabeled
+  decorative placeholder is exactly right once the image itself is
+  decorative.
 - **`getAssetUrl`'s `.png` extension is hard-coded (new, from the Crew/ship
   image column feature):** correct for every asset kind seen in the real
   payload (crew portraits/icons/full-body, ship previews/schematics), but
@@ -2366,26 +2390,34 @@ doing:
   round trip completed successfully end-to-end. Headless-browser
   verification is available again for any future feature that needs it —
   no need to re-diagnose this from scratch.
-- **Asset cache writes are not atomic (new, from the Asset cache proxy
-  feature):** `writeAssetCache` (`server/src/assetCache.ts`) writes
-  directly to the final path via `writeFileSync`. A concurrent request for
-  the *same* uncached filename during that write window could theoretically
-  read a partially-written file. Self-healing on reload; a
-  write-to-`.tmp`-then-`renameSync` would close it if ever worth a
-  standalone diff.
+- **Asset cache writes are not atomic — resolved by the Asset cache proxy
+  follow-ups fix wave, see deep-dive above.** (Kept here, struck through in
+  spirit, as a pointer for anyone who remembers this entry from before —
+  the fix is real, not just noted.) `writeAssetCache`
+  (`server/src/assetCache.ts`) now writes to a `.tmp-<uuid>` file and
+  `renameSync`s it into place, closing the window where a concurrent
+  request for the same uncached filename could theoretically read a
+  partially-written file.
 - **No in-flight de-duplication for concurrent asset-cache misses (new,
   from the Asset cache proxy feature):** two near-simultaneous requests
   for the same uncached filename both fetch upstream and both write.
   Correct outcome, just occasionally wasteful — explicitly judged
   acceptable at this app's scale (a handful of concurrent requests, not a
   high-traffic server).
-- **`res.sendFile` in the asset proxy route has no error callback (new,
-  from the Asset cache proxy feature), with a concrete trigger identified
-  at final review:** clicking "Refresh assets" while a thumbnail-heavy page
-  is still loading races `clearAssetCache`'s file deletion against an
-  in-flight `sendFile` call, producing an ENOENT that falls through to
-  Express's default error handler (a stack trace / 500) instead of a clean
-  404. Fix: pass a callback to `sendFile`, answer 404 on ENOENT.
+- **`res.sendFile` in the asset proxy route had no error callback —
+  resolved by the Asset cache proxy follow-ups fix wave, see deep-dive
+  above.** (Kept here, struck through in spirit, as a pointer for anyone
+  who remembers this entry from before — the fix is real, not just noted.)
+  The originally-identified concrete trigger: clicking "Refresh assets"
+  while a thumbnail-heavy page is still loading races `clearAssetCache`'s
+  file deletion against an in-flight `sendFile` call, producing an ENOENT
+  that fell through to Express's default error handler (a stack trace /
+  500) instead of a clean 404. The shipped fix passes a callback to
+  `sendFile` answering 404 on error; a follow-up final review then caught
+  that the 404's JSON body was served under `Content-Type: image/png`
+  (since `res.type('image/png')` ran before `res.json()`), fixed by an
+  explicit `.type('application/json')` before the `.json()` call — see the
+  Asset cache proxy follow-ups fix wave above for both fixes together.
 - **`.missing` markers accumulate with no eviction or TTL (new, from the
   Asset cache proxy feature):** every unique nonexistent-but-well-formed
   filename ever requested costs one inode forever, until "Refresh assets"
@@ -2402,13 +2434,31 @@ doing:
   boundary is ever revisited, binding the server to `127.0.0.1`
   (`app.listen(PORT, '127.0.0.1')` in `server/src/index.ts`) would harden
   all three endpoints in one line, rather than adding auth to just this one.
-- **Success feedback on "Refresh assets" (new, from the Asset cache proxy
-  feature):** a successful click produces a sub-100ms spinner flicker and
-  nothing else — no confirmation. Consistent with how the existing
-  player-data Refresh button already behaves (it has no success signal
-  either), so this is optional polish, not an inconsistency. A success
-  `Snackbar` reusing the error one's pattern would be a small follow-up if
-  the button ever feels inert in practice.
+- **Success feedback on "Refresh assets" — resolved by the Asset cache
+  proxy follow-ups fix wave, see deep-dive above.** (Kept here, struck
+  through in spirit, as a pointer for anyone who remembers this entry from
+  before — the fix is real, not just noted.) A successful click used to
+  produce only a sub-100ms spinner flicker with no confirmation; the
+  shipped fix adds a success `Snackbar` (`AppLayout.tsx`, `assetsSuccess`
+  state) reusing the existing error `Snackbar`'s pattern.
+- **`writeAssetCache`'s `renameSync` can throw `ENOENT` if a concurrent
+  `POST /api/assets/refresh` deletes the temp file first (new, from the
+  Asset cache proxy follow-ups fix wave):** the atomic-write fix above
+  writes to `.tmp-<uuid>` then `renameSync`s it into place, but if
+  `clearAssetCache` deletes that same `.tmp-*` file in the window between
+  `writeFileSync` and `renameSync`, the request answers 502 instead of 200.
+  Self-healing on reload; same category of accepted race as the other
+  deferred items in this route.
+- **No cleanup of a `.tmp-<uuid>` file if the process crashes or
+  `renameSync` throws between write and rename (new, from the Asset cache
+  proxy follow-ups fix wave):** hygiene only — a `.tmp-*` file can never be
+  served (`FILENAME_PATTERN` rejects it) and gets swept up by the next
+  `POST /api/assets/refresh`.
+- **The error and success `Snackbar`s in `AppLayout.tsx` share MUI's
+  default `anchorOrigin` (new, from the Asset cache proxy follow-ups fix
+  wave):** a click that fails within ~6 seconds of a prior success could
+  theoretically show both stacked briefly during the exit transition.
+  Cosmetic, rare.
 
 ## Likely next steps
 
