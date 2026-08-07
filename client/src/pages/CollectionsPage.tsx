@@ -1,7 +1,7 @@
 import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
-import { getCrewList, getOwnedItems } from '../crew/getters';
-import { getCollectionsList, getFrozenCrewArchetypeIds } from '../collections/getters';
+import { getCrewList, getFrozenCrewArchetypeIds, getOwnedItems } from '../crew/getters';
+import { getCollectionsList } from '../collections/getters';
 import { byUpgradableThenCompletionThenNameAsc } from '../collections/sorters';
 import CollectionsTable from '../collections/CollectionsTable';
 

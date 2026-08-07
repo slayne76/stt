@@ -1,6 +1,7 @@
 import type { PlayerData } from '../types/player';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
+import type { StoredImmortal } from '../types/storedImmortal';
 
 export function getCrewList(data: PlayerData): CrewMember[] {
   const player = data.player as Record<string, unknown> | undefined;
@@ -52,4 +53,12 @@ export function getCrewTier(crew: CrewMember, items: OwnedItem[]): CrewTier | nu
   if (crew.rarity < crew.max_rarity - 1) return null;
   if (crew.rarity === crew.max_rarity - 1) return 'leveling';
   return isReadyToImmortalize(crew, items) ? 'ready' : 'needsWork';
+}
+
+export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
+  const player = data.player as Record<string, unknown> | undefined;
+  const character = player?.character as Record<string, unknown> | undefined;
+  const storedImmortals = character?.stored_immortals;
+  const list = Array.isArray(storedImmortals) ? (storedImmortals as StoredImmortal[]) : [];
+  return new Set(list.map((s) => s.id));
 }

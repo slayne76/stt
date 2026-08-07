@@ -2,7 +2,6 @@ import type { PlayerData } from '../types/player';
 import type { Collection } from '../types/collection';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
-import type { StoredImmortal } from '../types/storedImmortal';
 import { getCrewTier } from '../crew/getters';
 
 export function getCollectionsList(data: PlayerData): Collection[] {
@@ -25,14 +24,6 @@ export function getCrewCollections(crew: CrewMember, collections: Collection[]):
 
 export function getCollectionCount(crew: CrewMember, collections: Collection[]): number {
   return getCrewCollections(crew, collections).length;
-}
-
-export function getFrozenCrewArchetypeIds(data: PlayerData): Set<number> {
-  const player = data.player as Record<string, unknown> | undefined;
-  const character = player?.character as Record<string, unknown> | undefined;
-  const storedImmortals = character?.stored_immortals;
-  const list = Array.isArray(storedImmortals) ? (storedImmortals as StoredImmortal[]) : [];
-  return new Set(list.map((s) => s.id));
 }
 
 export function getCollectionCrew(

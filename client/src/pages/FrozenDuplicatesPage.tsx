@@ -1,10 +1,10 @@
 import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
-import { getCrewList } from '../crew/getters';
+import { getCrewList, getFrozenCrewArchetypeIds } from '../crew/getters';
 import { filterFrozenDuplicates } from '../crew/filters';
 import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
 import { combineComparators } from '../lib/comparator';
-import { getCollectionsList, getFrozenCrewArchetypeIds } from '../collections/getters';
+import { getCollectionsList } from '../collections/getters';
 import CrewTable from '../crew/CrewTable';
 
 export interface FrozenDuplicatesPageProps {
