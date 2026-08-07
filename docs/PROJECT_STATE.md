@@ -1117,6 +1117,91 @@ duplicates, a different concept entirely) — this wording was corrected
 during final review, after the plan had specified the literal
 `${max_rarity} Stars` form verbatim.
 
+## Page shell extraction
+
+The longest-standing deferred-issues entry in this project — first
+flagged at the 4th crew page, re-flagged at every subsequent page's
+final review, "well past the threshold" by 7 pages — is closed. All 7
+pages sharing the identical loading/error/empty/title JSX shell
+(`ThreeFourStarsCrewPage`, `FourFiveStarsCrewPage`,
+`FourFourStarsCrewReadyPage`, `FourFourStarsCrewPage`,
+`FrozenDuplicatesPage`, `CollectionsPage`, `ShipsPage`) now share one
+new component, `PageShell` (`layout/PageShell.tsx`) — the same category
+as `AppLayout.tsx`/`NavGroupItem.tsx`, shared structural UI, alongside
+`CrewTable`/`StarRating`'s precedent above of extracting once real reuse
+arrives rather than up front.
+
+**`PageShell` is a pure presentational component, deliberately decoupled
+from `PlayerData`/data-fetching entirely:**
+
+```ts
+export interface PageShellProps {
+  title: string;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  loaded: boolean;
+  count: number;
+  emptyMessage: string;
+  children: ReactNode;
+}
+```
+
+Each page still calls `usePlayerData()` itself, does all of its own
+data-fetching/filtering/sorting, computes `loaded` itself
+(`!loading && !error && !!data`), and passes its table component as
+`children` — only the render shell moved. `loaded` is a caller-computed
+boolean rather than `PageShell` inferring it from a `data` prop
+specifically so the component stays reusable for anything with a
+loading/error/loaded shape, not coupled to this app's specific hook;
+`onRetry` takes a plain `() => void` for the same reason (each page still
+does its own `onRetry={() => void refresh()}` wrapping).
+
+**Verification went well beyond the spec's own plan, and is worth
+recording as a technique, not just a result:** rather than relying on
+argument-from-code-reading for equivalence, the final review ran a live
+A/B DOM diff — the pre-branch code was still serving on one port, the
+post-branch code on another — captured each of the 9 routes'
+(7 pages, 2 of them rarity-parameterized into 2 routes each)
+`outerHTML`, normalized emotion's per-build `css-xxxx` hashes, and
+SHA-256'd the result. **Byte-identical rendered DOM on all 9 routes**,
+across all 4 states (loading, error, loaded-with-data, loaded-empty —
+`/5-stars-duplicates` genuinely renders empty in the real sample, so
+this wasn't argued, it was observed live pre/post). Clicking Retry in
+the error state fired exactly one `/api/player/refresh` call on both
+sides, confirming the `onRetry` indirection introduces no behavioral
+drift. This is a stronger equivalence proof than a unit-test suite would
+have given for a pure zero-behavior-change refactor, since it asserts
+the actual property under test (rendered output) rather than a proxy for
+it.
+
+**One JSX subtlety the extraction had to get right, and did:** the
+original title JSX was one line
+(`` {title}{loaded ? ` (${count})` : ''} ``); `PageShell`'s is two,
+for readability. JSX strips whitespace-only text nodes containing a
+newline, so this doesn't introduce an extra text node or a stray space
+— confirmed live (`" (50)"` renders with its leading space intact, from
+the template literal, not from JSX formatting), not just assumed safe.
+
+**Deliberately not extracted, and this is why the backlog entry below is
+marked resolved, not "closed with nothing left":** the original
+recommendation named two options — "extract a shared
+`RarityCrewPage`/`CrewListPage` component **or** a `usePageData(...)`
+hook covering the `usePlayerData` + loading/error/empty/title pattern."
+This shipped the first half (the JSX shell) only. `usePlayerData()`
+itself, and the one-line `loaded` computation, still repeat 7×; more
+strikingly, `combineComparators(byLevelDesc,
+byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections),
+byNameAsc)` — the crew-page default sort order — is now a byte-identical
+5-way copy across every crew-shaped page, a duplication the shell
+extraction *exposed* rather than *caused*, since it always existed
+alongside the shell it was tangled up with. See "Deferred issues" below
+— this is deliberately scoped out, not missed.
+
+**Spec/plan:**
+`docs/superpowers/specs/2026-08-07-page-shell-extraction-design.md`,
+`docs/superpowers/plans/2026-08-07-page-shell-extraction-plan.md`.
+
 ## Topbar Refresh button
 
 **Update, Asset cache proxy feature:** the topbar now has two buttons, not
@@ -2138,28 +2223,41 @@ doing:
   refresh/retry path via the topbar, including Overview's error state,
   which previously had none. The crew pages' own per-`Alert` "Retry"
   buttons remain as harmless duplication, not removed.
-- **Page-shell duplication — the deferred threshold has now been
-  crossed:** all crew pages (`ThreeFourStarsCrewPage`,
-  `FourFiveStarsCrewPage`, `FourFourStarsCrewReadyPage`,
-  `FourFourStarsCrewPage`) repeat the same `usePlayerData()` +
-  loading/error/empty-state/title scaffolding, differing only in filter
-  composition and copy strings. `CollectionsPage`, `FrozenDuplicatesPage`,
-  and now `ShipsPage` bring this to **7** pages sharing the identical
-  shell (parameterization kept the two Duplicates routes and the two
-  Ships routes from being independent copies) — well past the trigger
-  multiple prior reviews named for finally extracting it. Still not
-  done; still deliberately deferred. Recommendation unchanged: extract a
-  shared
-  `RarityCrewPage`/`CrewListPage` component or a `usePageData(...)` hook
-  covering the `usePlayerData` + loading/error/empty/title pattern (the
-  filter/sort composition itself varies too much across pages to fold
-  into the same abstraction — only the shell repeats identically).
+- **Page-shell duplication — resolved 2026-08-07 for the JSX half, see
+  "Page shell extraction" above.** (Kept here, struck through in spirit,
+  as a pointer for anyone who remembers this entry from before — the fix
+  is real, not just noted.) **Partially closed, not fully:** the shared
+  `PageShell` component closed the loading/error/empty/title JSX
+  duplication across all 7 pages, but the original recommendation's other
+  half — a `usePageData(...)` hook covering `usePlayerData()` itself and
+  the `loaded` computation — was deliberately not built. See the next
+  entry for what the extraction newly exposed.
+- **`usePlayerData()`/`loaded` and the default crew-page sort composition
+  still repeat across pages (new, surfaced by the Page shell extraction,
+  not caused by it):** every one of the 7 pages still calls
+  `usePlayerData()` and computes
+  `const loaded = !loading && !error && !!data;` itself — 7 identical
+  copies. More strikingly, `combineComparators(byLevelDesc,
+  byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections),
+  byNameAsc)` — the crew-page default sort order — is now a byte-identical
+  5-way copy across `ThreeFourStarsCrewPage`, `FourFiveStarsCrewPage`,
+  `FourFourStarsCrewPage`, `FourFourStarsCrewReadyPage`, and
+  `FrozenDuplicatesPage`. This duplication always existed; the shell
+  extraction just made it visible by removing the JSX that was tangled
+  up with it. A `usePageData(...)` hook (the option the original
+  recommendation named but this branch didn't build) and/or a
+  `DEFAULT_CREW_COMPARATOR(collections)` helper would be the natural next
+  increment.
 - **Nav active-state:** the nav `ListItemButton`s don't show which page is
   currently selected (no `selected` prop / `useLocation` check). Cosmetic.
 - **`NAV_ITEMS` and `<Routes>` are hand-synced lists** in two different
   files (`AppLayout.tsx`, `App.tsx`) — adding a page means editing both,
-  with no compile-time check they stay consistent. Would be resolved by
-  the same shared-page-shell refactor above.
+  with no compile-time check they stay consistent. **Correction, made at
+  the Page shell extraction's final review:** an earlier version of this
+  entry predicted this would be resolved by that refactor. It wasn't, and
+  couldn't have been — `PageShell` is a presentational component with no
+  bearing on route registration; `App.tsx` and `AppLayout.tsx` are
+  untouched by that branch, correctly so. Still open.
 - **`getFilledSlotIndices` not extracted:** `isImmortalized` checks slot
   fullness via `equipment.length === 4` (a count), while
   `getMissingEquipmentArchetypeIds` checks it via a `Set` of indices — they
@@ -2521,11 +2619,12 @@ asset-cache-proxy fixes' own residual notes (a
 on failure, the two `Snackbar`s sharing a default anchor position — all
 above); beyond those, unifying the dual upgradable-status computation
 between the Collections sort and chip, another crew classification
-factor (skills? traits?), finally tackling the page-shell duplication (7
-pages now share the identical shell, well past the threshold every prior
-review named), reconsidering whether frozen-crew exclusion should
-broaden to the 4 crew pages now that its correctness is proven rather
-than merely plausible, extending the image column to a new asset kind
+factor (skills? traits?), building the `usePageData(...)` hook /
+`DEFAULT_CREW_COMPARATOR` helper the Page shell extraction's own final
+review surfaced as its natural next increment, reconsidering whether
+frozen-crew exclusion should broaden to the 4 crew pages now that its
+correctness is proven rather than merely plausible, extending the image
+column to a new asset kind
 now that two features have proven the design (items? rewards?), or
 binding the server to `127.0.0.1` as a standalone hardening pass
 covering all three currently-unauthenticated endpoints at once. The
