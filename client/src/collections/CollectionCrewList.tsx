@@ -1,8 +1,9 @@
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
 import { getCrewTier, getEquipmentSlotsRemaining } from '../crew/getters';
 import StarRating from '../crew/StarRating';
+import StatusChip from '../components/StatusChip';
 
 export interface CollectionCrewListProps {
   crew: CrewMember[];
@@ -20,8 +21,8 @@ function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
           <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
             <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
-            {isReady && <Chip label="Ready" size="small" color="success" />}
-            {isNeedsWork && <Chip label={`${c.max_rarity}/${c.max_rarity} Stars`} size="small" color="warning" />}
+            {isReady && <StatusChip label="Ready" color="success" />}
+            {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
             <Typography color="text.secondary" sx={{ ml: 'auto' }}>
               Lv {c.level}
             </Typography>
