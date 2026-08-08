@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-06. This document is the durable, in-depth record of
+Last updated: 2026-08-08. This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -71,6 +71,9 @@ client/src/
                                  (image cache, see "Asset cache proxy" below) — its first non-page
                                  `usePlayerData()` consumer
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
+  components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
+                                  QPs Ready chip") — first file in this folder, the app's home for
+                                  small, reusable, cross-domain presentational UI
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
@@ -95,6 +98,8 @@ client/src/
                                 lib/comparator.ts)
     CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/Collections)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
+    QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds left;
+                                  see "QPs page" and "StatusChip component and QPs Ready chip")
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
                                 getCollectionCount, getCollectionCrew (reverse direction)
@@ -102,7 +107,9 @@ client/src/
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
-    CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted)
+    CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted; its "Ready"/
+                                 needs-work chips now render via the shared `components/StatusChip.tsx`
+                                 — see "StatusChip component and QPs Ready chip")
   ships/                         All ship-related pure logic + the Ships pages' table (see "Ships pages")
     getters.ts                 getShipList, isShipMaxed, getShipSchematicsOwned,
                                 getShipDisplayLevel, getShipSchematicsDisplay,
@@ -124,6 +131,7 @@ client/src/
     ShipsPage.tsx                    internal, parameterized (rarity/title) — see "Ships pages"
     FiveStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=5
     FourStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=4
+    QPsPage.tsx                       immortalized crew closest to their next Q Bit level (see "QPs page")
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
@@ -2083,6 +2091,96 @@ for the Page shell extraction).
 **Spec/plan:** `docs/superpowers/specs/2026-08-07-qps-page-design.md`,
 `docs/superpowers/plans/2026-08-07-qps-page-plan.md`.
 
+## StatusChip component and QPs Ready chip
+
+A small follow-up to the QPs page: crew within one successful mission run
+of their next QP level (`getQPRoundsLeft(c) <= 1` — the same "on hold"
+boundary the page's own sort already uses) now get a bolded name and a
+green "Ready" chip in `QPsTable`'s Name column, visually matching the
+existing "Ready" treatment on the Collections page's per-collection crew
+list. Requested directly by the user, who also asked that the chip
+rendering be extracted into something reusable, anticipating more chip
+variants on future pages.
+
+**New component, `components/StatusChip.tsx`** — first file in a new
+`client/src/components/` top-level folder, the app's first home for a
+small, reusable, presentational widget shared *across* domains/pages
+(as opposed to `layout/` — page-shell/nav scaffolding — or `lib/` —
+domain-neutral pure logic). Deliberately generic, no domain vocabulary
+baked in:
+
+```ts
+export interface StatusChipProps {
+  label: string;
+  color: ChipProps['color'];
+}
+```
+
+**Both of Collections' pre-existing inline chips were migrated onto it**
+in `CollectionCrewList.tsx` (the green "Ready" chip and the amber
+`` `${max_rarity}/${max_rarity} Stars` `` needs-work chip from the
+`needsWork` tier label feature), not just the one being copied to QPs —
+a pure extraction, verified pixel-identical to the prior inline `Chip`
+usage. A third inline chip was found during final review
+(`CollectionsTable.tsx`'s blue "Upgradable" chip) that was *not*
+migrated — `StatusChip` doesn't forward `sx`/`className`, and that chip
+needs a margin override, so absorbing it would require a real API
+decision. Left as a deliberate, ledgered deferral rather than expanding
+this branch's scope; the codebase now has two chip-rendering call
+patterns (inline `Chip`, and `StatusChip`) until that's addressed.
+
+**QPsTable's Name cell** — `isReady = getQPRoundsLeft(c) <= 1`, computed
+once per row and reused for both the bold weight and the chip guard, no
+new getter (the existing, pre-verified `getQPRoundsLeft` is reused
+directly):
+
+```tsx
+<Typography variant="body2" sx={{ fontWeight: isReady ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>
+  {c.name}
+</Typography>
+{isReady && <StatusChip label="Ready" color="success" />}
+```
+
+**One real bug caught only at final review, not by either task-level
+review:** the first version of this Name cell wrapped the crew name in a
+bare `<Typography>` (no `variant`). MUI's `TableCell` applies
+`theme.typography.body2` (0.875rem) to its content by default;
+`Typography` itself defaults to `variant="body1"` (1rem) and overrides
+that inheritance — this app defines no custom MUI theme, so these are
+the real, unmodified defaults. Net effect: every crew name (not just
+"ready" ones) rendered visibly larger than its own row's `QL`/`QPs`/
+`Points left`/`Rounds left` cells, and the added flex chip plus the
+larger font pushed some long names (e.g. "Gorn Offensive Pike") to wrap
+across 2-3 lines, inflating that row's height. Both task-level reviews
+missed it because they were checking "is the chip there and is the name
+bold," not comparing the cell's rendering against its own prior state —
+exactly the class of regression a per-task lens misses and a
+whole-branch review exists to catch. Traced to the plan's own literal
+code (the implementer transcribed it exactly), so per this project's
+established rule it was surfaced to the user rather than silently
+patched; the user chose "fix now." Fixed with `variant="body2"` (restore
+correct inheritance) plus `whiteSpace: 'nowrap'` on the same `Typography`
+(keep names on one line; any overflow is absorbed by `TableContainer`'s
+existing horizontal scroll, not vertical wrapping) — one fix round,
+clean scoped re-review, no new breakage.
+
+**Verification:** no automated test framework (deliberate, project-wide
+choice). The "ready" condition needed no new logic verification — it's a
+direct reuse of `getQPRoundsLeft`, already proven correct in the QPs
+page feature. Live browser checks confirmed the true case (bold name,
+green chip) directly; the false case (normal weight, no chip) could only
+be confirmed by static reading of the diff's conditional logic, because
+every one of the 62 QP-eligible crew in this worktree's
+`example-data.json` snapshot happened to sit at exactly `75/100` q_bits
+(`Rounds left: -1`) — a genuine data artifact, independently re-verified
+by the controller against the real file, not a code defect. The final
+review's own recommendation ("a before/after screenshot pair on
+refactored-plus-modified cells would have caught [the font-size
+regression]") is worth carrying into future presentational-diff reviews.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-08-qps-ready-chip-design.md`,
+`docs/superpowers/plans/2026-08-08-qps-ready-chip-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -2312,6 +2410,23 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     spot-checking, and surfaced one genuine open domain question (do
     Q Bit thresholds vary by crew rarity?) that no amount of code review
     could answer — resolved by asking the requester directly.
+22. **StatusChip component and QPs Ready chip** (`2026-08-08-qps-ready-chip`)
+    — deep dive above. Bolds a crew name and adds a green "Ready" chip on
+    the QPs page for crew one mission run from their next level, and
+    extracts the chip rendering into a new generic `components/StatusChip.tsx`
+    — the app's first cross-domain presentational-component folder — also
+    migrating Collections' two pre-existing inline chips onto it. First
+    feature whose final review caught a real, user-visible regression
+    (the Name cell silently rendering at the wrong MUI typography
+    variant/size, plus consequent row-height wrapping) that both
+    task-level reviews had missed entirely — traced to the plan's own
+    literal code, surfaced to the user per the established plan-mandated-
+    finding rule, fixed in one round with a clean scoped re-review. First
+    feature where a data-artifact limitation (a real snapshot with zero
+    variance on the exact boolean condition being added) was independently
+    re-verified by the controller against the raw data before accepting an
+    implementer's report of it, rather than taking the "couldn't test the
+    negative case" claim at face value.
 
 ## Current routes / nav (in order)
 
@@ -2830,7 +2945,13 @@ zero changes; and most recently its Phase 2, the Asset cache proxy —
 a Node-backend proxy/cache so those thumbnails load from the local server
 instead of hotlinking `assets.datacore.app` directly, closing the loop
 Phase 1's `ASSET_BASE_URL` seam was built to support, plus an independent
-"Refresh assets" button. Nothing is currently in flight.
+"Refresh assets" button; then the QPs page, the first genuinely new data
+domain (`crew.q_bits`) since crew/collections/ships, showing which
+immortalized crew are closest to their next Q Bit level; and most
+recently the QPs Ready chip — bolding/chip-tagging QPs rows within one
+run of their next level, and extracting the chip rendering into a new
+shared `components/StatusChip.tsx` also adopted by Collections. Nothing
+is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
