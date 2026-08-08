@@ -150,7 +150,7 @@ function AppLayout() {
         </Alert>
       </Snackbar>
       <Snackbar
-        open={catalogErrorSnackbarOpen}
+        open={catalogErrorSnackbarOpen && catalogError !== null}
         autoHideDuration={6000}
         onClose={() => setCatalogErrorSnackbarOpen(false)}
       >

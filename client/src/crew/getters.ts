@@ -96,6 +96,10 @@ export function getQPRoundsLeft(crew: CrewMember): number {
   return Math.ceil(getQPPointsNeeded(crew) / 25);
 }
 
+// "Ever obtained at all": counts an archetype as owned if an active-roster
+// copy exists at ANY completion state, or a frozen copy exists. This is
+// deliberately looser than the isImmortalized-gated set getCollectionCrew
+// uses for collection-progress calculations — do not substitute one for the other.
 export function getOwnedArchetypeIds(
   crewList: CrewMember[],
   frozenArchetypeIds: Set<number>,
