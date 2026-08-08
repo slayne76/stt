@@ -45,6 +45,18 @@ is deterministic and reproducible without needing a real session cookie,
 which is what let almost every feature in this project be verified
 end-to-end without live credentials.
 
+**A third external data source, added for the crew catalog feature (see
+"Crew catalog and Overview unique-crew counts" below):** the server also
+proxies/caches `https://datacore.app/structured/crew.json` — a public,
+unauthenticated, community-maintained catalog of every crew archetype
+ever added to the game — via `GET /api/crew-catalog` /
+`POST /api/crew-catalog/refresh`, the same whole-resource cache shape as
+`/api/player` (not the per-file `/api/assets` shape). No auth needed for
+this upstream, so only `UPSTREAM_ERROR` applies, never
+`UPSTREAM_AUTH_FAILED`. This exists because the player payload's own
+frozen-crew list (`stored_immortals`) carries no rarity information at
+all — see that section for the full investigation.
+
 **Client-side data flow:** the *entire* raw player JSON is fetched once by
 a `PlayerDataProvider` React Context at the app root
 (`client/src/context/PlayerDataContext.tsx`) and shared by every page via
@@ -60,16 +72,23 @@ pattern was simpler than standing up bespoke server endpoints per view.
 
 ```
 client/src/
-  App.tsx                       Routes + PlayerDataProvider wiring
+  App.tsx                       Routes + PlayerDataProvider + CrewCatalogProvider wiring
   main.tsx                      React root
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
+  context/CrewCatalogContext.tsx Same shape, second independent provider (see "Crew catalog and
+                                 Overview unique-crew counts") — a slow/failed catalog fetch never
+                                 blocks player-identity rendering
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
+  hooks/useCrewCatalog.ts        Same shape, for CrewCatalogContext
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
   api/assetsApi.ts               refreshAssets (see "Asset cache proxy")
-  layout/AppLayout.tsx          AppBar + Drawer nav shell; the app's two topbar controls, "Refresh"
-                                 (player data, see "Topbar Refresh button" below) and "Refresh assets"
-                                 (image cache, see "Asset cache proxy" below) — its first non-page
-                                 `usePlayerData()` consumer
+  api/catalogApi.ts              fetchCrewCatalog/refreshCrewCatalog (see "Crew catalog and Overview
+                                 unique-crew counts")
+  layout/AppLayout.tsx          AppBar + Drawer nav shell; the app's three topbar controls, "Refresh"
+                                 (player data, see "Topbar Refresh button" below), "Refresh assets"
+                                 (image cache, see "Asset cache proxy" below), and "Refresh catalog"
+                                 (crew catalog, see "Crew catalog and Overview unique-crew counts")
+                                 — its first non-page `usePlayerData()` consumer
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
                                   QPs Ready chip") — first file in this folder, the app's home for
@@ -86,6 +105,10 @@ client/src/
     storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
     ship.ts                    Ship interface (see "Ships pages"; `icon?` added for the image column)
     asset.ts                   DatacoreAsset interface (see "Crew/ship image column")
+    catalogEntry.ts             CatalogEntry interface — `{archetype_id, max_rarity, in_portal}`,
+                                 defined independently of the server's identical interface (this
+                                 monorepo doesn't share types between workspaces) — see "Crew catalog
+                                 and Overview unique-crew counts"
   assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
     config.ts                  ASSET_BASE_URL = '/api/assets' (repointed at the local proxy — see "Asset cache proxy")
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
@@ -118,8 +141,15 @@ client/src/
     sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
                                 byNameAsc, sortShips (reuses lib/comparator.ts's Comparator/combineComparators)
     ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics)
+  catalog/                       Pure logic over the external crew catalog (see "Crew catalog and
+                                 Overview unique-crew counts")
+    getters.ts                 getArchetypeMaxRarityMap, getCatalogCount (takes an optional
+                                `inPortal` partial-filter parameter, unused today, built for a
+                                 future missing-crew-list feature)
   pages/
-    OverviewPage.tsx            Player identity (Player ID, DBID) — the very first page
+    OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
+                                 (owned/total/pct%, see "Crew catalog and Overview unique-crew
+                                 counts") — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
     FourFiveStarsCrewPage.tsx   rarity=4, max_rarity=5
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
@@ -136,6 +166,10 @@ client/src/
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
   assetCache.ts, assetClient.ts, routes/assets.ts   Image cache/proxy (see "Asset cache proxy")
+  catalogCache.ts, catalogClient.ts, routes/catalog.ts   Crew catalog cache/proxy, mirrors
+                                                          cache.ts/sttClient.ts/routes/player.ts's
+                                                          whole-resource shape (see "Crew catalog and
+                                                          Overview unique-crew counts")
 ```
 
 ## The crew data model (as understood from the real game payload)
@@ -2181,6 +2215,140 @@ regression]") is worth carrying into future presentational-diff reviews.
 **Spec/plan:** `docs/superpowers/specs/2026-08-08-qps-ready-chip-design.md`,
 `docs/superpowers/plans/2026-08-08-qps-ready-chip-plan.md`.
 
+## Crew catalog and Overview unique-crew counts
+
+Two new Overview page rows — "5 Stars unique crew" and "4 Stars unique
+crew" — showing `owned/total (pct%)` distinct-archetype counts across
+**both** active-roster and frozen crew. This required the app's third
+external data source, alongside the STT game API and the asset-image
+host.
+
+**The blocking problem:** `player.character.stored_immortals` (the
+frozen-crew list, see "Frozen crew and duplicate exclusion" above) is
+`{ id, quantity, qbits }[]` — `id` is the crew's `archetype_id`, with
+**no rarity information at all**. Checked every other place an
+archetype could carry `max_rarity` in the full real payload (active
+roster, borrowed crew, voyage crew slots, season-exclusive crew): only
+**13 of 716** real frozen archetype IDs were resolvable. The other 703
+have no rarity anywhere in the payload — this app genuinely cannot
+answer "is this frozen crew 4★ or 5★?" from the player's own data.
+
+**Resolved via `https://datacore.app/structured/crew.json`** — a
+public, unauthenticated, static JSON export from the same community
+site (`stt-datacore`) this app already hotlinks/caches crew and ship
+images from. It's a flat array of every crew archetype ever added to
+the game (1961 entries as fetched), each with `archetype_id` and
+`max_rarity`. Verified against the real sample: **100% of both the 716
+frozen and 595 active-roster archetype IDs resolve in it**, and
+everywhere the catalog's `max_rarity` could be cross-checked against
+the real payload, it matched exactly — 0 mismatches. A lighter
+`crew.csv` export (~1MB vs. ~40MB) was considered and rejected — it has
+no `archetype_id` column, so it can't resolve `stored_immortals`
+entries at all. (`stt-datacore/website`'s GitHub repo was cloned
+locally to confirm `crew.json` is the only crew-archetype export
+carrying `archetype_id` — no lighter alternative exists.) No CORS
+headers on the URL, confirmed directly, so it must be fetched
+server-side — same root cause as the original STT-API proxy.
+
+**"Owned" is deliberately looser than the existing
+`isImmortalized`-gated "ownedImmortalArchetypes" concept** used by
+`getCollectionCrew` for collection-progress calculations (see "Frozen
+crew and duplicate exclusion" above) — this is a new, separate concept,
+not a reuse:
+
+```ts
+// crew/getters.ts — counts "ever obtained at all" (any active-roster
+// copy at any completion state, or a frozen copy); deliberately looser
+// than the isImmortalized-gated set getCollectionCrew uses for
+// collection-progress — do not substitute one for the other.
+export function getOwnedArchetypeIds(
+  crewList: CrewMember[],
+  frozenArchetypeIds: Set<number>,
+  catalogMaxRarityById: Map<number, number>,
+  maxRarity: number
+): Set<number> { /* ... */ }
+```
+
+Returns a `Set`, not just a count — `.size` gives today's number; the
+set itself is what a future missing-crew-list feature would diff
+against the full catalog. "Total" counts every catalog entry of that
+`max_rarity` regardless of `in_portal` (a portal/behold-roulette
+mechanic flag, not a clean "can this ever be obtained" signal) — i.e.
+every archetype of that rarity ever added to the game. Verified against
+real data + a live catalog pull: **5★ 436/1078 (40%), 4★ 683/703
+(97%)** — worth comparing against in a future session to sanity-check
+the catalog hasn't drifted unexpectedly.
+
+**Forward-looking, per explicit request:** a future feature will need
+lists of *missing* archetypes split by `in_portal`/not.
+`getCatalogCount(catalog, maxRarity, inPortal?)` takes `inPortal` as an
+optional third parameter for exactly this — omitted (used by this
+feature) is the global total; `true`/`false` are the partials that
+future feature will need. No missing-crew-list UI was built now, only
+this parameter shape, to avoid a rework later.
+
+**Backend: `server/src/catalogClient.ts` + `catalogCache.ts` +
+`routes/catalog.ts`** — mirrors `cache.ts`/`sttClient.ts`/
+`routes/player.ts`'s whole-resource shape exactly (`GET /api/crew-catalog`
+serves cache-or-fetch-live, `POST /api/crew-catalog/refresh` always
+fetches live), not the per-file `assets.ts` pattern, since this is one
+resource. Reduces each of the ~2000 raw catalog entries down to exactly
+`{ archetype_id, max_rarity, in_portal }` before caching — matching this
+project's "type only what's used" discipline; a ~40MB upstream response
+becomes a ~150KB cache file. Measured during final review: the full
+fetch+parse is ~2.7s wall clock with ~300MB peak RSS (Cloudflare serves
+it brotli-compressed) — a non-issue for a loopback-only, single-user app
+doing this once per cold start or explicit refresh click. No auth
+needed for this upstream (unlike the STT player API), so only
+`UpstreamError`/`UPSTREAM_ERROR` applies.
+
+**Client: `CrewCatalogContext`/`useCrewCatalog`** — structurally
+identical to `PlayerDataContext`/`usePlayerData` (own
+`data`/`loading`/`error`/`refresh`, auto-fetched on mount, `refresh()`
+swallows its own error into `error` state rather than throwing). A
+**second, independent provider**, not merged into `PlayerDataProvider`
+— a slow or failed catalog fetch never blocks player-identity
+rendering; the two new Overview rows have their own inline
+loading/error state (`CircularProgress` / literal `'Unavailable'` text)
+while the Player ID/DBID rows render normally regardless.
+
+**Topbar gets a third button, "Refresh catalog"** — visually matching
+"Refresh assets," but unlike it, wired directly through
+`CrewCatalogContext`'s own `refresh`/`loading` rather than duplicating
+local refresh state, since a real shared context exists here (assets
+has none). A `useEffect` watching the context's `error` drives a local
+Snackbar-open boolean, since `refresh()` never throws.
+
+**One real bug caught only at final review, in a path the plan's own
+verification checklist had dropped:** the design spec explicitly
+required confirming the page degrades gracefully if the catalog fetch
+fails, but the implementation plan's Task 3 verification steps omitted
+that check, so it shipped unexercised. The final reviewer manually
+traced the path and found the catalog-error Snackbar could render
+*blank* (open, but no message) if "Refresh catalog" was clicked twice in
+quick succession — the Snackbar's local `open` boolean and the context's
+`error` value (cleared to `null` at the start of every new load
+attempt) could desync. Fixed with `open={catalogErrorSnackbarOpen &&
+catalogError !== null}`, plus two related minors fixed in the same
+round: a missing `Array.isArray` guard on the new `catalog/getters.ts`
+functions (every other payload getter in this codebase has one; without
+it, a malformed cache file could blank the entire app — no
+`ErrorBoundary` exists anywhere in this client), and the disambiguating
+comment on `getOwnedArchetypeIds` shown above. One fix round, clean
+scoped re-review, then the dropped failure-path browser check was
+actually run (against a real broken upstream) and passed.
+
+**Known limitation, not yet addressed:** the catalog cache has no TTL —
+`GET /api/crew-catalog` serves an existing cache file forever, unlike
+`/api/player` where the player's own "Refresh" habit keeps data fresh.
+New crew enter the game continuously, so the `436/1078`-style number
+will silently drift stale over time with no visible staleness indicator
+beyond the manual "Refresh catalog" button. Flagged in "Deferred issues"
+below.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-08-crew-catalog-unique-counts-design.md`,
+`docs/superpowers/plans/2026-08-08-crew-catalog-unique-counts-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -2427,6 +2595,52 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     re-verified by the controller against the raw data before accepting an
     implementer's report of it, rather than taking the "couldn't test the
     negative case" claim at face value.
+23. **Crew catalog and Overview unique-crew counts** (`2026-08-08-crew-catalog-unique-counts`)
+    — deep dive above. Two new Overview rows showing distinct-archetype
+    5★/4★ counts across active + frozen crew, `owned/total (pct%)`. The
+    app's third external data source: a server-side proxy/cache for
+    `datacore.app`'s public crew catalog, needed because
+    `stored_immortals` (frozen crew) carries no rarity information at
+    all — 703 of 716 real frozen archetypes were unresolvable from the
+    player payload alone. First feature whose brainstorming phase
+    involved real external research before any design question could
+    even be answered — checked every other payload location for a
+    rarity fallback, fetched and inspected the real ~40MB catalog file,
+    cloned `stt-datacore/website`'s GitHub repo to confirm no lighter
+    alternative existed, and verified 100% real-data coverage before
+    presenting a design. First feature to combine three sequential
+    `AskUserQuestion` rounds across one brainstorming session (frozen-
+    rarity-source options once the blocker was found; then owned-
+    definition/totals-scope/total-definition together once the catalog
+    was confirmed usable) — the user's answer to the second round
+    ("owned/total/%, and keep future missing-crew-list partials in mind")
+    materially changed the shipped scope from the original literal ask.
+    First feature needing a worktree environment fix mid-session: Task
+    3's live browser check was initially blocked because this worktree
+    had no seeded player cache (only `example-data.json` gets copied by
+    convention, not a running server's cache) — the controller seeded
+    `server/data/player-cache.json` from `example-data.json` directly
+    and resumed the same implementer rather than treating the report as
+    final, which caught nothing wrong with the code but *did* let the
+    later-found Snackbar bug actually get exercised for real once fixed.
+    Final review independently re-derived every headline number from the
+    real cache files on disk (0 unresolved archetypes, 0 rarity
+    mismatches, the 12 correctly-deduped double-owned archetypes, both
+    436/1078 and 683/703) and measured the real upstream fetch cost
+    (~2.7s, ~300MB peak RSS) rather than taking the "this should be fine"
+    design-time reasoning on faith. Found one real bug in a path the
+    plan's own verification checklist had dropped (a spec-mandated
+    failure-path check never got run) — a blank error Snackbar on rapid
+    re-refresh — fixed in one round alongside two related minors
+    (missing `Array.isArray` guards, a disambiguating comment on the new
+    `getOwnedArchetypeIds` to prevent future confusion with the existing,
+    stricter `isImmortalized`-gated collections concept), then the
+    dropped check was actually run against a real broken upstream and
+    passed. `PROJECT_STATE.md` staleness was again flagged by the final
+    reviewer as "must fix before merge" and again overridden by the
+    controller per the now firmly-established convention (features
+    #15-18, #19, #22) — parked for this standard post-merge update
+    instead.
 
 ## Current routes / nav (in order)
 
@@ -2903,6 +3117,65 @@ doing:
   wave):** a click that fails within ~6 seconds of a prior success could
   theoretically show both stacked briefly during the exit transition.
   Cosmetic, rare.
+- **Crew catalog cache has no TTL, so the Overview unique-crew percentage
+  can silently go stale (new, from the Crew catalog feature — the one
+  item from that final review with real ongoing user-facing consequence,
+  not just a latent edge case):** `GET /api/crew-catalog` serves an
+  existing cache file forever. Unlike player data, nothing in normal
+  usage prompts a catalog refresh — new crew enter the game continuously,
+  so `436/1078`-style numbers will overstate completion more over time,
+  with no visible staleness indicator beyond remembering to click
+  "Refresh catalog." Cheapest fix consistent with this project's existing
+  patterns: a TTL on the `GET` path (re-fetch if the cache file's mtime
+  is older than ~24h, falling back to the stale cache if the upstream
+  fetch fails) — worth doing in the next session that touches this area,
+  not urgent enough to have blocked this feature's merge.
+- **Crew catalog client getters skip the codebase's `Array.isArray`
+  defensive-guard convention — resolved in the final-review fix round,
+  see "Crew catalog and Overview unique-crew counts" above.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.)
+  `getArchetypeMaxRarityMap`/`getCatalogCount` (`catalog/getters.ts`) now
+  guard non-array input the same way `getFrozenCrewArchetypeIds` and
+  every other payload getter in this codebase already did.
+- **Server-side malformed-catalog-upstream errors lose their specific
+  cause (new, from the Crew catalog feature):** if `datacore.app` ever
+  returns valid-but-wrong-shaped JSON (not an array), `catalogClient.ts`'s
+  `raw.map(...)` throws and `routes/catalog.ts`'s generic catch-all
+  responds `502` with `"Unexpected error fetching crew catalog"` rather
+  than a message naming the actual shape problem. Correct behavior
+  (no client-visible crash — see the false-case failure handling in the
+  feature's deep-dive above), just opaque diagnostics. A 2-line
+  `Array.isArray(raw)` check throwing a descriptive `UpstreamError` would
+  fix it; not done yet since the real upstream has never actually
+  returned a malformed shape.
+- **No fetch timeout, non-atomic cache write, and no in-flight
+  request-dedup in `catalogClient.ts`/`catalogCache.ts` (new, from the
+  Crew catalog feature):** all three inherited unmodified from the older
+  `sttClient.ts`/`cache.ts` pattern this feature deliberately mirrored,
+  not a regression introduced by this feature. Same category as the
+  already-deferred "No in-flight de-duplication for concurrent
+  asset-cache misses" item above — a torn cache write here is
+  self-healing (a failed `JSON.parse` on read falls through to a live
+  re-fetch, same as `cache.ts`'s player cache). Worth revisiting as one
+  codebase-wide pass (a shared `fetchWithTimeout` helper across all three
+  client modules, promoting `cache.ts`/`catalogCache.ts` to the atomic
+  tmp-file-plus-rename pattern the asset cache already uses) once a
+  fourth external dependency makes the duplication cost clearly worth
+  it — two instances of the gap were tolerated before this backlog entry
+  existed; three is the point it's now flagged, not yet the point it's
+  been fixed.
+- **`getOwnedArchetypeIds`'s numerator and denominator can theoretically
+  use different rarity sources (new, from the Crew catalog feature):**
+  active-roster crew contribute their own payload `max_rarity`; frozen
+  crew contribute the catalog's `max_rarity` for the same archetype. An
+  active crew member whose archetype is somehow absent from the catalog
+  would count toward "owned" without counting toward "total," permitting
+  `owned > total` in that edge case. Verified currently zero risk (0 of
+  595 real active archetype IDs are missing from the catalog, and the 12
+  archetypes present in both active and frozen data show 0 disagreement
+  between the two rarity sources) — latent, not live, same category as
+  `isCollectionUpgradable`'s duplicate-archetype assumption above.
 
 ## Likely next steps
 
@@ -2950,8 +3223,13 @@ domain (`crew.q_bits`) since crew/collections/ships, showing which
 immortalized crew are closest to their next Q Bit level; and most
 recently the QPs Ready chip — bolding/chip-tagging QPs rows within one
 run of their next level, and extracting the chip rendering into a new
-shared `components/StatusChip.tsx` also adopted by Collections. Nothing
-is currently in flight.
+shared `components/StatusChip.tsx` also adopted by Collections; and most
+recently the crew catalog feature — two new Overview rows showing
+distinct 5★/4★ crew counts across active + frozen crew against how many
+of that rarity exist in the game, backed by the app's third external
+data source (a proxy/cache for `datacore.app`'s public crew catalog),
+needed because the frozen-crew list alone carries no rarity information
+at all. Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
