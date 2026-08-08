@@ -4,3 +4,4 @@ dist/
 server/data/
 *.tsbuildinfo
 example-data.json
+.playwright-mcp/
