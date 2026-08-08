@@ -1,8 +1,18 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { CatalogEntry } from './catalogClient';
 
 const CACHE_PATH = 'data/crew-catalog-cache.json';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — matches datacore's own regeneration cadence
+
+export function isCatalogCacheFresh(): boolean {
+  if (!existsSync(CACHE_PATH)) return false;
+  try {
+    return Date.now() - statSync(CACHE_PATH).mtimeMs < CACHE_TTL_MS;
+  } catch {
+    return false;
+  }
+}
 
 export function readCatalogCache(): CatalogEntry[] | null {
   if (!existsSync(CACHE_PATH)) {
