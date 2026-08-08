@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Snackbar, Toolbar, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
+import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { refreshAssets } from '../api/assetsApi';
 import NavGroupItem from './NavGroupItem';
 
@@ -52,6 +53,13 @@ function AppLayout() {
   const [assetsError, setAssetsError] = useState<string | null>(null);
   const [assetsSuccess, setAssetsSuccess] = useState(false);
 
+  const { refresh: refreshCatalog, loading: catalogRefreshing, error: catalogError } = useCrewCatalog();
+  const [catalogErrorSnackbarOpen, setCatalogErrorSnackbarOpen] = useState(false);
+
+  useEffect(() => {
+    if (catalogError) setCatalogErrorSnackbarOpen(true);
+  }, [catalogError]);
+
   async function handleRefreshAssets() {
     setRefreshingAssets(true);
     setAssetsError(null);
@@ -95,6 +103,15 @@ function AppLayout() {
           >
             Refresh assets
           </Button>
+          <Button
+            variant="outlined"
+            onClick={() => void refreshCatalog()}
+            disabled={catalogRefreshing}
+            startIcon={catalogRefreshing ? <CircularProgress size={16} color="inherit" /> : undefined}
+            sx={{ ml: 1, color: 'common.white', borderColor: 'common.white' }}
+          >
+            Refresh catalog
+          </Button>
         </Toolbar>
       </AppBar>
       <Drawer
@@ -130,6 +147,15 @@ function AppLayout() {
       <Snackbar open={assetsSuccess} autoHideDuration={6000} onClose={() => setAssetsSuccess(false)}>
         <Alert severity="success" onClose={() => setAssetsSuccess(false)}>
           Asset cache refreshed
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={catalogErrorSnackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setCatalogErrorSnackbarOpen(false)}
+      >
+        <Alert severity="error" onClose={() => setCatalogErrorSnackbarOpen(false)}>
+          {catalogError}
         </Alert>
       </Snackbar>
     </Box>
