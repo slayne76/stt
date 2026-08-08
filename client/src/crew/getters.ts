@@ -95,3 +95,19 @@ export function getQPPointsNeeded(crew: CrewMember): number {
 export function getQPRoundsLeft(crew: CrewMember): number {
   return Math.ceil(getQPPointsNeeded(crew) / 25);
 }
+
+export function getOwnedArchetypeIds(
+  crewList: CrewMember[],
+  frozenArchetypeIds: Set<number>,
+  catalogMaxRarityById: Map<number, number>,
+  maxRarity: number
+): Set<number> {
+  const owned = new Set<number>();
+  for (const c of crewList) {
+    if (c.max_rarity === maxRarity) owned.add(c.archetype_id);
+  }
+  for (const archetypeId of frozenArchetypeIds) {
+    if (catalogMaxRarityById.get(archetypeId) === maxRarity) owned.add(archetypeId);
+  }
+  return owned;
+}
