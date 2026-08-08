@@ -39,7 +39,12 @@ function QPsTable({ crew }: QPsTableProps) {
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: isReady ? 'bold' : 'normal', whiteSpace: 'nowrap' }}
+                    >
+                      {c.name}
+                    </Typography>
                     {isReady && <StatusChip label="Ready" color="success" />}
                   </Box>
                 </TableCell>
