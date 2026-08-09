@@ -48,7 +48,9 @@ function OverviewPage() {
   const missingInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, true)].sort(byDataScoreDesc) : [];
   const missingNotInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, false)].sort(byDataScoreDesc) : [];
 
-  const showMissingTables = !loading && !error && identity && !catalogLoading && !catalogError && catalog;
+  const showMissingTables = Boolean(
+    !loading && !error && identity && !catalogLoading && !catalogError && catalog
+  );
 
   return (
     <Stack spacing={2}>

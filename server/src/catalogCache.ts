@@ -20,7 +20,12 @@ export function readCatalogCache(): CatalogEntry[] | null {
   }
   try {
     const raw = readFileSync(CACHE_PATH, 'utf-8');
-    return JSON.parse(raw) as CatalogEntry[];
+    const parsed = JSON.parse(raw) as CatalogEntry[];
+    if (parsed.length === 0 || typeof parsed[0].data_score !== 'number') {
+      // Empty, or old-shape cache (pre-widening of CatalogEntry) — treat as absent so callers refetch live.
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }

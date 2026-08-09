@@ -10,7 +10,7 @@ export interface ThumbnailProps {
 
 function Thumbnail({ asset, url: urlProp }: ThumbnailProps) {
   const [failed, setFailed] = useState(false);
-  const url = urlProp ?? getAssetUrl(asset);
+  const url = urlProp || getAssetUrl(asset);
 
   if (!url || failed) {
     return <Box sx={{ width: 40, height: 40, bgcolor: 'action.hover', borderRadius: 1 }} />;
