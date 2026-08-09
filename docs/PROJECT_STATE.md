@@ -105,14 +105,18 @@ client/src/
     storedImmortal.ts          StoredImmortal interface (see "Frozen crew and duplicate exclusion")
     ship.ts                    Ship interface (see "Ships pages"; `icon?` added for the image column)
     asset.ts                   DatacoreAsset interface (see "Crew/ship image column")
-    catalogEntry.ts             CatalogEntry interface — `{archetype_id, max_rarity, in_portal}`,
-                                 defined independently of the server's identical interface (this
-                                 monorepo doesn't share types between workspaces) — see "Crew catalog
-                                 and Overview unique-crew counts"
+    catalogEntry.ts             CatalogEntry interface — 8 fields as of the Missing 4 Stars tables
+                                 feature (`archetype_id, max_rarity, in_portal, name,
+                                 imageUrlPortrait, data_score, traits, traits_hidden`), defined
+                                 independently of the server's identical interface (this monorepo
+                                 doesn't share types between workspaces) — see "Crew catalog and
+                                 Overview unique-crew counts" and "Missing 4 Stars tables"
   assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
     config.ts                  ASSET_BASE_URL = '/api/assets' (repointed at the local proxy — see "Asset cache proxy")
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
-    Thumbnail.tsx                40x40 image-or-placeholder renderer, shared by CrewTable/ShipsTable
+    Thumbnail.tsx                40x40 image-or-placeholder renderer, shared by CrewTable/ShipsTable/
+                                 QPsTable/MissingCrewTable; takes EITHER `asset` (a `DatacoreAsset`)
+                                 OR a raw `url` string directly (see "Missing 4 Stars tables")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
     filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
@@ -125,7 +129,11 @@ client/src/
                                   see "QPs page" and "StatusChip component and QPs Ready chip")
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
-                                getCollectionCount, getCollectionCrew (reverse direction)
+                                getCollectionCount, getCollectionCrew (reverse direction);
+                                crewBelongsToCollection/getCrewCollections take the minimal
+                                `CollectionMatchable` shape (`archetype_id, traits, traits_hidden`),
+                                not `CrewMember`, since Missing 4 Stars needs to pass unowned
+                                `CatalogEntry`s through the same logic — see "Missing 4 Stars tables"
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
@@ -142,14 +150,20 @@ client/src/
                                 byNameAsc, sortShips (reuses lib/comparator.ts's Comparator/combineComparators)
     ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics)
   catalog/                       Pure logic over the external crew catalog (see "Crew catalog and
-                                 Overview unique-crew counts")
-    getters.ts                 getArchetypeMaxRarityMap, getCatalogCount (takes an optional
-                                `inPortal` partial-filter parameter, unused today, built for a
-                                 future missing-crew-list feature)
+                                 Overview unique-crew counts" and "Missing 4 Stars tables")
+    getters.ts                 getArchetypeMaxRarityMap, getCatalogCount (the `inPortal`
+                                 partial-filter parameter anticipated for a future missing-crew-list
+                                 feature — that feature arrived, see getMissingCrew below),
+                                 getMissingCrew (the complement of getOwnedArchetypeIds, filtered by
+                                 max_rarity/in_portal)
+    sorters.ts                  byDataScoreDesc — the domain's first sorter
+    MissingCrewTable.tsx         Shared table renderer (#/Image/Name/DataScore/Collections), used
+                                 twice on the Overview page (in-portal / not-in-portal)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
                                  (owned/total/pct%, see "Crew catalog and Overview unique-crew
-                                 counts") — the very first page
+                                 counts") plus two Missing 4 Stars tables (see "Missing 4 Stars
+                                 tables") — the very first page
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
     FourFiveStarsCrewPage.tsx   rarity=4, max_rarity=5
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
@@ -2414,6 +2428,122 @@ as one.
 **Spec/plan:** `docs/superpowers/specs/2026-08-08-catalog-ttl-and-pct-format-design.md`,
 `docs/superpowers/plans/2026-08-08-catalog-ttl-and-pct-format-plan.md`.
 
+## Missing 4 Stars tables
+
+Two new tables on the Overview page — "Missing 4 Stars (In Portal)" and
+"Missing 4 Stars (Not in Portal)" — listing 4★ crew archetypes the
+player doesn't own (neither active-roster nor frozen), sorted by
+DataScore descending, columns `#`/`Image`/`Name`/`DataScore`/
+`Collections`. Their combined row count equals `total − owned` from the
+existing "4 Stars unique crew" row by construction, not by a second
+independent computation — both derive from the same
+`getOwnedArchetypeIds`.
+
+**What "DataScore" actually is, resolved through real investigation, not
+a guess:** the user named a specific column visible on datacore.app,
+giving one data point — crew "V'Shal T'Pring" shows `57.47` there. This
+is *not* `cab_ov` (that crew's CAB Overall Rating is `10.3`, a
+different, smaller-scale metric). Searching the raw catalog payload for
+a value near `57.47` on that exact crew found `ranks.scores.overall =
+57.47` — an exact match. Independently confirmed via a dedicated public
+repository, `stt-datacore/datascore`, whose README states plainly:
+*"these scripts are used to generate scoring for the DataScore ranking
+system"* — `datascore` is the actual name of this scoring system in the
+datacore project. `ranks.scores.overall` is populated for all 1961
+catalog entries (0-100 scale, zero nulls) — strictly better-behaved than
+`cab_ov` (has real nulls) or `bigbook_tier` (was `-1`, i.e. ungraded,
+for **all 20** of the real missing 4★ crew checked during design —
+unusable as a sort key). No null-handling fallback was needed.
+
+**`CatalogEntry` widened from 3 to 8 fields** (both
+`server/src/catalogClient.ts` and `client/src/types/catalogEntry.ts`,
+independently, per this monorepo's no-shared-types convention): the
+existing `archetype_id`/`max_rarity`/`in_portal` plus `name`,
+`imageUrlPortrait`, `data_score` (`ranks.scores.overall`), `traits`,
+`traits_hidden`. `traits`/`traits_hidden` exist specifically so the
+Collections column can **reuse** this app's own existing
+`crewBelongsToCollection`/`getCrewCollections` logic (proven correct
+elsewhere) rather than trusting datacore's own precomputed `collections`
+field as a second, unverified source of truth for the same question.
+
+**That reuse required a real type-compatibility fix, caught while
+writing the plan, not assumed away by the spec:** `crewBelongsToCollection`/
+`getCrewCollections` (`collections/getters.ts`) took `crew: CrewMember`
+— and `CatalogEntry` is not a `CrewMember` (missing `id`, `symbol`,
+`level`, `equipment`, etc.), so passing one where the other was
+required would not compile. Fixed by widening both functions' parameter
+type to a new, minimal, exported `CollectionMatchable` interface
+(`{ archetype_id: number; traits: string[]; traits_hidden: string[] }`)
+— exactly the three fields the function body actually reads.
+`CrewMember` already satisfies this structurally (zero existing
+call-site changes needed); `CatalogEntry` now does too.
+`getCollectionCount`/`getCollectionCrew` (same file, need full
+`CrewMember` for `getCrewTier`) were left untouched.
+
+**`Thumbnail` (`assets/Thumbnail.tsx`) gained a second, optional `url`
+prop** — `imageUrlPortrait` (the catalog's raw field) is already in the
+exact flat-filename form `getAssetUrl()` normally derives from a nested
+`DatacoreAsset.file`, so no new URL-construction logic was needed, just
+a second, more direct way to hand `Thumbnail` a URL. `asset` became
+optional too; every existing call site (`CrewTable`, `ShipsTable`,
+`QPsTable`) keeps passing `asset` unchanged.
+
+**New `catalog/getters.ts` function, `getMissingCrew(catalog,
+ownedArchetypeIds, maxRarity, inPortal)`** — a three-condition filter
+(`max_rarity === maxRarity && in_portal === inPortal &&
+!ownedArchetypeIds.has(archetype_id)`), called with the existing
+`getOwnedArchetypeIds` unmodified. New `catalog/sorters.ts` (the
+domain's first sorter), `byDataScoreDesc`.
+
+**Verified against real data, both at design time and independently by
+the final reviewer:** 703 total 4★ in the catalog, 683 owned, 20
+missing = 6 in-portal + 14 not-in-portal (`6 + 14 == 20`, `683 + 20 ==
+703`). Zero of the 20 missing crew lack a `data_score`; all 20 resolve
+to at least one real collection via the reused membership logic.
+
+**One serious bug caught only at final review, with real, live
+consequence — not hypothetical:** a `crew-catalog-cache.json` written
+under the OLD 3-field `CatalogEntry` shape existed in the actual running
+deployment (from before this feature) and, thanks to the prior
+session's 24h TTL, would have been served as "fresh" for up to a day.
+`MissingCrewTable`'s `c.data_score.toFixed(2)` would then throw on
+`undefined` — and since this client has **no `ErrorBoundary` anywhere**,
+that doesn't degrade to two broken table sections, it blanks the
+**entire app**, every route, until the cache is manually cleared. The
+final reviewer found this by directly inspecting the real cache file on
+disk in the main checkout, not just reasoning about it abstractly.
+Fixed with a shape guard in `readCatalogCache()`
+(`server/src/catalogCache.ts`): if the parsed array is empty or its
+first entry's `data_score` isn't a `number`, treat the cache as absent
+(`null`) so the existing "no cache → live refetch" path handles it —
+the exact same path a missing cache file already took, no new code path
+introduced. This closes the *entire class* of "persisted cache written
+under an older `CatalogEntry` shape" bug, not just this one instance —
+worth remembering before the *next* `CatalogEntry` widening. The stale
+cache file in the main checkout was also deleted directly as
+belt-and-suspenders once this fix landed. Two related one-line fixes
+landed in the same round: `OverviewPage.tsx`'s `showMissingTables`
+wrapped in `Boolean(...)` (its inferred type included non-boolean
+possibilities that happened to render safely today but weren't robust
+by construction), and `Thumbnail`'s `urlProp ?? getAssetUrl(asset)`
+changed to `||` (an empty-string `url` would otherwise "win" over the
+`asset` fallback).
+
+**Deliberately not built now, tracked as latent/deferred (see "Deferred
+issues" below):** the arithmetic invariant (missing-in-portal +
+missing-not-in-portal = total − owned) holds today but isn't
+unconditional — it requires every owned 4★ archetype to also exist in
+the catalog, true for all 595 real active + frozen archetypes checked,
+but a newly-released roster crew ahead of the daily catalog snapshot
+could make it drift by a small amount; the catalog API payload grew
+~6× from this widening (107KB → 645KB in memory, no server compression
+middleware) — fine at this app's single-user loopback scale, worth
+remembering before the next widening; no empty-state message if a
+player is missing zero 4★ crew.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-09-missing-4-stars-tables-design.md`,
+`docs/superpowers/plans/2026-08-09-missing-4-stars-tables-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -2731,6 +2861,34 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     alongside `example-data.json` from the start) — both task
     implementers' browser verifications succeeded on the first attempt,
     no environment-gap resume needed this time.
+25. **Missing 4 Stars tables** (`2026-08-09-missing-4-stars-tables`) —
+    deep dive above. Two new Overview tables listing unowned 4★ crew,
+    split by `in_portal`, sorted by DataScore (`ranks.scores.overall`,
+    identified through genuine investigation — an exact-value match plus
+    confirmation via a dedicated `stt-datacore/datascore` public repo —
+    not guessed from a field name). `CatalogEntry` widened 3→8 fields;
+    `getMissingCrew` is the literal complement of the existing
+    `getOwnedArchetypeIds`, so the "missing = total − owned" arithmetic
+    from the prior feature holds by construction. First feature to reuse
+    existing business logic (`crewBelongsToCollection`) across a type
+    boundary it wasn't originally built for, via a new minimal structural
+    interface (`CollectionMatchable`) rather than a cast — caught and
+    designed at plan-writing time, not discovered as a build failure
+    mid-implementation. First feature where the final reviewer found a
+    **live, currently-existing** bug, not just a code-path risk: a stale
+    3-field catalog cache genuinely present in the real deployment,
+    which — thanks to the previous feature's own 24h TTL — would have
+    blanked the *entire app* (no `ErrorBoundary` exists anywhere in this
+    client) once merged, found by inspecting the actual file on disk
+    rather than reasoning abstractly about the code. Fixed with a shape
+    guard in `readCatalogCache()` that closes the whole class of "cache
+    written under an older `CatalogEntry` shape" bug, not just this
+    instance — plus the stale file itself deleted directly post-merge as
+    belt-and-suspenders. The fix-round implementer ran without its usual
+    safety classifier available (a session-level tooling gap, unrelated
+    to this project); the controller independently re-verified the fix
+    diff and re-ran build/lint itself before trusting the scoped
+    re-review, rather than proceeding on the report alone.
 
 ## Current routes / nav (in order)
 
@@ -3297,6 +3455,50 @@ doing:
   rationals (verified: not reachable with the real totals in production
   at ship time, but the TTL feature is exactly what makes `total` drift
   over time into ranges where it would have been).
+- **Old-shape catalog cache blanking the whole app — resolved by the
+  Missing 4 Stars tables feature, see deep-dive above.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.)
+  `readCatalogCache()` now shape-guards: an empty array or an entry
+  missing a numeric `data_score` is treated as no-cache-present,
+  triggering a live refetch instead of serving stale-shaped data that
+  would crash `MissingCrewTable`'s `.toFixed(2)` call. No `ErrorBoundary`
+  exists anywhere in this client yet — a genuine gap this bug exposed
+  but didn't itself fix; still worth adding as an independent follow-up
+  (see the "Missing 4 Stars tables" deep-dive's closing note).
+- **`getMissingCrew`'s arithmetic invariant assumes every owned
+  archetype also exists in the catalog (new, from the Missing 4 Stars
+  tables feature):** if a roster crew's archetype were ever missing from
+  the catalog (e.g. a newly-released crew ahead of the daily datacore
+  snapshot), it would count toward "owned" without counting toward
+  "total," making the two Missing tables' combined row count fall
+  slightly short of what the "4 Stars unique crew" row's `total − owned`
+  implies. Verified currently zero risk (0 of 595 real active + frozen
+  4★ archetype IDs are missing from the catalog). Same category and same
+  root cause as the pre-existing `getOwnedArchetypeIds`
+  numerator/denominator-mismatch entry above — not a new independent
+  risk, just a second place the same latent assumption surfaces.
+- **Catalog API payload grew ~6× from the `traits`/`traits_hidden`
+  widening (new, from the Missing 4 Stars tables feature):** ~107KB →
+  ~645KB in memory per fetch (154KB → 943KB on disk), and the server has
+  no `compression` middleware. Fine at this app's single-user, loopback
+  scale — flagged so the next `CatalogEntry` widening is a deliberate
+  choice, not a surprise when someone eventually checks payload size.
+- **No `ErrorBoundary` anywhere in this client (new, surfaced by — but
+  not itself fixed by — the Missing 4 Stars tables feature's stale-cache
+  bug):** any uncaught render-time exception anywhere in the app
+  currently blanks the entire React root, not just the page or component
+  that threw. The stale-cache shape guard above closes the one concrete
+  trigger found so far, but the underlying gap (no boundary at all) is
+  general and would recur for any future uncaught render error, from any
+  cause. Worth adding a router-level `ErrorBoundary` as an independent,
+  general-purpose hardening pass — not specific to the catalog feature.
+- **No empty-state message on `MissingCrewTable` (new, from the Missing
+  4 Stars tables feature):** a player missing zero 4★ crew of a given
+  `in_portal` status gets a heading plus a header-only table, no "none!"
+  message. Not specified either way in the design; arguably fine and
+  even informative as-is (an empty table already communicates "zero"),
+  not treated as a gap worth closing without a concrete complaint.
 
 ## Likely next steps
 
@@ -3350,11 +3552,15 @@ distinct 5★/4★ crew counts across active + frozen crew against how many
 of that rarity exist in the game, backed by the app's third external
 data source (a proxy/cache for `datacore.app`'s public crew catalog),
 needed because the frozen-crew list alone carries no rarity information
-at all; and most recently a same-session follow-up closing that
-feature's own "no TTL" limitation — a 24h auto-refetch on the catalog
-cache — bundled with an unrelated small request, the Overview
-percentage moving from whole-number to 2-decimal ceiling-rounded
-display. Nothing is currently in flight.
+at all; then a same-session follow-up closing that feature's own
+"no TTL" limitation — a 24h auto-refetch on the catalog cache — bundled
+with an unrelated small request, the Overview percentage moving from
+whole-number to 2-decimal ceiling-rounded display; and most recently the
+Missing 4 Stars tables — two more Overview tables listing unowned 4★
+crew split by portal availability, sorted by DataScore, whose final
+review caught and closed a real bug already live in the deployment (a
+stale-shaped catalog cache that would have blanked the whole app).
+Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
