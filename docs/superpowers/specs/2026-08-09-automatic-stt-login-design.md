@@ -34,10 +34,13 @@ rejected.
 
 ## Non-goals
 
-- No fetch timeouts on the new login requests — this app has no
-  fetch-timeout convention anywhere yet (an existing, already-deferred,
-  codebase-wide backlog item); the login flow inherits that same
-  accepted gap rather than fixing it here as scope creep.
+- No fetch timeouts on the new login requests — timeout coverage is
+  already inconsistent across this codebase's external clients
+  (`catalogClient.ts` has `AbortSignal.timeout(30_000)`, but
+  `sttClient.ts` and `assetClient.ts` don't, an existing, already-deferred
+  backlog item); the login flow inherits the same accepted gap as
+  `sttClient.ts`/`assetClient.ts` rather than fixing it here as scope
+  creep.
 - No login-attempt rate-limiting/cooldown — single-user, loopback-only
   app, refreshed by hand occasionally. YAGNI.
 - No manual-cookie-override fallback (`STT_SESSION_COOKIE` is removed
