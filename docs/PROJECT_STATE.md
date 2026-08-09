@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-08. This document is the durable, in-depth record of
+Last updated: 2026-08-09. This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -2338,16 +2338,81 @@ comment on `getOwnedArchetypeIds` shown above. One fix round, clean
 scoped re-review, then the dropped failure-path browser check was
 actually run (against a real broken upstream) and passed.
 
-**Known limitation, not yet addressed:** the catalog cache has no TTL —
-`GET /api/crew-catalog` serves an existing cache file forever, unlike
-`/api/player` where the player's own "Refresh" habit keeps data fresh.
-New crew enter the game continuously, so the `436/1078`-style number
-will silently drift stale over time with no visible staleness indicator
-beyond the manual "Refresh catalog" button. Flagged in "Deferred issues"
-below.
+**Known limitation at ship time, resolved one session later — see "Crew
+catalog TTL and Overview percentage format" below.** (Kept here, struck
+through in spirit, as a pointer for anyone who remembers this entry from
+before — the fix is real, not just noted.) The catalog cache originally
+had no TTL; it now auto-refetches after 24h.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-08-crew-catalog-unique-counts-design.md`,
 `docs/superpowers/plans/2026-08-08-crew-catalog-unique-counts-plan.md`.
+
+## Crew catalog TTL and Overview percentage format
+
+Two small, independent follow-ups to the feature above, done in the same
+session the "no TTL" limitation was flagged.
+
+**24h TTL on the crew-catalog cache.** `isCatalogCacheFresh()`
+(`server/src/catalogCache.ts`) checks the cache file's on-disk mtime
+against a 24h threshold — no new metadata stored in the cache file
+itself. `GET /api/crew-catalog` (`server/src/routes/catalog.ts`) now
+serves the cache immediately only if it's both present *and* fresh;
+otherwise it attempts a live refetch, caching the result on success. On
+a **failed** refetch of a stale cache, it silently falls back to serving
+the stale data rather than erroring — an automatic background refresh
+failing shouldn't make the page less reliable than it was before this
+existed. `POST /crew-catalog/refresh` (the topbar button) is
+deliberately **not** given this fallback — it's an explicit user action,
+so a failure there still surfaces a real error, exactly as before.
+Refactored around two small helpers, `fetchLiveAndCache` and
+`respondUpstreamError`, removing what had been duplicated
+`UpstreamError`/502 branching.
+
+**Percentage format: 2 decimal places, rounded up.**
+`uniqueCrewCell` (`client/src/pages/OverviewPage.tsx`) changed from
+`Math.round((owned/total)*100)` → `${pct}%` (e.g. `97%`) to
+`Math.ceil((owned/total)*10000)/100` → `${pct.toFixed(2)}%` (e.g.
+`97.16%`), an explicit user request for more precision, always rounding
+up rather than to nearest.
+
+**Final review found one real, if latent, risk and one real, if
+unreachable, edge case — both fixed in one round:**
+- **No fetch timeout on the catalog upstream call.** This gap already
+  existed in `catalogClient.ts` (and every other client in this
+  codebase — see "Deferred issues" below), but the TTL is what turned it
+  from "only hit by a manual button click" into "routinely exercised by
+  every GET against a cache older than 24h." A hanging (not
+  hard-failing) upstream would have blocked the request for minutes with
+  no error, only a permanently-spinning cell — a more realistic CDN
+  failure mode than the DNS-failure the original verification exercised.
+  Fixed with `AbortSignal.timeout(30_000)` on the fetch call; the
+  existing `UpstreamError`-wrapping `catch` needed no changes to handle
+  the resulting abort correctly.
+- **Ceiling-rounding float epsilon.** `Math.ceil((owned/total)*10000)/100`
+  can, for certain `total` values, overstate an exact round percentage
+  by 0.01 due to floating-point representation (verified exhaustively:
+  not reachable with today's real totals, 703 and 1078, but the whole
+  point of the TTL feature is that `total` grows over time). Fixed with
+  a `- 1e-9` epsilon before the ceiling: `Math.ceil((owned/total)*10000
+  - 1e-9)/100`.
+
+Both fixes were explicitly against the final reviewer's own "ready to
+merge as-is" recommendation — the user chose to fix them in this branch
+rather than defer, the first time this session a fix round happened on
+findings the reviewer itself judged non-blocking.
+
+**Two Minor findings deferred to the backlog, not fixed:** `StrictMode`
+causes `CrewCatalogProvider`'s mount effect to fire twice, so a stale
+cache triggers two concurrent ~40MB upstream downloads instead of one —
+harmless (`writeFileSync` can't produce a torn file, the loser's write
+just re-writes equivalent data) and only a scale concern this app
+doesn't have. The unique-crew percentage can now silently decrease
+between page loads with no staleness indicator, which is the intended
+self-correcting behavior, not a bug — noted so it isn't later reported
+as one.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-08-catalog-ttl-and-pct-format-design.md`,
+`docs/superpowers/plans/2026-08-08-catalog-ttl-and-pct-format-plan.md`.
 
 ## Feature history (chronological)
 
@@ -2641,6 +2706,31 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     controller per the now firmly-established convention (features
     #15-18, #19, #22) — parked for this standard post-merge update
     instead.
+24. **Crew catalog TTL and Overview percentage format** (`2026-08-08-catalog-ttl-and-pct-format`)
+    — deep dive above. Closes the "no TTL" limitation flagged at the end
+    of the previous feature's own session: a 24h TTL on the crew-catalog
+    cache, auto-refetching when stale with a silent stale-cache fallback
+    on refetch failure (GET only — the explicit "Refresh catalog" button
+    still surfaces real errors, unchanged). Also changed the Overview
+    percentage display from whole-number rounding to 2-decimal ceiling
+    rounding, a direct user request. First feature requested by the user
+    asking "what is that?" about a backlog item I'd mentioned in passing
+    — the explanation itself became the brainstorming session's opening
+    move, with the user then bundling in an unrelated small display
+    change once building was already agreed. First feature where a
+    final whole-branch review's own explicit bottom-line verdict was
+    "ready to merge, no fix needed" (a fetch-timeout risk and a
+    theoretical rounding edge case, both framed by the reviewer as
+    fast-follow-up material, not blockers) and the user chose to fix
+    both anyway rather than accept the reviewer's own recommendation to
+    defer — the first time in this project the fix-or-defer choice
+    went the opposite way from what the reviewer itself suggested. Both
+    fixes were one-liners (`AbortSignal.timeout(30_000)`, a `-1e-9`
+    epsilon) with a clean scoped re-review. This worktree also validated
+    the prior session's memory fix (seeding `server/data/player-cache.json`
+    alongside `example-data.json` from the start) — both task
+    implementers' browser verifications succeeded on the first attempt,
+    no environment-gap resume needed this time.
 
 ## Current routes / nav (in order)
 
@@ -3117,19 +3207,12 @@ doing:
   wave):** a click that fails within ~6 seconds of a prior success could
   theoretically show both stacked briefly during the exit transition.
   Cosmetic, rare.
-- **Crew catalog cache has no TTL, so the Overview unique-crew percentage
-  can silently go stale (new, from the Crew catalog feature — the one
-  item from that final review with real ongoing user-facing consequence,
-  not just a latent edge case):** `GET /api/crew-catalog` serves an
-  existing cache file forever. Unlike player data, nothing in normal
-  usage prompts a catalog refresh — new crew enter the game continuously,
-  so `436/1078`-style numbers will overstate completion more over time,
-  with no visible staleness indicator beyond remembering to click
-  "Refresh catalog." Cheapest fix consistent with this project's existing
-  patterns: a TTL on the `GET` path (re-fetch if the cache file's mtime
-  is older than ~24h, falling back to the stale cache if the upstream
-  fetch fails) — worth doing in the next session that touches this area,
-  not urgent enough to have blocked this feature's merge.
+- **Crew catalog cache has no TTL — resolved by the Crew catalog TTL
+  and Overview percentage format feature, see deep-dive above.** (Kept
+  here, struck through in spirit, as a pointer for anyone who remembers
+  this entry from before — the fix is real, not just noted.) `GET
+  /api/crew-catalog` now auto-refetches once the cache passes 24h,
+  falling back to the stale cache only if that refetch itself fails.
 - **Crew catalog client getters skip the codebase's `Array.isArray`
   defensive-guard convention — resolved in the final-review fix round,
   see "Crew catalog and Overview unique-crew counts" above.** (Kept here,
@@ -3149,22 +3232,23 @@ doing:
   `Array.isArray(raw)` check throwing a descriptive `UpstreamError` would
   fix it; not done yet since the real upstream has never actually
   returned a malformed shape.
-- **No fetch timeout, non-atomic cache write, and no in-flight
-  request-dedup in `catalogClient.ts`/`catalogCache.ts` (new, from the
-  Crew catalog feature):** all three inherited unmodified from the older
-  `sttClient.ts`/`cache.ts` pattern this feature deliberately mirrored,
-  not a regression introduced by this feature. Same category as the
-  already-deferred "No in-flight de-duplication for concurrent
-  asset-cache misses" item above — a torn cache write here is
-  self-healing (a failed `JSON.parse` on read falls through to a live
-  re-fetch, same as `cache.ts`'s player cache). Worth revisiting as one
-  codebase-wide pass (a shared `fetchWithTimeout` helper across all three
-  client modules, promoting `cache.ts`/`catalogCache.ts` to the atomic
-  tmp-file-plus-rename pattern the asset cache already uses) once a
-  fourth external dependency makes the duplication cost clearly worth
-  it — two instances of the gap were tolerated before this backlog entry
-  existed; three is the point it's now flagged, not yet the point it's
-  been fixed.
+- **`catalogClient.ts`'s missing fetch timeout — resolved by the Crew
+  catalog TTL and Overview percentage format feature, see deep-dive
+  above.** (Kept here, struck through in spirit, as a pointer for anyone
+  who remembers this entry from before — the fix is real, not just
+  noted.) `fetchCrewCatalog` now passes `AbortSignal.timeout(30_000)` to
+  its upstream `fetch` call. **Not resolved, and now the more clearly-
+  scoped remaining item:** `sttClient.ts` and `assetClient.ts` still have
+  no fetch timeout (a codebase-wide gap, not specific to the catalog),
+  and `catalogCache.ts`'s cache write is still non-atomic with no
+  in-flight request-dedup, same category as the already-deferred "No
+  in-flight de-duplication for concurrent asset-cache misses" item above
+  — a torn cache write here is self-healing (a failed `JSON.parse` on
+  read falls through to a live re-fetch). Worth a codebase-wide pass (a
+  shared `fetchWithTimeout` helper across the two remaining clients,
+  promoting `cache.ts`/`catalogCache.ts` to the atomic tmp-file-plus-
+  rename pattern the asset cache already uses) once a fourth external
+  dependency makes the duplication cost clearly worth it.
 - **`getOwnedArchetypeIds`'s numerator and denominator can theoretically
   use different rarity sources (new, from the Crew catalog feature):**
   active-roster crew contribute their own payload `max_rarity`; frozen
@@ -3176,6 +3260,43 @@ doing:
   archetypes present in both active and frozen data show 0 disagreement
   between the two rarity sources) — latent, not live, same category as
   `isCollectionUpgradable`'s duplicate-archetype assumption above.
+- **`CrewCatalogProvider`'s mount effect double-fires under `StrictMode`,
+  doubling upstream fetch cost specifically when the cache is stale (new,
+  from the Crew catalog TTL feature):** `client/src/main.tsx` wraps the
+  app in `StrictMode` unconditionally (including production builds), and
+  the provider's fetch-on-mount effect has no in-flight guard, so two
+  `GET /api/crew-catalog` requests fire concurrently on every mount. With
+  a fresh cache that's two cheap ~154KB reads; with a stale cache, both
+  see it as stale and both trigger a full ~40MB upstream download.
+  Verified harmless for correctness — `writeCatalogCache` uses
+  `writeFileSync`, which can't yield mid-write in Node's single-threaded
+  event loop, so the two writes can't interleave into a torn file, the
+  loser's write just re-writes equivalent data — but it's real wasted
+  bandwidth once a day per mount. Same underlying gap as the already-
+  deferred "no in-flight request-dedup" item above; not worth a
+  single-flight guard on its own at this app's (single-user, loopback)
+  scale.
+- **The Overview unique-crew percentage can now silently decrease
+  between page loads, with no staleness or "updated" indicator either
+  way (new, from the Crew catalog TTL feature — this is the intended
+  behavior, not a defect, recorded here only so it's never mistaken for
+  one):** the whole point of the TTL is that `owned/total (pct%)`
+  self-corrects downward as the game adds new crew the cache didn't
+  previously know about. Someone who saw `40.45%` yesterday may
+  correctly see a lower number today, purely from the catalog
+  refreshing in the background — no user action, no explanation shown.
+  Consistent with the feature's explicit design (see spec); a "catalog
+  last updated" indicator would be the natural follow-up if this is ever
+  reported as confusing.
+- **Ceiling-rounding float-epsilon overshoot — resolved by the Crew
+  catalog TTL and Overview percentage format feature, see deep-dive
+  above.** (Kept here, struck through in spirit, as a pointer for anyone
+  who remembers this entry from before — the fix is real, not just
+  noted.) `uniqueCrewCell`'s percentage formula now subtracts `1e-9`
+  before ceiling to absorb floating-point overshoot on exact-2-decimal
+  rationals (verified: not reachable with the real totals in production
+  at ship time, but the TTL feature is exactly what makes `total` drift
+  over time into ranges where it would have been).
 
 ## Likely next steps
 
@@ -3229,7 +3350,11 @@ distinct 5★/4★ crew counts across active + frozen crew against how many
 of that rarity exist in the game, backed by the app's third external
 data source (a proxy/cache for `datacore.app`'s public crew catalog),
 needed because the frozen-crew list alone carries no rarity information
-at all. Nothing is currently in flight.
+at all; and most recently a same-session follow-up closing that
+feature's own "no TTL" limitation — a 24h auto-refetch on the catalog
+cache — bundled with an unrelated small request, the Overview
+percentage moving from whole-number to 2-decimal ceiling-rounded
+display. Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
