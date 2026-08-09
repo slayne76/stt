@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-09. This document is the durable, in-depth record of
+Last updated: 2026-08-09 (Router-level ErrorBoundary). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -87,12 +87,16 @@ client/src/
   layout/AppLayout.tsx          AppBar + Drawer nav shell; the app's three topbar controls, "Refresh"
                                  (player data, see "Topbar Refresh button" below), "Refresh assets"
                                  (image cache, see "Asset cache proxy" below), and "Refresh catalog"
-                                 (crew catalog, see "Crew catalog and Overview unique-crew counts")
-                                 — its first non-page `usePlayerData()` consumer
+                                 (crew catalog, see "Crew catalog and Overview unique-crew counts");
+                                 wraps `<Outlet />` in `ErrorBoundary`, keyed by `location.pathname`
+                                 (see "Router-level ErrorBoundary" below) — its first non-page
+                                 `usePlayerData()` consumer
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
                                   QPs Ready chip") — first file in this folder, the app's home for
                                   small, reusable, cross-domain presentational UI
+  components/ErrorBoundary.tsx   Class-component error boundary, fallback Alert + "Try again" (see
+                                  "Router-level ErrorBoundary" below)
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
@@ -2346,8 +2350,9 @@ attempt) could desync. Fixed with `open={catalogErrorSnackbarOpen &&
 catalogError !== null}`, plus two related minors fixed in the same
 round: a missing `Array.isArray` guard on the new `catalog/getters.ts`
 functions (every other payload getter in this codebase has one; without
-it, a malformed cache file could blank the entire app — no
-`ErrorBoundary` exists anywhere in this client), and the disambiguating
+it, a malformed cache file could blank the entire app — at the time, no
+`ErrorBoundary` existed anywhere in this client; now closed, see
+"Router-level ErrorBoundary" below), and the disambiguating
 comment on `getOwnedArchetypeIds` shown above. One fix round, clean
 scoped re-review, then the dropped failure-path browser check was
 actually run (against a real broken upstream) and passed.
@@ -2507,9 +2512,10 @@ under the OLD 3-field `CatalogEntry` shape existed in the actual running
 deployment (from before this feature) and, thanks to the prior
 session's 24h TTL, would have been served as "fresh" for up to a day.
 `MissingCrewTable`'s `c.data_score.toFixed(2)` would then throw on
-`undefined` — and since this client has **no `ErrorBoundary` anywhere**,
-that doesn't degrade to two broken table sections, it blanks the
-**entire app**, every route, until the cache is manually cleared. The
+`undefined` — and since this client had **no `ErrorBoundary` anywhere**
+at the time (now closed, see "Router-level ErrorBoundary" below), that
+didn't degrade to two broken table sections, it blanked the
+**entire app**, every route, until the cache was manually cleared. The
 final reviewer found this by directly inspecting the real cache file on
 disk in the main checkout, not just reasoning about it abstractly.
 Fixed with a shape guard in `readCatalogCache()`
@@ -2543,6 +2549,71 @@ player is missing zero 4★ crew.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-09-missing-4-stars-tables-design.md`,
 `docs/superpowers/plans/2026-08-09-missing-4-stars-tables-plan.md`.
+
+## Router-level ErrorBoundary
+
+Until this feature, no `ErrorBoundary` existed anywhere in this client —
+any uncaught render-time exception, from any cause, blanked the entire
+React root. Two prior features (Crew catalog and Overview unique-crew
+counts; Missing 4 Stars tables) each hit a *concrete* trigger of this
+general gap and fixed the specific cause without fixing the underlying
+absence of a boundary. This feature closes the general gap itself.
+
+**`components/ErrorBoundary.tsx`** — a class component (React requires
+error boundaries to be class components; there's no hook equivalent as of
+React 19, making this the one exception to this codebase's otherwise
+all-functional component style). On catch, renders a `PageShell`-styled
+error `Alert` ("Something went wrong on this page." + a "Try again"
+button that resets `hasError` in place) instead of `children`, and logs
+the full error plus component stack to `console.error` — no raw error
+text is shown in the UI itself, matching this project's existing error-UI
+copy style.
+
+**Placement — `<Outlet />` only, not the whole `<App />`:** `AppLayout.tsx`
+wraps just `<Outlet />`, so a crash in one page's content leaves the
+topbar and nav drawer alive — the user can navigate to a different,
+healthy page instead of facing a fully dead screen. `AppLayout` itself
+(topbar, drawer, `PlayerDataProvider`/`CrewCatalogProvider`) stays outside
+the boundary, unchanged; a crash in that shell layer is still uncaught,
+same as before — a deliberate, scoped decision (no concrete trigger found
+there), not an oversight.
+
+**Auto-reset via `key={location.pathname}`:** wrapping `<Outlet />` in
+`<ErrorBoundary key={location.pathname}>` means React remounts a fresh
+`ErrorBoundary` instance whenever the route changes, clearing any stale
+`hasError` state automatically — navigating to a different page always
+works, without needing to click "Try again" first. This keeps
+`ErrorBoundary` itself free of any react-router dependency; the
+route-awareness lives entirely in `AppLayout`, which already owns routing
+concerns (the same reasoning already applied to `NavGroupItem`).
+
+**Verified safe against the two real interaction risks at this app's
+scale** (per the final review): `PlayerDataProvider`/`CrewCatalogProvider`
+wrap `BrowserRouter` in `App.tsx`, sitting *above* the keyed boundary, so
+remounting on navigation can never remount those providers or re-trigger
+their fetch effects; and no code under `<Outlet />` persists state across
+navigations (no `useSearchParams`, `localStorage`, `sessionStorage`, or
+scroll-position tracking anywhere in the client), so the remount never
+discards anything a page would have wanted to keep.
+
+**Known, accepted gap:** keying on `location.pathname` rather than
+`location.key` means re-clicking the *current* page's own nav entry while
+its fallback is showing won't auto-clear it — mitigated by the always-
+visible "Try again" button, and tracked as a Minor deferred finding (see
+"Deferred issues" below) rather than fixed, since the one-token
+`location.key` swap wasn't judged worth a fix round for a case with an
+obvious in-place workaround.
+
+**Verification:** no automated test framework exists in this project (by
+repeated, deliberate choice); verified via a real running dev server with
+a temporary forced `throw` in a page component (fully reverted before the
+final commit, confirmed via an empty `git diff` on that file) — fallback
+renders with nav/topbar still usable, "Try again" re-throws while the
+cause remains, navigating away and back auto-resets and re-triggers the
+crash, and normal rendering resumes once the forced throw is removed.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-09-error-boundary-design.md`,
+`docs/superpowers/plans/2026-08-09-error-boundary-plan.md`.
 
 ## Feature history (chronological)
 
@@ -2878,8 +2949,9 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     **live, currently-existing** bug, not just a code-path risk: a stale
     3-field catalog cache genuinely present in the real deployment,
     which — thanks to the previous feature's own 24h TTL — would have
-    blanked the *entire app* (no `ErrorBoundary` exists anywhere in this
-    client) once merged, found by inspecting the actual file on disk
+    blanked the *entire app* (no `ErrorBoundary` existed anywhere in this
+    client at the time; now closed, see "Router-level ErrorBoundary"
+    below) once merged, found by inspecting the actual file on disk
     rather than reasoning abstractly about the code. Fixed with a shape
     guard in `readCatalogCache()` that closes the whole class of "cache
     written under an older `CatalogEntry` shape" bug, not just this
@@ -2889,6 +2961,18 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     to this project); the controller independently re-verified the fix
     diff and re-ran build/lint itself before trusting the scoped
     re-review, rather than proceeding on the report alone.
+26. **Router-level ErrorBoundary** (`2026-08-09-error-boundary`) — deep
+    dive below. Closes the "no `ErrorBoundary` anywhere in this client"
+    gap flagged by the previous feature. A new class component,
+    `components/ErrorBoundary.tsx`, wraps `<Outlet />` in `AppLayout`,
+    keyed by `location.pathname` so navigating to a new route auto-clears
+    a tripped boundary. Single-task plan, zero findings at the task
+    review, zero Critical/Important at the final whole-branch review
+    (5 Minor findings, all deferred — see "Deferred issues" below).
+    First feature whose implementer was dispatched on the cheapest model
+    tier (the plan's code was complete and copy-pasteable, making the
+    task pure transcription plus browser verification) and whose task
+    review consequently came back with zero findings of any kind.
 
 ## Current routes / nav (in order)
 
@@ -3462,10 +3546,9 @@ doing:
   `readCatalogCache()` now shape-guards: an empty array or an entry
   missing a numeric `data_score` is treated as no-cache-present,
   triggering a live refetch instead of serving stale-shaped data that
-  would crash `MissingCrewTable`'s `.toFixed(2)` call. No `ErrorBoundary`
-  exists anywhere in this client yet — a genuine gap this bug exposed
-  but didn't itself fix; still worth adding as an independent follow-up
-  (see the "Missing 4 Stars tables" deep-dive's closing note).
+  would crash `MissingCrewTable`'s `.toFixed(2)` call. The general gap
+  this bug exposed (no `ErrorBoundary` anywhere in this client) is now
+  also closed — see "Router-level ErrorBoundary" below.
 - **`getMissingCrew`'s arithmetic invariant assumes every owned
   archetype also exists in the catalog (new, from the Missing 4 Stars
   tables feature):** if a roster crew's archetype were ever missing from
@@ -3484,21 +3567,47 @@ doing:
   no `compression` middleware. Fine at this app's single-user, loopback
   scale — flagged so the next `CatalogEntry` widening is a deliberate
   choice, not a surprise when someone eventually checks payload size.
-- **No `ErrorBoundary` anywhere in this client (new, surfaced by — but
-  not itself fixed by — the Missing 4 Stars tables feature's stale-cache
-  bug):** any uncaught render-time exception anywhere in the app
-  currently blanks the entire React root, not just the page or component
-  that threw. The stale-cache shape guard above closes the one concrete
-  trigger found so far, but the underlying gap (no boundary at all) is
-  general and would recur for any future uncaught render error, from any
-  cause. Worth adding a router-level `ErrorBoundary` as an independent,
-  general-purpose hardening pass — not specific to the catalog feature.
+- **No `ErrorBoundary` anywhere in this client — resolved by the
+  Router-level ErrorBoundary feature, see deep-dive below.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.) Any uncaught
+  render-time exception in a page's content is now caught and contained
+  to that page instead of blanking the entire React root.
 - **No empty-state message on `MissingCrewTable` (new, from the Missing
   4 Stars tables feature):** a player missing zero 4★ crew of a given
   `in_portal` status gets a heading plus a header-only table, no "none!"
   message. Not specified either way in the design; arguably fine and
   even informative as-is (an empty table already communicates "zero"),
   not treated as a gap worth closing without a concrete complaint.
+- **`ErrorBoundary` keys on `location.pathname`, not `location.key` (new,
+  from the Router-level ErrorBoundary feature, final review — Minor,
+  deferred not fixed):** re-clicking the *current* page's own nav entry
+  while its fallback is showing doesn't auto-clear it, since `pathname`
+  is unchanged even though react-router pushes a new history entry.
+  Mitigated by the always-visible "Try again" button in the same
+  viewport. Fix, if ever done: swap the `AppLayout.tsx` key to
+  `location.key` — a one-token change, strictly stronger for reset
+  purposes, with no other implications.
+- **`ErrorBoundary.componentDidCatch`'s `info` param is typed narrower
+  than React's real `ErrorInfo` (new, from the Router-level ErrorBoundary
+  feature, final review — Minor):** declared as `{ componentStack:
+  string }`, but `@types/react` v19's `ErrorInfo.componentStack` is
+  `string | null | undefined`. Compiles today only via TypeScript's
+  bivariant method-parameter checking; harmless (a `null`/`undefined`
+  would just print as-is in the `console.error` call), but asserts a
+  guarantee React doesn't make.
+- **`ErrorBoundary`'s fallback has no page-title heading (new, from the
+  Router-level ErrorBoundary feature, final review — Minor):** unlike
+  every healthy page (which gets a `<Typography variant="h4">` title from
+  `PageShell`), a tripped boundary shows only the bare `Alert` — cosmetic,
+  since the nav still shows which page is selected.
+- **`AppLayout` itself (topbar, drawer, providers) has no error boundary
+  (accepted scope decision, not a bug — from the Router-level
+  ErrorBoundary feature's design):** only `<Outlet />` is wrapped. A
+  crash in the app shell layer itself still blanks the whole app. No
+  concrete trigger has been found there (unlike the page-content layer,
+  which had two real ones), so a second, outer boundary wasn't built —
+  revisit if a shell-layer crash is ever actually observed.
 
 ## Likely next steps
 
