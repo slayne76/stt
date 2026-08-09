@@ -35,7 +35,7 @@ function OverviewPage() {
     if (!catalog) return '—';
     const owned = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, maxRarity).size;
     const total = getCatalogCount(catalog, maxRarity);
-    const pct = total > 0 ? Math.ceil((owned / total) * 10000) / 100 : 0;
+    const pct = total > 0 ? Math.ceil((owned / total) * 10000 - 1e-9) / 100 : 0;
     return `${owned}/${total} (${pct.toFixed(2)}%)`;
   }
 

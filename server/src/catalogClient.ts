@@ -18,7 +18,7 @@ interface RawCatalogEntry {
 export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
   let response: Response;
   try {
-    response = await fetch(CATALOG_UPSTREAM_URL);
+    response = await fetch(CATALOG_UPSTREAM_URL, { signal: AbortSignal.timeout(30_000) });
   } catch (cause) {
     throw new UpstreamError(`Network error fetching crew catalog: ${(cause as Error).message}`);
   }
