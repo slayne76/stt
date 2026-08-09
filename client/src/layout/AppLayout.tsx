@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Alert, AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Snackbar, Toolbar, Typography } from '@mui/material';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { refreshAssets } from '../api/assetsApi';
 import NavGroupItem from './NavGroupItem';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const DRAWER_WIDTH = 220;
 
@@ -48,6 +49,7 @@ const NAV_ITEMS: (NavLink | NavGroup)[] = [
 
 function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refresh, loading } = usePlayerData();
   const [refreshingAssets, setRefreshingAssets] = useState(false);
   const [assetsError, setAssetsError] = useState<string | null>(null);
@@ -137,7 +139,9 @@ function AppLayout() {
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </Box>
       <Snackbar open={assetsError !== null} autoHideDuration={6000} onClose={() => setAssetsError(null)}>
         <Alert severity="error" onClose={() => setAssetsError(null)}>
