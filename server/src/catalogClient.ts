@@ -6,12 +6,22 @@ export interface CatalogEntry {
   archetype_id: number;
   max_rarity: number;
   in_portal: boolean;
+  name: string;
+  imageUrlPortrait: string;
+  data_score: number;
+  traits: string[];
+  traits_hidden: string[];
 }
 
 interface RawCatalogEntry {
   archetype_id: number;
   max_rarity: number;
   in_portal: boolean;
+  name: string;
+  imageUrlPortrait: string;
+  traits?: string[];
+  traits_hidden?: string[];
+  ranks?: { scores?: { overall?: number } };
   [key: string]: unknown;
 }
 
@@ -32,5 +42,10 @@ export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
     archetype_id: e.archetype_id,
     max_rarity: e.max_rarity,
     in_portal: e.in_portal,
+    name: e.name,
+    imageUrlPortrait: e.imageUrlPortrait,
+    data_score: e.ranks?.scores?.overall ?? 0,
+    traits: e.traits ?? [],
+    traits_hidden: e.traits_hidden ?? [],
   }));
 }

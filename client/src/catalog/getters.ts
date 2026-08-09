@@ -9,3 +9,15 @@ export function getCatalogCount(catalog: CatalogEntry[], maxRarity: number, inPo
   if (!Array.isArray(catalog)) return 0;
   return catalog.filter((c) => c.max_rarity === maxRarity && (inPortal === undefined || c.in_portal === inPortal)).length;
 }
+
+export function getMissingCrew(
+  catalog: CatalogEntry[],
+  ownedArchetypeIds: Set<number>,
+  maxRarity: number,
+  inPortal: boolean
+): CatalogEntry[] {
+  if (!Array.isArray(catalog)) return [];
+  return catalog.filter(
+    (c) => c.max_rarity === maxRarity && c.in_portal === inPortal && !ownedArchetypeIds.has(c.archetype_id)
+  );
+}
