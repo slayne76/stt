@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-09 (Router-level ErrorBoundary). This document is the durable, in-depth record of
+Last updated: 2026-08-09 (Automatic STT login). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -38,12 +38,20 @@ endpoints:
 - `POST /api/player/refresh` — always fetches live and overwrites the
   cache.
 
-Auth failures (expired/missing `STT_SESSION_COOKIE` in `server/.env`, or
-upstream 401/403) come back as `502` with
-`{ error: string, code: 'UPSTREAM_AUTH_FAILED' | 'UPSTREAM_ERROR' }` — this
-is deterministic and reproducible without needing a real session cookie,
-which is what let almost every feature in this project be verified
-end-to-end without live credentials.
+**As of the Automatic STT login feature (see below), session-cookie
+management is fully automatic** — `server/.env` holds `STT_EMAIL`/
+`STT_PASSWORD` instead of a manually-pasted `STT_SESSION_COOKIE`, and the
+server logs in on demand whenever the cached session
+(`server/data/session-cache.json`, gitignored) is missing or rejected.
+Auth failures still come back as `502` with
+`{ error: string, code: 'UPSTREAM_AUTH_FAILED' | 'UPSTREAM_ERROR' }` —
+now covering both a plain upstream 401/403 rejection and any failure in
+the login flow itself, each with its own distinct, unmistakable message
+(see "Automatic STT login" below) — this is deterministic and
+reproducible without needing real credentials for most of this project's
+history, which is what let almost every earlier feature be verified
+end-to-end without live credentials; this feature itself was the first
+to genuinely require them.
 
 **A third external data source, added for the crew catalog feature (see
 "Crew catalog and Overview unique-crew counts" below):** the server also
@@ -183,6 +191,9 @@ client/src/
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
+  authClient.ts, sessionCache.ts   The real 6-hop STT login flow, and its
+                                    persisted-session-cookie cache (see
+                                    "Automatic STT login")
   assetCache.ts, assetClient.ts, routes/assets.ts   Image cache/proxy (see "Asset cache proxy")
   catalogCache.ts, catalogClient.ts, routes/catalog.ts   Crew catalog cache/proxy, mirrors
                                                           cache.ts/sttClient.ts/routes/player.ts's
@@ -2615,6 +2626,120 @@ crash, and normal rendering resumes once the forced throw is removed.
 **Spec/plan:** `docs/superpowers/specs/2026-08-09-error-boundary-design.md`,
 `docs/superpowers/plans/2026-08-09-error-boundary-plan.md`.
 
+## Automatic STT login
+
+Until this feature, `server/.env`'s `STT_SESSION_COOKIE` had to be pasted
+in by hand (DevTools > Application > Cookies) every time it expired, with
+no known expiry to plan around — `_startrek_session` carries no
+`Max-Age`/`Expires` at all (verified live). `server/.env` now holds
+`STT_EMAIL`/`STT_PASSWORD` instead, and the server logs in on demand,
+through the real login flow, whenever the cached session is missing or
+rejected.
+
+**The real login flow is a genuine 6-hop authorization-code-style OAuth
+dance across two domains**, reverse-engineered live (not from any public
+API docs — none exist) by walking the user's own real manual login
+click-path with `curl`, one hop at a time, using real credentials:
+
+1. `GET app.startrektimelines.com/users/auth/dbid` → redirects to a
+   `games.disruptorbeam.com/oauth2/auth` URL carrying `client_id`,
+   `redirect_uri`, `state`.
+2. That redirects to `games.disruptorbeam.com/login`, setting a
+   `db_oauth_id` cookie whose value encodes the pending request's return
+   URL — the step a naive "just POST the login form" implementation
+   would skip, and the actual reason a direct POST fails.
+3. `GET` the login page itself (matches real browser behavior).
+4. `POST username`/`password` to
+   `games.disruptorbeam.com/auth/authenticate/userpass` — `400` on bad
+   credentials (page re-rendered, no redirect), `303` back into the OAuth
+   chain on success.
+5. Re-hit the `oauth2/auth` URL, now authenticated — returns an
+   authorization `code`. **Confirmed flaky twice** (different failure
+   codes each time — `404` during design research, `303` during
+   implementation) for the same underlying reason: session-store
+   propagation lag on Disruptor Beam's backend between the login POST and
+   this immediately-following request. Fixed with a `Referer` header
+   (real browser behavior, not a workaround) plus one defensive retry
+   after a short delay on any non-`302` status.
+6. `GET` the callback URL with that code — **this is where the real,
+   authenticated `_startrek_session` cookie actually gets set**, captured
+   directly from this response (not read back out of the accumulated
+   cookie jar, which would incorrectly still hold hop 1's anonymous
+   placeholder — caught at final review).
+
+Implemented as hand-rolled `fetch` calls (`redirect: 'manual'`, a flat
+`{name: value}` cookie-jar object — safe here since the two domains never
+share a cookie name) in `server/src/authClient.ts`, deliberately *not* a
+headless browser: offered as the recommended option during brainstorming
+given the flow's real complexity, but the user chose raw HTTP replication
+for its lighter weight, and it held up.
+
+**A genuine design gap, found only by live testing, not by reasoning
+about the design:** the original detection logic assumed an invalid
+session always produces `401`/`403`. A live test (deliberately corrupting
+the cached cookie to verify the reactive re-login path) got back `HTTP
+200` with `{"email":null,"password":null}` instead — silently cached as
+if real, no re-login ever triggered. Surfaced to the user rather than
+silently patched (this project's established norm for fresh correctness
+findings); fix approved: `sttClient.ts` now also validates the response
+actually contains a player identity (`player.id`/`player.dbid`), matching
+the exact convention `client/src/lib/extractPlayerIdentity.ts` already
+uses client-side — same `UpstreamAuthError` a status-code failure would
+throw, so the retry orchestration catches it identically. The plan file
+was amended live, mid-execution, with this correction before the
+implementer resumed — the amendment is recorded directly in
+`docs/superpowers/plans/2026-08-09-automatic-stt-login-plan.md`.
+
+**Retry orchestration** (`routes/player.ts`'s `getPlayerDataWithAutoLogin`,
+covering both `GET /api/player`'s cold-cache fallthrough and
+`POST /api/player/refresh`): try the cached session
+(`server/data/session-cache.json`, gitignored, `{sessionCookie,
+obtainedAt}` — `obtainedAt` is diagnostic only, nothing may treat it as a
+TTL, since no real expiry is ever known); on `UpstreamAuthError` — but
+*not* a plain `UpstreamError`, so a network blip never burns a real login
+attempt — log in fresh, persist, retry once. Bounded on every entry path
+(cold cache, corrupted cache, login-itself-fails, login-succeeds-but-
+still-rejected) — verified by the final reviewer tracing all four.
+
+**Four distinct, unmistakable user-facing error messages**, all sharing
+an `"Automatic STT login..."` lead-in per explicit user request (so a
+login/token problem reads as unmistakably different from a generic
+upstream error): bad credentials, the login flow breaking upstream at a
+named hop, a network error contacting the login flow, and login
+succeeding but the new session still being rejected. A guard against
+empty `STT_EMAIL`/`STT_PASSWORD` (added at final review — a fresh clone
+with an unfilled `.env` would otherwise trigger a real login attempt
+against production with empty credentials) throws a fifth, matching-style
+message before any network call.
+
+**Two mid-implementation deviations, both resolved cleanly:** Task 1's
+declared file list didn't account for its own "build must stay green"
+requirement (removing `AppConfig.sttSessionCookie` broke the not-yet-
+rewritten `sttClient.ts`) — a real plan gap, not an implementer error,
+self-corrected when Task 3's full-file rewrite superseded the interim
+patch entirely (confirmed clean at final review, zero leftovers). The
+response-shape-validation gap above is the other.
+
+**Final review (most capable model) found 4 Important + 4 Minor issues**
+beyond the two live-discovered gaps above — a dead cookie-capture guard
+at hop 6 (read from the wrong place, could never fire), an unguarded
+`response.json()`/`data.player` access in `sttClient.ts` (a malformed
+200 body would bypass auto-login entirely, uncaught), stale
+`STT_SESSION_COOKIE` references left in `README.md`, and the empty-
+credentials guard mentioned above — all fixed in one round, one scoped
+re-review confirmed all 8 addressed with no new breakage.
+
+**Verification:** no automated test framework exists in this project (by
+repeated, deliberate choice) — every step was a real, deliberate login
+attempt against the actual production STT/Disruptor Beam/Tilting Point
+infrastructure using the user's real account, not a mock. This is the
+first feature in this project's history to genuinely require live
+credentials at implementation/verification time, not just for one-off
+design research.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-09-automatic-stt-login-design.md`,
+`docs/superpowers/plans/2026-08-09-automatic-stt-login-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -2973,6 +3098,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     tier (the plan's code was complete and copy-pasteable, making the
     task pure transcription plus browser verification) and whose task
     review consequently came back with zero findings of any kind.
+27. **Automatic STT login** (`2026-08-09-automatic-stt-login`) — deep
+    dive above. Replaces manually-pasted `STT_SESSION_COOKIE` with
+    `STT_EMAIL`/`STT_PASSWORD` and a real, reverse-engineered 6-hop OAuth
+    login flow (`authClient.ts`), persisted across restarts
+    (`sessionCache.ts`), wired into a bounded retry orchestration in
+    `routes/player.ts`. First feature in this project's history to
+    genuinely require live credentials for implementation/verification,
+    not just design research — every hop was confirmed against real
+    production infrastructure. Found and fixed, live, a genuine design
+    gap the original reasoning had missed (invalid sessions don't always
+    401/403 — a malformed cookie produced a `200` stub instead), surfaced
+    to the user for a decision rather than silently patched, with the
+    plan amended mid-execution to record it. A separate plan-scope gap
+    (Task 1 needing to touch a file outside its declared list to keep the
+    build green) self-corrected when Task 3's full-file rewrite
+    superseded the interim patch. Final review (most capable model) found
+    4 Important + 4 Minor issues beyond the two live-discovered gaps,
+    all fixed in one round with a clean scoped re-review.
 
 ## Current routes / nav (in order)
 
@@ -3608,6 +3751,32 @@ doing:
   concrete trigger has been found there (unlike the page-content layer,
   which had two real ones), so a second, outer boundary wasn't built —
   revisit if a shell-layer crash is ever actually observed.
+- **`authClient.ts`'s "no session cookie at hop 6" error message doesn't
+  distinguish its cause (new, from the Automatic STT login feature,
+  final review scoped re-review — Minor, non-blocking):** when hop 6
+  returns `302` but sets no `_startrek_session` cookie, the thrown
+  message reads `...at step 'OAuth callback' (HTTP 302)` — technically
+  accurate but reads as if the status code were the problem, when the
+  real issue is the missing cookie. Pre-existing wording, not introduced
+  by the fix that made this guard actually reachable (see the "Automatic
+  STT login" deep-dive above); worth a clearer message if this path is
+  ever actually hit in practice.
+- **`server/src/authClient.ts` and `client/src/lib/extractPlayerIdentity.ts`
+  both define an `isDisplayable` helper with no shared module (new, from
+  the Automatic STT login feature):** intentional duplication, documented
+  in-place with a comment pointing each at the other — no shared
+  client/server package exists in this workspace layout, so duplication
+  was the correct call over adding one for two small functions. Flagged
+  here only so both copies are remembered to be kept in sync if the
+  definition of "displayable" ever changes.
+- **The Automatic STT login feature's correctness hard-depends on
+  `/player` always including `player.id` or `player.dbid` when
+  successful (new, from the Automatic STT login feature, final review):**
+  verified true live, so it's the right trade today, but if STT ever
+  drops those fields from the payload, every request would attempt a
+  full real login and then still fail (bounded, non-crashing, but
+  permanently broken with a misleading "check STT_CLIENT_API" message
+  pointing at the wrong cause) until this assumption is revisited.
 
 ## Likely next steps
 
