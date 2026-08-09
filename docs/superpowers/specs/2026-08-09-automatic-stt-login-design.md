@@ -118,7 +118,8 @@ Body: username=<email>&password=<password>   (URL-encoded, e.g. via URLSearchPar
   server/.env)."*
 - **Anything else:** → throw `UpstreamAuthError`: *"Automatic STT login
   failed: the login flow returned an unexpected response at step
-  'login POST'. The login process may have changed upstream."*
+  'login POST' (HTTP \<status\>). The login process may have changed
+  upstream."*
 
 **Hop 5 — GET `<the oauth2/auth URL again, same URL as hop 2's target>`**
 Send `Cookie: db_oauth_id=..., dbid_ss=...` and
@@ -219,8 +220,8 @@ non-auth `UpstreamError` still produces:
 1. *"Automatic STT login failed: Disruptor Beam rejected the
    email/password (check STT_EMAIL and STT_PASSWORD in server/.env)."*
 2. *"Automatic STT login failed: the login flow returned an unexpected
-   response at step '\<hop\>'. The login process may have changed
-   upstream."* (`<hop>` ∈ `login POST`, `oauth2 authorize`,
+   response at step '\<hop\>' (HTTP \<status\>). The login process may
+   have changed upstream."* (`<hop>` ∈ `login POST`, `oauth2 authorize`,
    `OAuth callback`, or the equivalent for an unexpected status at any
    other hop)
 3. *"Automatic STT login failed: network error contacting the login

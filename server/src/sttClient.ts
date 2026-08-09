@@ -23,16 +23,26 @@ export async function fetchPlayerData(sessionCookie: string, clientApi: string):
     throw new UpstreamError(`STT API returned HTTP ${response.status}`);
   }
 
-  const data = (await response.json()) as { player?: { id?: unknown; dbid?: unknown } };
-  if (!isDisplayable(data.player?.id) && !isDisplayable(data.player?.dbid)) {
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
     throw new UpstreamAuthError(
       'STT API returned HTTP 200 with no player identity in the response — the session is likely invalid despite the non-error status.'
     );
   }
-
+  const player = (data as { player?: { id?: unknown; dbid?: unknown } } | null)?.player;
+  if (!isDisplayable(player?.id) && !isDisplayable(player?.dbid)) {
+    throw new UpstreamAuthError(
+      'STT API returned HTTP 200 with no player identity in the response — the session is likely invalid despite the non-error status.'
+    );
+  }
   return data;
 }
 
+// Intentionally mirrors client/src/lib/extractPlayerIdentity.ts's isDisplayable —
+// no shared package exists between client/server in this workspace layout, so
+// this duplication is deliberate; keep the two in sync if either changes.
 function isDisplayable(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }

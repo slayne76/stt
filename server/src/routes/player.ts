@@ -38,6 +38,12 @@ async function getPlayerDataWithAutoLogin(config: AppConfig): Promise<unknown> {
     }
   }
 
+  if (!config.sttEmail || !config.sttPassword) {
+    throw new UpstreamAuthError(
+      'Automatic STT login failed: STT_EMAIL and STT_PASSWORD are not set in server/.env.'
+    );
+  }
+
   const freshCookie = await loginAndGetSessionCookie(config.sttEmail, config.sttPassword);
   writeSessionCookie(freshCookie);
 

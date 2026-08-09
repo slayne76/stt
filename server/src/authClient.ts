@@ -67,10 +67,10 @@ function unexpectedResponse(hop: string, status: number): UpstreamAuthError {
   );
 }
 
-function locationOf(response: Response, hop: string): string {
+function locationOf(response: Response, hop: string, requestUrl: string): string {
   const location = response.headers.get('location');
   if (!location) throw unexpectedResponse(hop, response.status);
-  return location;
+  return new URL(location, requestUrl).toString();
 }
 
 export async function loginAndGetSessionCookie(email: string, password: string): Promise<string> {
@@ -79,7 +79,7 @@ export async function loginAndGetSessionCookie(email: string, password: string):
   // Hop 1: initiate the OAuth flow
   const hop1 = await manualFetch(DBID_AUTH_URL, jar);
   if (hop1.status !== 302) throw unexpectedResponse('dbid auth init', hop1.status);
-  const oauthAuthorizeUrl = locationOf(hop1, 'dbid auth init');
+  const oauthAuthorizeUrl = locationOf(hop1, 'dbid auth init', DBID_AUTH_URL);
 
   // Hop 2: hit the OAuth authorize endpoint — expect a bounce to the login page
   const hop2 = await manualFetch(oauthAuthorizeUrl, jar);
@@ -109,12 +109,16 @@ export async function loginAndGetSessionCookie(email: string, password: string):
     hop5 = await manualFetch(oauthAuthorizeUrl, jar, { referer: LOGIN_PAGE_URL });
   }
   if (hop5.status !== 302) throw unexpectedResponse('oauth2 authorize', hop5.status);
-  const callbackUrl = locationOf(hop5, 'oauth2 authorize');
+  const callbackUrl = locationOf(hop5, 'oauth2 authorize', oauthAuthorizeUrl);
 
   // Hop 6: complete the callback — this is where the real, authenticated session cookie appears
   const hop6 = await manualFetch(callbackUrl, jar);
   if (hop6.status !== 302) throw unexpectedResponse('OAuth callback', hop6.status);
-  const sessionCookie = jar['_startrek_session'];
+  const sessionCookie = hop6.headers
+    .getSetCookie()
+    .map((c) => c.split(';')[0])
+    .find((p) => p.startsWith('_startrek_session='))
+    ?.slice('_startrek_session='.length);
   if (!sessionCookie) throw unexpectedResponse('OAuth callback', hop6.status);
   return sessionCookie;
 }

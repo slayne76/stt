@@ -346,6 +346,22 @@ export async function loginAndGetSessionCookie(email: string, password: string):
 }
 ```
 
+**Amendment (discovered live during Task 3 execution, code already
+shipped correctly; documented here after the fact):** hop 5's retry
+condition above only covers a `404`, matching the one flake observed
+during design research. Task 3's live verification hit a second, distinct
+flake on this same hop — `HTTP 303` instead of the expected `302` — with
+the same plausible root cause (session-store propagation lag between the
+login POST in hop 4 and this immediately-following request). Since both
+observed failure modes share that root cause and the fix (a short delay
+then one retry) is identical either way, the condition was broadened live
+to "retry once on any non-302 status" rather than special-casing `404`.
+The shipped code in `server/src/authClient.ts` already reflects this
+(with an inline comment explaining both observed statuses) — this note
+just gives it the same formal Amendment treatment Task 3's `sttClient.ts`
+change received, since it was also a live deviation from this plan's
+original text.
+
 - [ ] **Step 2: Verify with a throwaway script using real credentials**
 
 Create `server/scratch-verify-auth-client.ts`:
