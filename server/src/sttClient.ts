@@ -1,9 +1,11 @@
 import type { AppConfig } from './config';
+import { readSessionCookie } from './sessionCache';
 import { UpstreamAuthError, UpstreamError } from './errors';
 
 export async function fetchPlayerData(config: AppConfig): Promise<unknown> {
-  if (!config.sttSessionCookie) {
-    throw new UpstreamAuthError('STT_SESSION_COOKIE is not set in server/.env');
+  const sessionCookie = readSessionCookie();
+  if (!sessionCookie) {
+    throw new UpstreamAuthError('Session cookie not found. Run automatic login first.');
   }
 
   const url = `https://app.startrektimelines.com/player?client_api=${config.sttClientApi}&only_read_state=true`;
@@ -12,7 +14,7 @@ export async function fetchPlayerData(config: AppConfig): Promise<unknown> {
   try {
     response = await fetch(url, {
       headers: {
-        Cookie: `_startrek_session=${config.sttSessionCookie}`,
+        Cookie: `_startrek_session=${sessionCookie}`,
         Accept: 'application/json',
       },
     });
@@ -22,7 +24,7 @@ export async function fetchPlayerData(config: AppConfig): Promise<unknown> {
 
   if (response.status === 401 || response.status === 403) {
     throw new UpstreamAuthError(
-      `STT API rejected the session cookie (HTTP ${response.status}). It has likely expired — update STT_SESSION_COOKIE in server/.env.`
+      `STT API rejected the session cookie (HTTP ${response.status}). It has likely expired — re-run automatic login.`
     );
   }
 
