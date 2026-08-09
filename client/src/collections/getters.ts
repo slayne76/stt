@@ -11,14 +11,24 @@ export function getCollectionsList(data: PlayerData): Collection[] {
   return Array.isArray(collections) ? (collections as Collection[]) : [];
 }
 
-export function crewBelongsToCollection(crew: CrewMember, collection: Collection): boolean {
+// The minimal shape crewBelongsToCollection/getCrewCollections actually need —
+// CrewMember satisfies this structurally (no call site changes needed), and it's
+// what lets CatalogEntry (unowned catalog crew, not a CrewMember) be passed in too,
+// for the Missing 4 Stars tables (see catalog/MissingCrewTable.tsx).
+export interface CollectionMatchable {
+  archetype_id: number;
+  traits: string[];
+  traits_hidden: string[];
+}
+
+export function crewBelongsToCollection(crew: CollectionMatchable, collection: Collection): boolean {
   const crewTraits = new Set([...(crew.traits ?? []), ...(crew.traits_hidden ?? [])]);
   const collectionTraits = collection.traits ?? [];
   const extraCrew = collection.extra_crew ?? [];
   return collectionTraits.some((trait) => crewTraits.has(trait)) || extraCrew.includes(crew.archetype_id);
 }
 
-export function getCrewCollections(crew: CrewMember, collections: Collection[]): Collection[] {
+export function getCrewCollections(crew: CollectionMatchable, collections: Collection[]): Collection[] {
   return collections.filter((collection) => crewBelongsToCollection(crew, collection));
 }
 

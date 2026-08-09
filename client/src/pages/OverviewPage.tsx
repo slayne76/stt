@@ -1,6 +1,7 @@
 import {
   Alert,
   CircularProgress,
+  Divider,
   Paper,
   Stack,
   Table,
@@ -14,7 +15,10 @@ import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
-import { getArchetypeMaxRarityMap, getCatalogCount } from '../catalog/getters';
+import { getArchetypeMaxRarityMap, getCatalogCount, getMissingCrew } from '../catalog/getters';
+import { byDataScoreDesc } from '../catalog/sorters';
+import { getCollectionsList } from '../collections/getters';
+import MissingCrewTable from '../catalog/MissingCrewTable';
 import type { PlayerIdentity } from '../types/player';
 
 const FIELD_LABELS: Record<keyof PlayerIdentity, string> = {
@@ -30,6 +34,7 @@ function OverviewPage() {
   const crewList = data ? getCrewList(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const catalogMaxRarityById = catalog ? getArchetypeMaxRarityMap(catalog) : new Map<number, number>();
+  const collectionsList = data ? getCollectionsList(data) : [];
 
   function uniqueCrewCell(maxRarity: number): string {
     if (!catalog) return '—';
@@ -38,6 +43,12 @@ function OverviewPage() {
     const pct = total > 0 ? Math.ceil((owned / total) * 10000 - 1e-9) / 100 : 0;
     return `${owned}/${total} (${pct.toFixed(2)}%)`;
   }
+
+  const owned4 = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, 4);
+  const missingInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, true)].sort(byDataScoreDesc) : [];
+  const missingNotInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, false)].sort(byDataScoreDesc) : [];
+
+  const showMissingTables = !loading && !error && identity && !catalogLoading && !catalogError && catalog;
 
   return (
     <Stack spacing={2}>
@@ -89,6 +100,16 @@ function OverviewPage() {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {showMissingTables && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Missing 4 Stars (In Portal)</Typography>
+          <MissingCrewTable crew={missingInPortal} collections={collectionsList} />
+          <Typography variant="h5">Missing 4 Stars (Not in Portal)</Typography>
+          <MissingCrewTable crew={missingNotInPortal} collections={collectionsList} />
+        </>
       )}
     </Stack>
   );
