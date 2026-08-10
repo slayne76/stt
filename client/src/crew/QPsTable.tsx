@@ -1,6 +1,19 @@
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import {
+  Box,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableFooter,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Typography,
+} from '@mui/material';
 import type { CrewMember } from '../types/crew';
 import { getQPLevel, getQPProgressDisplay, getQPPointsNeeded, getQPRoundsLeft, QP_MAX_LEVEL } from './getters';
+import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
 import StatusChip from '../components/StatusChip';
@@ -10,6 +23,8 @@ export interface QPsTableProps {
 }
 
 function QPsTable({ crew }: QPsTableProps) {
+  const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(crew);
+
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -26,11 +41,11 @@ function QPsTable({ crew }: QPsTableProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {crew.map((c, index) => {
+          {pageItems.map((c, index) => {
             const isReady = getQPRoundsLeft(c) <= 1;
             return (
               <TableRow key={c.id}>
-                <TableCell>{index + 1}</TableCell>
+                <TableCell>{page * pageSize + index + 1}</TableCell>
                 <TableCell>
                   <Thumbnail asset={c.portrait} />
                 </TableCell>
@@ -56,6 +71,21 @@ function QPsTable({ crew }: QPsTableProps) {
             );
           })}
         </TableBody>
+        {showPagination && (
+          <TableFooter>
+            <TableRow>
+              <TablePagination
+                count={crew.length}
+                page={page}
+                onPageChange={handlePageChange}
+                rowsPerPage={pageSize}
+                onRowsPerPageChange={handlePageSizeChange}
+                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                colSpan={8}
+              />
+            </TableRow>
+          </TableFooter>
+        )}
       </Table>
     </TableContainer>
   );

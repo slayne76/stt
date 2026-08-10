@@ -1,7 +1,18 @@
-import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import {
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableFooter,
+  TableHead,
+  TablePagination,
+  TableRow,
+} from '@mui/material';
 import type { CatalogEntry } from '../types/catalogEntry';
 import type { Collection } from '../types/collection';
 import { getCollectionCount, getCrewCollections } from '../collections/getters';
+import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
 
@@ -11,6 +22,8 @@ export interface MissingCrewTableProps {
 }
 
 function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
+  const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(crew);
+
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -25,9 +38,9 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {crew.map((c, index) => (
+          {pageItems.map((c, index) => (
             <TableRow key={c.archetype_id}>
-              <TableCell>{index + 1}</TableCell>
+              <TableCell>{page * pageSize + index + 1}</TableCell>
               <TableCell>
                 <Thumbnail url={`${ASSET_BASE_URL}/${c.imageUrlPortrait}`} />
               </TableCell>
@@ -42,6 +55,21 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
             </TableRow>
           ))}
         </TableBody>
+        {showPagination && (
+          <TableFooter>
+            <TableRow>
+              <TablePagination
+                count={crew.length}
+                page={page}
+                onPageChange={handlePageChange}
+                rowsPerPage={pageSize}
+                onRowsPerPageChange={handlePageSizeChange}
+                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                colSpan={6}
+              />
+            </TableRow>
+          </TableFooter>
+        )}
       </Table>
     </TableContainer>
   );
