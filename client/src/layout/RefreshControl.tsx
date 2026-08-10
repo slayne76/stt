@@ -61,10 +61,15 @@ function RefreshControl({
         value={selected}
         onChange={handleChange}
         disabled={isRefreshing}
+        inputProps={{ 'aria-label': 'Refresh target' }}
         sx={{
           color: 'common.white',
           '.MuiOutlinedInput-notchedOutline': { borderColor: 'common.white' },
           '.MuiSvgIcon-root': { color: 'common.white' },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'common.white' },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'common.white' },
+          '&.Mui-disabled .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.5)' },
+          '&.Mui-disabled .MuiSelect-select': { WebkitTextFillColor: 'rgba(255,255,255,0.5)' },
         }}
       >
         {OPTIONS.map((option) => (

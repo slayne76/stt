@@ -135,6 +135,7 @@ function AppLayout() {
         open={catalogErrorSnackbarOpen && catalogError !== null}
         autoHideDuration={6000}
         onClose={() => setCatalogErrorSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert severity="error" onClose={() => setCatalogErrorSnackbarOpen(false)}>
           {catalogError}
