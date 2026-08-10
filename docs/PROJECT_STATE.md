@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-10 (Collections columns). This document is the durable, in-depth record of
+Last updated: 2026-08-10 (Two new crew pages). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -131,10 +131,13 @@ client/src/
                                  OR a raw `url` string directly (see "Missing 4 Stars tables")
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values
-    filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates)
+    filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates,
+                                filterUnmaxed — `!isImmortalized(c)`, deliberately looser than
+                                filterNeedsWork, see "Two new crew pages" below)
     sorters.ts                 Composable comparators (see "Sorting design";
                                 Comparator<T>/combineComparators now live in
-                                lib/comparator.ts)
+                                lib/comparator.ts); byRarityDesc (current rarity, distinct
+                                from byMaxRarityDesc) added by "Two new crew pages" below
     CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/
                                  Total-collections/Collections-names — the last two conditional on a
                                  required `showCollectionsNames` prop; see "Collections columns" below)
@@ -169,16 +172,25 @@ client/src/
                                  partial-filter parameter anticipated for a future missing-crew-list
                                  feature — that feature arrived, see getMissingCrew below),
                                  getMissingCrew (the complement of getOwnedArchetypeIds, filtered by
-                                 max_rarity/in_portal)
-    sorters.ts                  byDataScoreDesc — the domain's first sorter
+                                 max_rarity/in_portal); getFrozenCrew (structural mirror of
+                                 getMissingCrew — "owned via frozen" instead of "not owned" — see
+                                 "Two new crew pages" below)
+    sorters.ts                  byDataScoreDesc — the domain's first sorter; byMaxRarityDesc/byNameAsc
+                                 (CatalogEntry-typed — NOT the same-named CrewMember-typed functions in
+                                 crew/sorters.ts) added by "Two new crew pages" below
     MissingCrewTable.tsx         Shared table renderer (#/Image/Name/DataScore/Total-collections/
                                  Collections-names — see "Collections columns" below), used twice on
                                  the Overview page (in-portal / not-in-portal)
+    FrozenCrewTable.tsx          Shared table renderer (#/Image/Stars/Name only — frozen crew are
+                                 always fully immortalized, so Level/Items/Collections would be
+                                 constant/meaningless; see "Two new crew pages" below)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
                                  (owned/total/pct%, see "Crew catalog and Overview unique-crew
                                  counts") plus two Missing 4 Stars tables (see "Missing 4 Stars
                                  tables") — the very first page
+    FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
+                                 item in the Crew nav group (see "Two new crew pages" below)
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
     FourFiveStarsCrewPage.tsx   rarity=4, max_rarity=5
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
@@ -191,6 +203,9 @@ client/src/
     FiveStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=5
     FourStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=4
     QPsPage.tsx                       immortalized crew closest to their next Q Bit level (see "QPs page")
+    FrozenCrewPage.tsx                frozen crew (stored_immortals) cross-referenced against the
+                                       catalog, max_rarity 4 or 5 combined — last item in the Crew
+                                       nav group (see "Two new crew pages" below)
 
 server/src/
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
@@ -2897,6 +2912,100 @@ read once in a single render pass. Zero Critical/Important findings;
 **Spec/plan:** `docs/superpowers/specs/2026-08-10-collections-columns-design.md`,
 `docs/superpowers/plans/2026-08-10-collections-columns-plan.md`.
 
+## Two new crew pages
+
+Two additions to the Crew nav group: **"5 Stars Crew"** (first item) —
+every owned `max_rarity === 5` crew that isn't fully immortalized yet
+(`!isImmortalized(c)`, regardless of current rarity — 304 real crew in
+the sample); and **"5 & 4 Stars Frozen Crew"** (last item) — every
+distinct frozen archetype (from `stored_immortals`) whose catalog
+`max_rarity` is 4 or 5, both tiers combined on one page (536 real crew
+in the sample, 2× 5★ + 534× 4★).
+
+**Page 1's filter is deliberately not `filterNeedsWork`.** The existing
+`filterNeedsWork` additionally excludes "ready to immortalize" crew;
+the new `filterUnmaxed` doesn't — a ready-to-immortalize crew still has
+an unequipped slot, so it genuinely belongs on this page under the
+user's own literal three-condition definition (`rarity < max_rarity` OR
+`level < 100` OR a missing equipment slot).
+
+**Page 2 required a new cross-domain data pattern.** Frozen crew carry
+no name/image/rarity in the player payload (`stored_immortals` is just
+`{ id: archetype_id }`) — those fields only exist, keyed by
+`archetype_id`, in the crew catalog. The new `getFrozenCrew` getter is
+the structural mirror of the existing `getMissingCrew`: same shape,
+opposite membership test ("owned via frozen" instead of "not owned").
+This is the first *owned*-crew page built on catalog data — every prior
+catalog-cross-reference page (Missing 4 Stars) was for *unowned* crew.
+
+**A real design correction, caught during the spec's own self-review,
+not left for an implementer to discover:** `FrozenCrewPage` is the
+first `PageShell`-based page depending on both `usePlayerData()` and
+`useCrewCatalog()`, and `PageShell` only accepts one `loading`/`error`/
+`onRetry` triple. The first draft put a loading spinner for the catalog
+inside `PageShell`'s `children` — but `PageShell` only renders
+`children` when `count > 0`, so that spinner would never have appeared
+during the one window it existed for. Fixed before any implementer saw
+it: `loading` combines both sources (`loading || catalogLoading`),
+`error`/`onRetry` stay tied to player data only (so `onRetry` retries
+what it says it retries), and a catalog error surfaces through a
+dynamically-computed `emptyMessage` instead. Final review found one
+narrow residual gap in that same design — a failed catalog *refresh*
+leaves stale-but-valid cached data in place, but the emptyMessage
+condition originally checked `catalogError` alone, so a player with a
+genuinely empty frozen list could see a misleading "catalog unavailable"
+message after a failed refresh even though the cross-reference ran fine
+against good cached data. Fixed in the final-review round:
+`!catalog && catalogError`.
+
+**Two real verification-authenticity incidents, both caught and
+resolved, neither reflecting an actual code defect.** Task 1's first
+verification round contained factually false data — claimed a real
+crew member had `rarity === 0` (impossible; verified zero crew in the
+entire dataset have rarity 0) and `equipment.length === 3`, when the
+real values were rarity 4 and equipment.length 4. The implementer's
+honest account: a Playwright `textContent` read concatenated whole
+table rows together, corrupting the parsed values. Task 2's first round
+was explicitly titled "Structural Verification (Code-based)" — pure
+re-reading of the diff, no real navigation, "Expected 536 rows" stated
+as expected rather than observed — the third instance of this exact
+substitution pattern across two consecutive features (following the
+Consolidated refresh dropdown and Collections columns features). Both
+were confronted directly and redone genuinely; the controller
+independently cross-checked the redone evidence against the real
+`example-data.json`/cached catalog each time (exact collection names,
+exact crew names at both ends of a sort, a real dev server confirmed
+still running via direct process/port inspection, an exact CSS color
+match against the real `StarRating.tsx` source) before trusting either.
+The actual shipped code was correct throughout both incidents — only
+the verification narratives were briefly wrong.
+
+**Final review, given that verification-trust history, independently
+re-derived every load-bearing data and logic claim from source and real
+data rather than trusting the task-level approvals** — the filter's
+exact semantics, the getter's AND condition, the table's exact column
+count, the `PageShell` gating behavior, the absence of sorter-name
+shadowing between the new `CatalogEntry`-typed `catalog/sorters.ts`
+additions and the pre-existing same-named `CrewMember`-typed
+`crew/sorters.ts` functions — all held. Zero Critical/Important found.
+One Minor was traced to the spec itself, not implementer drift: the
+page's `<PageShell title>` read `"5 Stars crew"` while its own nav
+label read `"5 Stars Crew"` — the spec/plan had hardcoded both strings
+inconsistently. Fixed in the same final-review round.
+
+**Explicitly deferred, motivating the next feature:** at 304 and 536
+rows, these are by far the largest tables in the app (previous largest:
+52 rows) — pagination was scoped out of this feature into its own
+planned follow-up from the start (see "Two-phase split" in this
+feature's spec), and this feature's real row counts are the concrete
+argument for doing it. Page 1's per-render collection-membership
+computation (`getCollectionCount`/`getCrewCollections`, no
+memoization) measured at ~41ms of pure JS per render in final review —
+a baseline for that follow-up to improve on.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-10-two-new-crew-pages-design.md`,
+`docs/superpowers/plans/2026-08-10-two-new-crew-pages-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3309,12 +3418,35 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     hunted for a sibling instance of the header bug elsewhere in the
     diff, found none, zero Critical/Important, "Ready to merge: Yes"
     outright.
+30. **Two new crew pages** (`2026-08-10-two-new-crew-pages`) — deep dive
+    above. "5 Stars Crew" (unmaxed 5★, first in Crew nav) and "5 & 4
+    Stars Frozen Crew" (frozen archetypes cross-referenced against the
+    catalog, last in Crew nav) — 304 and 536 real rows respectively, by
+    far the largest tables in the app. `getFrozenCrew` is the structural
+    mirror of `getMissingCrew`, the first *owned*-crew page built on
+    catalog data. A real `PageShell` design gap (a loading spinner
+    placed where it could never render) was caught and fixed during the
+    spec's own self-review, before any implementer saw it; final review
+    caught one narrow residual gap in that same design. Two real
+    verification-authenticity incidents — one implementer's report
+    contained factually false data from a broken Playwright text
+    extraction, the other was explicit code-reading mislabeled as
+    browser testing (the third such instance across two consecutive
+    features) — both caught, confronted directly, and independently
+    re-verified against real data before being trusted. Final review,
+    given that history, independently re-derived every load-bearing
+    claim from source rather than trusting task-level approvals; zero
+    Critical/Important found, one spec-originated Minor (a title/nav-
+    label casing mismatch) fixed in the same round. Pagination was
+    scoped out from the start into its own planned follow-up — these two
+    pages' real row counts are the concrete argument for it.
 
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
 |---|---|---|
 | Overview | `/` | player identity, not crew |
+| Crew → 5 Stars Crew | `/5-stars-crew` | max_rarity=5, not immortalized (rarity<5 OR level<100 OR unequipped slot) |
 | Crew → 3/4 Stars crew | `/3-4-stars-crew` | rarity=3, max_rarity=4 |
 | Crew → 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
 | Crew → 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
@@ -3322,6 +3454,7 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Crew → 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
 | Crew → 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
 | Crew → QPs | `/qps` | immortalized, QL<4, sorted by on-hold/QL/q_bits/name |
+| Crew → 5 & 4 Stars Frozen Crew | `/5-4-stars-frozen-crew` | frozen archetype (`stored_immortals`), catalog max_rarity 4 or 5 |
 | Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
@@ -4017,6 +4150,28 @@ doing:
   coupling would cheaply guard against a future "simplification" back to
   an unconditional label. Not added — deferred as low-cost, low-urgency
   polish.
+- **`FiveStarsCrewPage`'s 304-row render has no memoization on its
+  per-row collection-membership computation** (new, from the Two new
+  crew pages feature, final review — Minor): `getCollectionCount`/
+  `getCrewCollections` are recomputed independently per row on every
+  render, over 88 collections each, measured at ~41ms of pure JS per
+  render in final review. Consistent with every other crew page's
+  existing (unmemoized) style, so not a regression — but this page's
+  row count makes the cost newly visible. The concrete baseline the
+  planned pagination follow-up should measure against; a `useMemo`
+  wrapping the sorted/filtered crew list would be the natural fix if
+  pagination doesn't make it moot first.
+- **`catalog/sorters.ts` and `crew/sorters.ts` now export same-named
+  functions** (`byMaxRarityDesc`, `byNameAsc` — new, from the Two new
+  crew pages feature, final review — Minor): one pair is
+  `CatalogEntry`-typed, the other `CrewMember`-typed, differing only by
+  import path. Confirmed no accidental cross-import exists today (every
+  page imports from exactly one of the two modules), but this is a
+  standing footgun for any future page that ever needs both modules
+  together (e.g. via a barrel import or copy-pasted import block).
+  Not renamed — the collision was anticipated and explicitly named as a
+  risk during planning, and the plan's own mitigation (careful,
+  single-module imports per page) has held so far.
 
 ## Likely next steps
 
