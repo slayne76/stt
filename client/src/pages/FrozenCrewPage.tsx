@@ -26,7 +26,7 @@ function FrozenCrewPage() {
       onRetry={() => void refresh()}
       loaded={loaded}
       count={crew.length}
-      emptyMessage={catalogError ? `Crew catalog unavailable: ${catalogError}` : 'No frozen 4 or 5-star crew.'}
+      emptyMessage={!catalog && catalogError ? `Crew catalog unavailable: ${catalogError}` : 'No frozen 4 or 5-star crew.'}
     >
       <FrozenCrewTable crew={crew} />
     </PageShell>

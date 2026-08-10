@@ -22,7 +22,7 @@ function FiveStarsCrewPage() {
 
   return (
     <PageShell
-      title="5 Stars crew"
+      title="5 Stars Crew"
       loading={loading}
       error={error}
       onRetry={() => void refresh()}
