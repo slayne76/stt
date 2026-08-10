@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Alert, AppBar, Box, Button, CircularProgress, Drawer, List, ListItemButton, ListItemText, Snackbar, Toolbar, Typography } from '@mui/material';
+import { Alert, AppBar, Box, Drawer, List, ListItemButton, ListItemText, Snackbar, Toolbar, Typography } from '@mui/material';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { refreshAssets } from '../api/assetsApi';
 import NavGroupItem from './NavGroupItem';
 import ErrorBoundary from '../components/ErrorBoundary';
+import RefreshControl from './RefreshControl';
 
 const DRAWER_WIDTH = 220;
 
@@ -83,37 +84,14 @@ function AppLayout() {
           <Typography variant="h6" noWrap component="div">
             STT Tracker
           </Typography>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={() => void refresh()}
-            disabled={loading}
-            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
-            sx={{
-              ml: 'auto',
-              '&.Mui-disabled': { bgcolor: 'success.dark', color: 'common.white' },
-            }}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => void handleRefreshAssets()}
-            disabled={refreshingAssets}
-            startIcon={refreshingAssets ? <CircularProgress size={16} color="inherit" /> : undefined}
-            sx={{ ml: 1, color: 'common.white', borderColor: 'common.white' }}
-          >
-            Refresh assets
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => void refreshCatalog()}
-            disabled={catalogRefreshing}
-            startIcon={catalogRefreshing ? <CircularProgress size={16} color="inherit" /> : undefined}
-            sx={{ ml: 1, color: 'common.white', borderColor: 'common.white' }}
-          >
-            Refresh catalog
-          </Button>
+          <RefreshControl
+            playerLoading={loading}
+            onRefreshPlayer={refresh}
+            assetsRefreshing={refreshingAssets}
+            onRefreshAssets={handleRefreshAssets}
+            catalogRefreshing={catalogRefreshing}
+            onRefreshCatalog={refreshCatalog}
+          />
         </Toolbar>
       </AppBar>
       <Drawer
