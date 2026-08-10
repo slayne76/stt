@@ -33,7 +33,7 @@ function FourFourStarsCrewPage() {
       count={crew.length}
       emptyMessage="No crew at 4/4 stars."
     >
-      <CrewTable crew={crew} collections={collections} />
+      <CrewTable crew={crew} collections={collections} showCollectionsNames={true} />
     </PageShell>
   );
 }

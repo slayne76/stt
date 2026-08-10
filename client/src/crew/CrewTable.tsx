@@ -2,16 +2,17 @@ import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
-import { getCollectionCount } from '../collections/getters';
+import { getCollectionCount, getCrewCollections } from '../collections/getters';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
 
 export interface CrewTableProps {
   crew: CrewMember[];
   collections: Collection[];
+  showCollectionsNames: boolean;
 }
 
-function CrewTable({ crew, collections }: CrewTableProps) {
+function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) {
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -23,7 +24,8 @@ function CrewTable({ crew, collections }: CrewTableProps) {
             <TableCell>Name</TableCell>
             <TableCell align="right">Level</TableCell>
             <TableCell align="right">Items to equip</TableCell>
-            <TableCell align="right">Collections</TableCell>
+            <TableCell align="right">{showCollectionsNames ? 'Total collections' : 'Collections'}</TableCell>
+            {showCollectionsNames && <TableCell>Collections names</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -40,6 +42,13 @@ function CrewTable({ crew, collections }: CrewTableProps) {
               <TableCell align="right">{c.level}</TableCell>
               <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
               <TableCell align="right">{getCollectionCount(c, collections)}</TableCell>
+              {showCollectionsNames && (
+                <TableCell>
+                  {getCrewCollections(c, collections)
+                    .map((col) => col.name)
+                    .join(', ')}
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>
@@ -49,4 +58,3 @@ function CrewTable({ crew, collections }: CrewTableProps) {
 }
 
 export default CrewTable;
-

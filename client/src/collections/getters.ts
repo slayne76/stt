@@ -32,7 +32,7 @@ export function getCrewCollections(crew: CollectionMatchable, collections: Colle
   return collections.filter((collection) => crewBelongsToCollection(crew, collection));
 }
 
-export function getCollectionCount(crew: CrewMember, collections: Collection[]): number {
+export function getCollectionCount(crew: CollectionMatchable, collections: Collection[]): number {
   return getCrewCollections(crew, collections).length;
 }
 

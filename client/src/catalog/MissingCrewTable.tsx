@@ -1,7 +1,7 @@
 import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import type { CatalogEntry } from '../types/catalogEntry';
 import type { Collection } from '../types/collection';
-import { getCrewCollections } from '../collections/getters';
+import { getCollectionCount, getCrewCollections } from '../collections/getters';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
 
@@ -20,7 +20,8 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
             <TableCell>Image</TableCell>
             <TableCell>Name</TableCell>
             <TableCell align="right">DataScore</TableCell>
-            <TableCell>Collections</TableCell>
+            <TableCell align="right">Total collections</TableCell>
+            <TableCell>Collections names</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -32,6 +33,7 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
               </TableCell>
               <TableCell>{c.name}</TableCell>
               <TableCell align="right">{c.data_score.toFixed(2)}</TableCell>
+              <TableCell align="right">{getCollectionCount(c, collections)}</TableCell>
               <TableCell>
                 {getCrewCollections(c, collections)
                   .map((col) => col.name)

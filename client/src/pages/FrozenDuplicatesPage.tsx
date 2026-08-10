@@ -36,7 +36,7 @@ function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
       count={crew.length}
       emptyMessage="No duplicate crew at this rarity."
     >
-      <CrewTable crew={crew} collections={collections} />
+      <CrewTable crew={crew} collections={collections} showCollectionsNames={false} />
     </PageShell>
   );
 }
