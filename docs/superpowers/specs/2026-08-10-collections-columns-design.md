@@ -55,8 +55,14 @@ widening treatment last time.
 
 **`client/src/crew/CrewTable.tsx`** — gains a new required prop
 `showCollectionsNames: boolean` (required, not defaulted — see below).
-The existing "Collections" header becomes **"Total collections"**
-(`getCollectionCount(c, collections)`, unchanged value). When
+**The existing "Collections" header's label is itself conditional on
+this prop** — `{showCollectionsNames ? 'Total collections' :
+'Collections'}` — not just the new column's presence. (This distinction
+was originally missed in this spec's own first draft — the header text
+was written as an unconditional rename, which shipped as a real bug and
+was only caught by task review; corrected here so re-reading this spec
+doesn't reintroduce it.) The count value itself
+(`getCollectionCount(c, collections)`) is unchanged either way. When
 `showCollectionsNames` is `true`, one more `<TableCell>` renders at the
 end of each row: `getCrewCollections(c, collections).map((col) => col.name).join(', ')`,
 under a new **"Collections names"** header.

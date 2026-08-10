@@ -128,7 +128,7 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
             <TableCell>Name</TableCell>
             <TableCell align="right">Level</TableCell>
             <TableCell align="right">Items to equip</TableCell>
-            <TableCell align="right">Total collections</TableCell>
+            <TableCell align="right">{showCollectionsNames ? 'Total collections' : 'Collections'}</TableCell>
             {showCollectionsNames && <TableCell>Collections names</TableCell>}
           </TableRow>
         </TableHead>
