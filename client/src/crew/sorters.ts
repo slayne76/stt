@@ -31,6 +31,10 @@ export function byNameAsc(a: CrewMember, b: CrewMember): number {
   return a.name.localeCompare(b.name);
 }
 
+export function byRarityDesc(a: CrewMember, b: CrewMember): number {
+  return b.rarity - a.rarity;
+}
+
 export function sortCrew(crew: CrewMember[], comparator: Comparator<CrewMember>): CrewMember[] {
   return [...crew].sort(comparator);
 }

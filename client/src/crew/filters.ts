@@ -24,3 +24,7 @@ export function filterFrozenDuplicates(crew: CrewMember[], frozenArchetypeIds: S
 export function filterQPEligible(crew: CrewMember[]): CrewMember[] {
   return crew.filter((c) => isImmortalized(c) && getQPLevel(c) < QP_MAX_LEVEL);
 }
+
+export function filterUnmaxed(crew: CrewMember[], maxRarity: number): CrewMember[] {
+  return crew.filter((c) => c.max_rarity === maxRarity && !isImmortalized(c));
+}

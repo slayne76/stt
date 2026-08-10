@@ -3,6 +3,7 @@ import { PlayerDataProvider } from './context/PlayerDataContext';
 import { CrewCatalogProvider } from './context/CrewCatalogContext';
 import AppLayout from './layout/AppLayout';
 import OverviewPage from './pages/OverviewPage';
+import FiveStarsCrewPage from './pages/FiveStarsCrewPage';
 import ThreeFourStarsCrewPage from './pages/ThreeFourStarsCrewPage';
 import FourFiveStarsCrewPage from './pages/FourFiveStarsCrewPage';
 import FourFourStarsCrewReadyPage from './pages/FourFourStarsCrewReadyPage';
@@ -22,6 +23,7 @@ function App() {
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<OverviewPage />} />
+              <Route path="/5-stars-crew" element={<FiveStarsCrewPage />} />
               <Route path="/3-4-stars-crew" element={<ThreeFourStarsCrewPage />} />
               <Route path="/4-5-stars-crew" element={<FourFiveStarsCrewPage />} />
               <Route path="/4-4-stars-crew-ready" element={<FourFourStarsCrewReadyPage />} />

@@ -29,6 +29,7 @@ const NAV_ITEMS: (NavLink | NavGroup)[] = [
   {
     label: 'Crew',
     children: [
+      { label: '5 Stars Crew', path: '/5-stars-crew' },
       { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
       { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
       { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready' },
