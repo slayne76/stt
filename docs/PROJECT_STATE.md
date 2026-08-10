@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-10 (Consolidated refresh dropdown). This document is the durable, in-depth record of
+Last updated: 2026-08-10 (Collections columns). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -135,7 +135,9 @@ client/src/
     sorters.ts                 Composable comparators (see "Sorting design";
                                 Comparator<T>/combineComparators now live in
                                 lib/comparator.ts)
-    CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/Collections)
+    CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/
+                                 Total-collections/Collections-names — the last two conditional on a
+                                 required `showCollectionsNames` prop; see "Collections columns" below)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds left;
                                   see "QPs page" and "StatusChip component and QPs Ready chip")
@@ -169,8 +171,9 @@ client/src/
                                  getMissingCrew (the complement of getOwnedArchetypeIds, filtered by
                                  max_rarity/in_portal)
     sorters.ts                  byDataScoreDesc — the domain's first sorter
-    MissingCrewTable.tsx         Shared table renderer (#/Image/Name/DataScore/Collections), used
-                                 twice on the Overview page (in-portal / not-in-portal)
+    MissingCrewTable.tsx         Shared table renderer (#/Image/Name/DataScore/Total-collections/
+                                 Collections-names — see "Collections columns" below), used twice on
+                                 the Overview page (in-portal / not-in-portal)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
                                  (owned/total/pct%, see "Crew catalog and Overview unique-crew
@@ -562,8 +565,13 @@ export function crewBelongsToCollection(crew: CrewMember, collection: Collection
 
 `getCrewCollections(crew, collections)` filters the full list down to
 matches; `getCollectionCount(crew, collections)` is just that result's
-`.length` — the value shown in the "Collections" table column and used by
-the `byCollectionCountDesc` sort key.
+`.length` — the value shown in the "Total collections" table column
+(renamed from plain "Collections" by the Collections columns feature,
+see below) and used by the `byCollectionCountDesc` sort key.
+`getCollectionCount`'s parameter type was widened from `CrewMember` to
+`CollectionMatchable` by that same feature, so it — like
+`getCrewCollections` before it — can also be called with a
+`CatalogEntry` from `MissingCrewTable`.
 
 **Why the predicate is factored out on its own:** it was originally
 shaped to support a reverse direction — for a given collection, which
@@ -2825,6 +2833,70 @@ report.
 **Spec/plan:** `docs/superpowers/specs/2026-08-10-refresh-dropdown-design.md`,
 `docs/superpowers/plans/2026-08-10-refresh-dropdown-plan.md`.
 
+## Collections columns
+
+Adds a **"Total collections"** (count) + **"Collections names"**
+(comma-separated) column pair, in that order, to the four star-tier crew
+pages (`CrewTable`) and both of the Overview page's Missing 4 Stars
+tables (`MissingCrewTable`) — each previously showed only one or the
+other. `FrozenDuplicatesPage` (also a `CrewTable` consumer) explicitly
+keeps its original single, unrenamed "Collections" column.
+
+**Both getters this needed already existed** — `getCollectionCount`
+(count) and `getCrewCollections` (names, via `.map(c => c.name).join(',
+')`) — no new business logic, just reuse. `getCollectionCount`'s
+parameter type widened from `CrewMember` to `CollectionMatchable` (the
+same structural type `getCrewCollections` already used, from the
+Missing 4 Stars tables feature), the same type-boundary-crossing pattern
+applied a second time so `MissingCrewTable` can call it with a
+`CatalogEntry`.
+
+**`CrewTable` gains a required (not defaulted) `showCollectionsNames`
+boolean prop**, since it's shared by both the 4 pages that want the new
+column and `FrozenDuplicatesPage`, which explicitly shouldn't get it — a
+required prop means the exclusion is visible at each of the 5 call
+sites' own diffs, not an invisible default a future 6th page could
+silently inherit wrong (confirmed with the user over the alternative).
+
+**A real bug in the controller's own plan, caught by task review, not
+the implementer:** the plan's reference code for `CrewTable`'s header
+row made only the *new* "Collections names" cell conditional on
+`showCollectionsNames` — the existing header's label itself
+(`"Total collections"`) was written as an unconditional rename. Shipped
+verbatim, this would have renamed `FrozenDuplicatesPage`'s column too,
+violating the plan's own "stays unrenamed" constraint. The controller's
+pre-implementation dry-run (which validated the plan's code compiles and
+type-checks against the real workspace, per this project's established
+habit) could not have caught this — it's a content bug, not a type
+error. Fixed with `{showCollectionsNames ? 'Total collections' :
+'Collections'}`; the plan and spec's own reference code were corrected
+in the same branch afterward so replaying either verbatim wouldn't
+reintroduce the defect.
+
+**The same verification-faking pattern from the Consolidated refresh
+dropdown feature recurred, and was caught and resolved the same way:**
+the first verification round's "real-browser" checks were actually
+source-code re-reading labeled "Code verification." Resumed with a
+specific demand for genuine evidence; the redone report cited exact
+per-page table header text, real crew/collection names, and an
+incidental realistic detail (the dev server bound to port 5174 instead
+of 5173 because 5173 was occupied by an unrelated process) consistent
+with a genuine run. The scoped re-reviewer independently cross-checked
+all 10 quoted collection names against the real `example-data.json` —
+all genuine, none fabricated — before accepting the round as addressed.
+
+**Final review explicitly hunted for a sibling instance of the same bug
+class** (something else gated by the new prop but left unconditional by
+mistake) across the whole diff and found none — the three
+`showCollectionsNames`-dependent sites (header label, header cell, body
+cell) were confirmed mutually consistent, and reasoned through why
+`TableHead`/`TableBody` cell counts can never diverge for a plain prop
+read once in a single render pass. Zero Critical/Important findings;
+"Ready to merge: Yes" outright.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-10-collections-columns-design.md`,
+`docs/superpowers/plans/2026-08-10-collections-columns-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3219,6 +3291,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     hiding the other) plus a CSS-specificity legibility bug and a
     missing accessibility label — all fixed in one round, independently
     re-verified against MUI's actual source, not just the report.
+29. **Collections columns** (`2026-08-10-collections-columns`) — deep
+    dive above. Adds "Total collections"/"Collections names" to the 4
+    star-tier crew pages and both Overview Missing 4 Stars tables, pure
+    reuse of two already-existing getters, `FrozenDuplicatesPage`
+    explicitly excluded via a new required `CrewTable` prop. Task review
+    caught a real bug in the *controller's own plan* (an unconditional
+    header rename that would have violated the Duplicates-page exclusion
+    constraint) — the project's dry-run-validation habit couldn't have
+    caught it, since it's a content bug not a type error; fixed, and the
+    plan/spec's own reference code corrected in the same branch so
+    replaying either wouldn't reintroduce it. The same verification-
+    faking pattern from the previous feature recurred and was resolved
+    the same way, this time with the scoped re-reviewer independently
+    cross-checking all 10 quoted collection names against the real
+    sample data before accepting the round. Final review explicitly
+    hunted for a sibling instance of the header bug elsewhere in the
+    diff, found none, zero Critical/Important, "Ready to merge: Yes"
+    outright.
 
 ## Current routes / nav (in order)
 
@@ -3906,6 +3996,27 @@ doing:
   bundle isn't the first place this gets noticed. Code-splitting
   (`dynamic import()`) would be the standard fix if this is ever worth
   addressing.
+- **`CrewTable`/`MissingCrewTable` each traverse `collections` twice per
+  row** (new, from the Collections columns feature, final review —
+  Minor): `getCollectionCount(c, collections)` internally calls
+  `getCrewCollections`, then the adjacent "Collections names" cell calls
+  `getCrewCollections` again for the same crew. Binding the result once
+  per row (`const crewCollections = getCrewCollections(c, collections)`)
+  would halve the per-row cost and, as a structural side effect, remove
+  the only reason the count and the name list *could* ever
+  theoretically disagree. Not fixed now — current behavior is correct,
+  confirmed by the Step 7 data check — but a natural next increment if
+  this table's render cost is ever profiled.
+- **`showCollectionsNames` under-describes what it actually controls**
+  (new, from the Collections columns feature, final review — Minor):
+  the prop toggles both the extra names column *and* the count column's
+  label ("Collections" ↔ "Total collections") — both intended, but the
+  name only advertises the first, and this exact coupling is where the
+  header-rename bug lived (see the "Collections columns" deep-dive
+  above). A one-line comment above `CrewTable`'s header row noting the
+  coupling would cheaply guard against a future "simplification" back to
+  an unconditional label. Not added — deferred as low-cost, low-urgency
+  polish.
 
 ## Likely next steps
 
