@@ -21,3 +21,12 @@ export function getMissingCrew(
     (c) => c.max_rarity === maxRarity && c.in_portal === inPortal && !ownedArchetypeIds.has(c.archetype_id)
   );
 }
+
+export function getFrozenCrew(
+  catalog: CatalogEntry[],
+  frozenArchetypeIds: Set<number>,
+  maxRarities: number[]
+): CatalogEntry[] {
+  if (!Array.isArray(catalog)) return [];
+  return catalog.filter((c) => maxRarities.includes(c.max_rarity) && frozenArchetypeIds.has(c.archetype_id));
+}

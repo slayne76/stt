@@ -37,6 +37,7 @@ const NAV_ITEMS: (NavLink | NavGroup)[] = [
       { label: '4 Stars Duplicates', path: '/4-stars-duplicates' },
       { label: '5 Stars Duplicates', path: '/5-stars-duplicates' },
       { label: 'QPs', path: '/qps' },
+      { label: '5 & 4 Stars Frozen Crew', path: '/5-4-stars-frozen-crew' },
     ],
   },
   {

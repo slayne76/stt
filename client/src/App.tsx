@@ -14,6 +14,7 @@ import FiveStarsDuplicatesPage from './pages/FiveStarsDuplicatesPage';
 import FiveStarsShipsPage from './pages/FiveStarsShipsPage';
 import FourStarsShipsPage from './pages/FourStarsShipsPage';
 import QPsPage from './pages/QPsPage';
+import FrozenCrewPage from './pages/FrozenCrewPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
               <Route path="/5-stars-ships" element={<FiveStarsShipsPage />} />
               <Route path="/4-stars-ships" element={<FourStarsShipsPage />} />
               <Route path="/qps" element={<QPsPage />} />
+              <Route path="/5-4-stars-frozen-crew" element={<FrozenCrewPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
