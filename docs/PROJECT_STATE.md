@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-09 (Automatic STT login). This document is the durable, in-depth record of
+Last updated: 2026-08-10 (Consolidated refresh dropdown). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -92,13 +92,13 @@ client/src/
   api/assetsApi.ts               refreshAssets (see "Asset cache proxy")
   api/catalogApi.ts              fetchCrewCatalog/refreshCrewCatalog (see "Crew catalog and Overview
                                  unique-crew counts")
-  layout/AppLayout.tsx          AppBar + Drawer nav shell; the app's three topbar controls, "Refresh"
-                                 (player data, see "Topbar Refresh button" below), "Refresh assets"
-                                 (image cache, see "Asset cache proxy" below), and "Refresh catalog"
-                                 (crew catalog, see "Crew catalog and Overview unique-crew counts");
-                                 wraps `<Outlet />` in `ErrorBoundary`, keyed by `location.pathname`
-                                 (see "Router-level ErrorBoundary" below) — its first non-page
-                                 `usePlayerData()` consumer
+  layout/AppLayout.tsx          AppBar + Drawer nav shell; hosts <RefreshControl /> (below) for the
+                                 topbar's refresh trigger; wraps `<Outlet />` in `ErrorBoundary`, keyed
+                                 by `location.pathname` (see "Router-level ErrorBoundary" below) — its
+                                 first non-page `usePlayerData()` consumer
+  layout/RefreshControl.tsx     Dropdown + Apply button covering player data / assets / catalog /
+                                 all-three-at-once refresh (see "Consolidated refresh dropdown" below)
+                                 — takes the three refresh operations as props, calls no hook/API itself
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
                                   QPs Ready chip") — first file in this folder, the app's home for
@@ -1285,6 +1285,16 @@ one — this section describes the original (player-data) "Refresh" button
 only; the second, "Refresh assets," is a separate, independent control
 added later (see "Asset cache proxy" below) and does not touch anything
 described in this section.
+
+**Update, Consolidated refresh dropdown feature (see below):** all three
+topbar refresh buttons this section and "Asset cache proxy"/"Crew catalog
+and Overview unique-crew counts" describe (player data / assets /
+catalog) have since been replaced by a single dropdown + Apply button —
+`AppLayout.tsx` no longer contains any `Button` for this at all, the
+`<Button>` JSX block quoted immediately below is historical. The three
+underlying operations, their loading/error state, and the three
+`Snackbar`s are otherwise unchanged; only the trigger UI moved into
+`layout/RefreshControl.tsx`. See "Consolidated refresh dropdown" below.
 
 The "Refresh" control used to live only in `OverviewPage.tsx`'s own
 header. It now lives in `AppLayout.tsx`'s `Toolbar` — the app's
@@ -2740,6 +2750,81 @@ design research.
 **Spec/plan:** `docs/superpowers/specs/2026-08-09-automatic-stt-login-design.md`,
 `docs/superpowers/plans/2026-08-09-automatic-stt-login-plan.md`.
 
+## Consolidated refresh dropdown
+
+The topbar's three separate refresh buttons (player data / assets /
+catalog — see "Topbar Refresh button" and "Asset cache proxy" above)
+are replaced by a single MUI `Select` dropdown + "Apply" button in a new
+`layout/RefreshControl.tsx`, plus a fourth option, **"Refresh all,"**
+that fires all three concurrently.
+
+**Why parallel, not sequential, for "Refresh all":** verified during
+design by reading each refresh's actual server-side behavior, not
+assumed. Player-data refresh fetches live JSON and overwrites its cache.
+Assets refresh does **not** pre-fetch any images — it only clears the
+asset cache; images are re-fetched lazily on next render regardless of
+what triggered the clear. Catalog refresh fetches an entirely separate,
+player-independent external resource. Three independent caches, no
+shared state, no read-after-write dependency — so `Promise.allSettled`
+across all three is both simpler and faster than a chain, with each of
+the three keeping its own existing, independent success/error UI (no new
+combined summary — a deliberate non-goal, confirmed with the user).
+
+**`RefreshControl.tsx` calls no hook or API itself** — it takes the three
+refresh callbacks and their loading flags as props, matching this
+project's existing pattern of small, dependency-free UI components
+(`NavGroupItem`, `StatusChip`). `isRefreshing` is derived from whichever
+loading flag(s) correspond to the *currently selected* option, disabling
+both the `Select` and Apply while true.
+
+**One real MUI typing trap, caught before any implementer hit it:** MUI
+v6's generic `<Select<RefreshOption>>` does not narrow `event.target.value`
+to `RefreshOption` on an inline arrow-function `onChange` handler under
+this project's `tsconfig` — confirmed by a standalone `tsc` dry run
+during plan-writing, which found the inline form genuinely fails to
+compile (`string` not assignable to `RefreshOption`). The plan's code
+uses a named handler with an explicit `SelectChangeEvent<RefreshOption>`
+parameter type instead, which does compile — the working form was
+verified before being handed to the implementer, not discovered as a
+build failure mid-task.
+
+**Task review caught a verification-integrity gap, not a code defect:**
+the code was approved outright on first read (verbatim match to the
+plan, `Promise.allSettled` correctly starts all three calls
+synchronously). But two of the four brief-mandated real-browser checks
+(selecting "Refresh assets"/"Refresh catalog" via the actual dropdown
+and clicking Apply, and confirming "Refresh all" fires concurrently via
+the network panel) had been substituted with direct `curl` calls and an
+unrelated timing demo instead of actually exercising the UI. Resolved
+over two rounds: real dropdown clicks with screenshot evidence, then
+(after a scoped re-reviewer wanted a literal DevTools-panel screenshot)
+the raw structured network-request tool output instead — three requests
+(one each of player/assets/catalog refresh) with sequential, gapless
+request IDs, consistent with the code's already-proven synchronous
+dispatch. The controller adjudicated this closed directly rather than
+chasing screenshot-of-a-panel evidence that wouldn't have proven
+concurrency any more rigorously than the structured data already did.
+
+**Final review caught one real UX regression the skipped verification
+step would have caught:** all three topbar `Snackbar`s defaulted to the
+same screen position. With "Refresh all," the common outcome of one
+succeeding while another fails (e.g. catalog fails, assets succeeds)
+would render two `Snackbar`s stacked, one hiding the other — quietly
+defeating the feature's own point (each of the three stays independently
+visible). Fixed by giving the catalog error `Snackbar` a distinct
+`anchorOrigin` (bottom-right vs. the other two's default bottom-left) so
+they can never collide. Also fixed in the same round: the `Select`'s
+white-on-`AppBar` styling lost to MUI's own more-specific hover/focus/
+disabled rules (illegible for a large fraction of the control's visible
+lifetime — exactly while it's disabled, mid-refresh); and the `Select`
+had no accessible name for screen readers (`aria-label` added). One
+scoped re-review independently verified the CSS-specificity fix against
+MUI v6's actual source in `node_modules`, not just the implementer's
+report.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-10-refresh-dropdown-design.md`,
+`docs/superpowers/plans/2026-08-10-refresh-dropdown-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3116,6 +3201,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     superseded the interim patch. Final review (most capable model) found
     4 Important + 4 Minor issues beyond the two live-discovered gaps,
     all fixed in one round with a clean scoped re-review.
+28. **Consolidated refresh dropdown** (`2026-08-10-refresh-dropdown`) —
+    deep dive above. Replaces the topbar's three separate refresh buttons
+    with one `Select` + Apply, plus a new "Refresh all" option
+    (`Promise.allSettled` across all three — verified during design to
+    have no real ordering dependency, so parallel rather than
+    sequential). New `layout/RefreshControl.tsx`, hook/API-free by
+    design. Task review caught not a code defect but a verification-
+    integrity gap (two of four brief-mandated real-browser checks were
+    substituted with `curl` calls); resolved over two rounds ending in
+    the controller adjudicating raw network-tool data as sufficient
+    proof, without chasing a literal DevTools-panel screenshot a scoped
+    re-reviewer had asked for. Final review caught a real UX regression
+    the skipped verification would have caught (all three topbar
+    `Snackbar`s defaulting to the same screen position, so "Refresh
+    all"'s common partial-failure case could render two stacked, one
+    hiding the other) plus a CSS-specificity legibility bug and a
+    missing accessibility label — all fixed in one round, independently
+    re-verified against MUI's actual source, not just the report.
 
 ## Current routes / nav (in order)
 
@@ -3777,6 +3880,32 @@ doing:
   full real login and then still fail (bounded, non-crashing, but
   permanently broken with a misleading "check STT_CLIENT_API" message
   pointing at the wrong cause) until this assumption is revisited.
+- **`RefreshControl`'s `isRefreshing` can disable the whole control
+  during the app's initial page load, not just after an explicit Apply
+  click (accepted design consequence, not a bug — from the Consolidated
+  refresh dropdown feature):** `PlayerDataContext`/`CrewCatalogContext`
+  both initialize `loading: true` and auto-fetch on mount, so with the
+  default `'player'` selection, the `Select` and Apply button are
+  briefly disabled purely from that initial load — a window that was
+  independently-controllable before (each old button had its own
+  disabled state) but is now coupled through the shared control. Short
+  and self-clearing; the plan's own specified `isRefreshing` derivation,
+  not a deviation.
+- **`RefreshControl`'s option-dispatch branches aren't exhaustiveness-
+  checked (new, from the Consolidated refresh dropdown feature, final
+  review — Minor):** `isRefreshing`'s final `else` (`catalogRefreshing`)
+  and `handleApply`'s bare `else` (`'all'`) would both silently
+  mis-handle a hypothetical fifth `RefreshOption` value with no compile
+  error. Not worth churning the plan's already-verified code over for a
+  option set that isn't expected to grow.
+- **Vite's build now warns about a chunk over 500KB after minification**
+  (new, from the Consolidated refresh dropdown feature): bundle grew
+  462KB → 508KB gzipped 144KB → 156KB, crossing Vite's default warning
+  threshold. Not a build failure, no functional impact at this app's
+  single-user scale — flagged so a future feature that also grows the
+  bundle isn't the first place this gets noticed. Code-splitting
+  (`dynamic import()`) would be the standard fix if this is ever worth
+  addressing.
 
 ## Likely next steps
 
