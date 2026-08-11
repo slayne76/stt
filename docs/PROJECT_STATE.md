@@ -1,9 +1,9 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (TablePaginationFooter extraction). This document is the
-durable, in-depth record of what has been built, why, and how the
-trickier pieces of logic work. It's
-meant to let a fresh session (or a fresh person) get back up to speed
+Last updated: 2026-08-12 (usePageData hook + defaultCrewComparator). This
+document is the durable, in-depth record of what has been built, why,
+and how the trickier pieces of logic work. It's meant to let a fresh
+session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
 the full spec/plan trail is in `docs/superpowers/specs/` and
 `docs/superpowers/plans/`, one pair per feature, in chronological order —
@@ -1323,20 +1323,21 @@ newline, so this doesn't introduce an extra text node or a stray space
 — confirmed live (`" (50)"` renders with its leading space intact, from
 the template literal, not from JSX formatting), not just assumed safe.
 
-**Deliberately not extracted, and this is why the backlog entry below is
-marked resolved, not "closed with nothing left":** the original
-recommendation named two options — "extract a shared
+**Deliberately not extracted at the time, closed later — see below.** The
+original recommendation named two options — "extract a shared
 `RarityCrewPage`/`CrewListPage` component **or** a `usePageData(...)`
 hook covering the `usePlayerData` + loading/error/empty/title pattern."
 This shipped the first half (the JSX shell) only. `usePlayerData()`
-itself, and the one-line `loaded` computation, still repeat 7×; more
-strikingly, `combineComparators(byLevelDesc,
+itself, and the one-line `loaded` computation, repeated across every
+page that used this shell; more strikingly, `combineComparators(byLevelDesc,
 byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections),
-byNameAsc)` — the crew-page default sort order — is now a byte-identical
+byNameAsc)` — the crew-page default sort order — was a byte-identical
 5-way copy across every crew-shaped page, a duplication the shell
 extraction *exposed* rather than *caused*, since it always existed
-alongside the shell it was tangled up with. See "Deferred issues" below
-— this is deliberately scoped out, not missed.
+alongside the shell it was tangled up with. **Both gaps closed 2026-08-12
+by the "usePageData hook + defaultCrewComparator" feature, see below —
+this section is left as-written as an accurate record of the state at
+the time, not retroactively rewritten.**
 
 **Spec/plan:**
 `docs/superpowers/specs/2026-08-07-page-shell-extraction-design.md`,
@@ -3889,6 +3890,41 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     and a screenshot, confirming the underlying rendering was correct all
     along — a text-extraction artifact, not a defect. Zero
     Critical/Important.
+37. **usePageData hook + defaultCrewComparator** (`2026-08-11-usepagedata-default-crew-comparator`)
+    — resolves the "`usePlayerData()`/`loaded` and the default crew-page
+    sort composition still repeat across pages" deferred issue below,
+    surfaced by the Page shell extraction feature. `hooks/usePageData.ts`
+    (new) wraps `usePlayerData()`, adding an `extraLoading` optional
+    boolean parameter and a `loaded` field — `usePageData()` (no
+    argument) replaces `usePlayerData()` + the manual
+    `const loaded = !loading && !error && !!data;` line across 9 pages;
+    `usePageData(catalogLoading)` covers the 10th, `FrozenCrewPage`,
+    which has a second data source (the crew catalog). Its `loaded`
+    formula (`!loading && !catalogLoading && !error && !!data`,
+    deliberately excluding `catalogError` — a catalog failure downgrades
+    to an empty-state message, never blocks `loaded`) is provably
+    unchanged: `usePageData`'s `combinedLoading = loading ||
+    catalogLoading` makes `loaded = !(loading || catalogLoading) &&
+    !error && !!data`, identical to the old formula by De Morgan's law —
+    independently re-derived by the task reviewer from source, not just
+    trusted from the report. `crew/sorters.ts` gained
+    `defaultCrewComparator(collections)`, a named factory wrapping the
+    identical `combineComparators(byLevelDesc,
+    byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections),
+    byNameAsc)` composition duplicated across `ThreeFourStarsCrewPage`,
+    `FourFiveStarsCrewPage`, `FourFourStarsCrewPage`,
+    `FourFourStarsCrewReadyPage`, and `FrozenDuplicatesPage`, verified
+    against real data (crew names/sort order confirmed unchanged across
+    all 5 routes, including one page's own tiebreak chain checked
+    row-by-row). `FiveStarsCrewPage` (a different sort — `byRarityDesc`,
+    not `byCollectionCountDesc`) and `OverviewPage` (no `PageShell`, a
+    bespoke condition) were correctly left out of scope. Delivered in 4
+    tasks, each reviewed clean with zero Critical/Important findings —
+    task reviewers repeatedly went beyond the implementers' own
+    real-browser coverage (independently checking routes the implementer
+    hadn't, and in one case chasing down and resolving an
+    initially-suspicious row count rather than accepting it at face
+    value).
 
 ## Current routes / nav (in order)
 
@@ -4074,30 +4110,23 @@ doing:
   which previously had none. The crew pages' own per-`Alert` "Retry"
   buttons remain as harmless duplication, not removed.
 - **Page-shell duplication — resolved 2026-08-07 for the JSX half, see
-  "Page shell extraction" above.** (Kept here, struck through in spirit,
-  as a pointer for anyone who remembers this entry from before — the fix
-  is real, not just noted.) **Partially closed, not fully:** the shared
+  "Page shell extraction" above; the remaining half resolved 2026-08-12,
+  see "usePageData hook + defaultCrewComparator" below.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — both fixes are real, not just noted.) The shared
   `PageShell` component closed the loading/error/empty/title JSX
-  duplication across all 7 pages, but the original recommendation's other
-  half — a `usePageData(...)` hook covering `usePlayerData()` itself and
-  the `loaded` computation — was deliberately not built. See the next
-  entry for what the extraction newly exposed.
+  duplication across all pages using it; `usePageData` later closed the
+  `usePlayerData()`+`loaded` half the original recommendation also named.
 - **`usePlayerData()`/`loaded` and the default crew-page sort composition
-  still repeat across pages (new, surfaced by the Page shell extraction,
-  not caused by it):** every one of the 7 pages still calls
-  `usePlayerData()` and computes
-  `const loaded = !loading && !error && !!data;` itself — 7 identical
-  copies. More strikingly, `combineComparators(byLevelDesc,
-  byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections),
-  byNameAsc)` — the crew-page default sort order — is now a byte-identical
-  5-way copy across `ThreeFourStarsCrewPage`, `FourFiveStarsCrewPage`,
-  `FourFourStarsCrewPage`, `FourFourStarsCrewReadyPage`, and
-  `FrozenDuplicatesPage`. This duplication always existed; the shell
-  extraction just made it visible by removing the JSX that was tangled
-  up with it. A `usePageData(...)` hook (the option the original
-  recommendation named but this branch didn't build) and/or a
-  `DEFAULT_CREW_COMPARATOR(collections)` helper would be the natural next
-  increment.
+  repeated across pages — resolved 2026-08-12, see "usePageData hook +
+  defaultCrewComparator" below.** (Kept here, struck through in spirit,
+  as a pointer for anyone who remembers this entry from before — the fix
+  is real, not just noted.) `usePageData()` now covers 10 pages (verified
+  fresh at fix time — corrected from this entry's original "7" count,
+  which predated later pages); `defaultCrewComparator(collections)` now
+  covers the 5 pages that shared the identical
+  `combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc,
+  byCollectionCountDesc(collections), byNameAsc)` composition named here.
 - **Nav active-state:** the nav `ListItemButton`s don't show which page is
   currently selected (no `selected` prop / `useLocation` check). Cosmetic.
 - **`NAV_ITEMS` and `<Routes>` are hand-synced lists** in two different
