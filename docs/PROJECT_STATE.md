@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (Collections upgradable-status dedup). This document is the
+Last updated: 2026-08-11 (TablePaginationFooter extraction). This document is the
 durable, in-depth record of what has been built, why, and how the
 trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
@@ -3120,15 +3120,20 @@ does call `useState` internally.
 destructure `usePagination(itemsArray)`, map over `pageItems` instead of
 the full array, use `page * pageSize + index + 1` for the `#` column
 (continuous numbering across pages — the pre-existing `index + 1` would
-have restarted at 1 on every page), and add
-`{showPagination && (<TableFooter><TableRow><TablePagination
-count={itemsArray.length} page={page} onPageChange={handlePageChange}
-rowsPerPage={pageSize} onRowsPerPageChange={handlePageSizeChange}
-rowsPerPageOptions={PAGE_SIZE_OPTIONS} colSpan={N} /></TableRow></TableFooter>)}`
-after `</TableBody>`. `colSpan` matches each table's real column count:
-`CrewTable` 7 or 8 (conditional on `showCollectionsNames`, same condition
-that already governed its header), `MissingCrewTable` 6, `FrozenCrewTable`
-4, `QPsTable` 8, `ShipsTable` 5, `CollectionsTable` 6.
+have restarted at 1 on every page), and add a `<TablePaginationFooter
+show={showPagination} count={itemsArray.length} page={page}
+pageSize={pageSize} onPageChange={handlePageChange}
+onPageSizeChange={handlePageSizeChange} colSpan={N} />` after
+`</TableBody>`. **Originally each table inlined its own
+`{showPagination && (<TableFooter><TableRow><TablePagination .../>
+</TableRow></TableFooter>)}` block; the TablePaginationFooter extraction
+feature (below) later moved that verbatim-duplicated JSX into one shared
+`components/TablePaginationFooter.tsx`, which now owns the show/hide
+decision internally** — this section describes the current, extracted
+form. `colSpan` matches each table's real column count: `CrewTable` 7 or 8
+(conditional on `showCollectionsNames`, same condition that already
+governed its header), `MissingCrewTable` 6, `FrozenCrewTable` 4, `QPsTable`
+8, `ShipsTable` 5, `CollectionsTable` 6.
 
 **`CollectionsTable` is the one structural exception, planned from the
 start, not discovered mid-implementation.** Every other table maps one
@@ -3855,6 +3860,26 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     `example-data.json`: sort order, the upgradable set (5 of 88), and
     every collection's qualifying-crew list all matched. Zero
     Critical/Important.
+36. **TablePaginationFooter extraction** (`2026-08-11-table-pagination-footer`)
+    — resolves the "`TablePagination` footer JSX duplicated 6x verbatim"
+    deferred issue below. A new `components/TablePaginationFooter.tsx`
+    (`{ show, count, page, pageSize, onPageChange, onPageSizeChange,
+    colSpan }`, owning the show/hide decision internally via
+    `if (!show) return null;`) replaces the identical ~15-line
+    `{showPagination && (<TableFooter>...)}` block that had been
+    duplicated verbatim across all 6 tables (`CrewTable`,
+    `MissingCrewTable`, `FrozenCrewTable`, `QPsTable`, `ShipsTable`,
+    `CollectionsTable`). Pure mechanical extraction — no behavior change,
+    no change to `usePagination.ts` itself, no change to any table's
+    header/body rendering. Real-browser verification across all 6 tables
+    confirmed identical rendering and functioning page/page-size controls;
+    one verification-rigor gap (a toolbar `textContent` read that
+    concatenated multiple sibling text nodes into a garbled-looking
+    string, e.g. `"Rows per page:501–50 of 55"`) was flagged at task
+    review and independently resolved via distinct per-element DOM reads
+    and a screenshot, confirming the underlying rendering was correct all
+    along — a text-extraction artifact, not a defect. Zero
+    Critical/Important.
 
 ## Current routes / nav (in order)
 
@@ -3991,15 +4016,14 @@ doing:
   reset one when the other changes. Arguably desirable (position
   preserved) rather than a bug, flagged because nobody explicitly decided
   this interaction either way.
-- **`TablePagination` footer JSX duplicated 6x verbatim (new, from the
-  Table pagination feature):** each of the 6 tables repeats the same
-  ~15-line `{showPagination && (<TableFooter>...)}` block. This project's
-  own precedent (`StatusChip` extracted at 2 call sites, `PageShell`
-  similarly) suggests a `components/TablePaginationFooter.tsx` taking
+- **`TablePagination` footer JSX duplicated 6x verbatim — resolved by the
+  TablePaginationFooter extraction feature, see below.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.)
+  `components/TablePaginationFooter.tsx` now takes exactly the
   `{ show, count, page, pageSize, onPageChange, onPageSizeChange, colSpan }`
-  would remove the duplication and give pagination UI a single point of
-  change. Explicitly out of the approved plan's scope — noted as a
-  follow-up, not a defect.
+  shape this entry proposed, owning the show/hide decision internally
+  (`if (!show) return null;`), and all 6 tables call it identically.
 - **`usePagination.ts` placement in `lib/` vs `hooks/` (new, from the
   Table pagination feature):** a deliberate call (see "Table pagination"
   above for the reasoning — domain-neutral logic vs. the app's two
