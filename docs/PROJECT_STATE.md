@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (browser-automation tooling: MCP verification +
-CLAUDE.md). This document is the durable, in-depth record of
+Last updated: 2026-08-11 (Small cleanup bundle). This document is the
+durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -3772,6 +3772,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     resolved with genuine evidence, verified by the final reviewer to
     have never had a path into the ~10-line shipped diff. Zero
     Critical/Important.
+34. **Small cleanup bundle** (`2026-08-11-small-cleanup-bundle`) — three
+    independent, unrelated fixes pulled from the deferred-issues backlog
+    (see the three now-resolved entries above): `AppLayout.tsx`'s
+    `ErrorBoundary` now keys on `location.key` instead of
+    `location.pathname`, so re-clicking a crashed page's own nav entry
+    actually clears the fallback; `TableSearchBar` gained a required
+    `ariaLabel` prop (set via `slotProps.htmlInput`) with a distinguishing
+    value at all 12 call sites; and `CrewTable`/`MissingCrewTable` now
+    bind `getCrewCollections`'s result once per row instead of calling it
+    (directly, and indirectly via `getCollectionCount`) twice. Task 1's
+    first verification round was rejected at task review — the report's
+    "fallback cleared" claim was contradicted by two byte-identical
+    leftover screenshots (an unconditional debug throw meant the fallback
+    could never actually clear regardless of whether the fix worked); the
+    redone round used a toggleable debug condition and was independently
+    reproduced by the re-reviewer's own fresh browser test, not just
+    re-read from the report. Tasks 2 and 3 delivered clean on the first
+    review round. Zero Critical/Important across all three tasks.
 
 ## Current routes / nav (in order)
 
@@ -3886,11 +3904,14 @@ directly-clickable drawer entries.
 Collected across final reviews, roughly in the order they'd become worth
 doing:
 
-- **`TableSearchBar` has no accessible name beyond its placeholder (new,
-  from the Table search feature):** `RefreshControl.tsx` already sets a
-  precedent for an explicit `aria-label` on a form control in this
-  codebase; `TableSearchBar` should follow it, especially on the Overview
-  page where two identical-placeholder inputs coexist on one page.
+- **`TableSearchBar` has no accessible name beyond its placeholder —
+  resolved by the Small cleanup bundle feature, see below.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.) `TableSearchBar`
+  now takes a required `ariaLabel` prop, set via `slotProps.htmlInput`
+  (the actual `<input>` element, not the wrapper `slotProps.input`), with
+  a distinguishing string at all 12 call sites — including Overview's two
+  previously-identical-placeholder instances.
 - **Overview's two Missing-4-Stars headings always show `"(N of N)"`,
   never collapsing to `"(N)"` when no search is active (new, from the
   Table search feature):** this is exactly what the plan specified (a
@@ -4438,15 +4459,15 @@ doing:
   message. Not specified either way in the design; arguably fine and
   even informative as-is (an empty table already communicates "zero"),
   not treated as a gap worth closing without a concrete complaint.
-- **`ErrorBoundary` keys on `location.pathname`, not `location.key` (new,
-  from the Router-level ErrorBoundary feature, final review — Minor,
-  deferred not fixed):** re-clicking the *current* page's own nav entry
-  while its fallback is showing doesn't auto-clear it, since `pathname`
-  is unchanged even though react-router pushes a new history entry.
-  Mitigated by the always-visible "Try again" button in the same
-  viewport. Fix, if ever done: swap the `AppLayout.tsx` key to
-  `location.key` — a one-token change, strictly stronger for reset
-  purposes, with no other implications.
+- **`ErrorBoundary` keys on `location.pathname`, not `location.key` —
+  resolved by the Small cleanup bundle feature, see below.** (Kept here,
+  struck through in spirit, as a pointer for anyone who remembers this
+  entry from before — the fix is real, not just noted.) `AppLayout.tsx`'s
+  `<ErrorBoundary key={...}>` now uses `location.key`, the exact one-token
+  swap this entry originally proposed — re-clicking the current page's own
+  nav entry while its fallback is showing now clears it, confirmed via
+  real-browser verification (a toggleable debug error condition, checked
+  present/absent across all three navigation cases).
 - **`ErrorBoundary.componentDidCatch`'s `info` param is typed narrower
   than React's real `ErrorInfo` (new, from the Router-level ErrorBoundary
   feature, final review — Minor):** declared as `{ componentStack:
@@ -4520,16 +4541,15 @@ doing:
   (`dynamic import()`) would be the standard fix if this is ever worth
   addressing.
 - **`CrewTable`/`MissingCrewTable` each traverse `collections` twice per
-  row** (new, from the Collections columns feature, final review —
-  Minor): `getCollectionCount(c, collections)` internally calls
-  `getCrewCollections`, then the adjacent "Collections names" cell calls
-  `getCrewCollections` again for the same crew. Binding the result once
-  per row (`const crewCollections = getCrewCollections(c, collections)`)
-  would halve the per-row cost and, as a structural side effect, remove
-  the only reason the count and the name list *could* ever
-  theoretically disagree. Not fixed now — current behavior is correct,
-  confirmed by the Step 7 data check — but a natural next increment if
-  this table's render cost is ever profiled.
+  row — resolved by the Small cleanup bundle feature, see below.** (Kept
+  here, struck through in spirit, as a pointer for anyone who remembers
+  this entry from before — the fix is real, not just noted.) Both files
+  now bind `const crewCollections = getCrewCollections(c, collections)`
+  once per row and derive both the count cell (`.length`) and the names
+  cell (`.map(...).join(', ')`) from it — `getCollectionCount` (itself
+  just `getCrewCollections(...).length`) is no longer imported by either
+  file. Provably behavior-preserving, not just empirically so, and
+  structurally removes the only reason the two cells could ever disagree.
 - **`showCollectionsNames` under-describes what it actually controls**
   (new, from the Collections columns feature, final review — Minor):
   the prop toggles both the extra names column *and* the count column's
