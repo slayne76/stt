@@ -45,3 +45,17 @@ it never needs re-downloading). If it's ever missing, `npx playwright install
 chromium` fetches just the one browser this project actually uses — never
 run a bare `npx playwright install` (installs Chromium *and* Firefox *and*
 WebKit by default; this project has only ever used headless Chromium).
+
+## Git safety: never commit on `main`
+
+This repo's process always works in an isolated git worktree (a branch
+named `worktree-<feature>`), never on `main` directly — every feature is
+reviewed and merged through that flow. Before running `git commit` (or
+`git push`), run `git branch --show-current`. If it prints `main` — or
+you're not certain you're in the worktree you were dispatched to — STOP:
+do not commit. Report back to whoever dispatched you instead. This
+happened for real on 2026-08-11 (a fix-dispatch subagent ended up
+operating against the main checkout instead of its assigned worktree and
+committed there directly) — caught only because merging the properly-
+reviewed feature branch produced an unexpected conflict instead of a
+clean fast-forward, not because anything flagged it at commit time.
