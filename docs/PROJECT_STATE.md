@@ -3874,7 +3874,11 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     header/body rendering. Real-browser verification covered `ShipsTable`,
     `CrewTable` (8-column branch), `QPsTable`, `CollectionsTable`, and
     `FrozenCrewTable` — identical rendering and functioning page/page-size
-    controls, plus six below-threshold routes confirming no footer renders.
+    controls, plus six below-threshold routes (`/4-5-stars-crew`,
+    `/4-4-stars-crew-ready`, `/4-4-stars-crew`, `/4-stars-duplicates`,
+    `/4-stars-ships`, and both `MissingCrewTable` instances on `/`)
+    confirming zero `<tfoot>` elements render, matching
+    `usePagination`'s `items.length > pageSize` threshold exactly.
     `MissingCrewTable`'s footer and `CrewTable`'s 7-column branch are below
     the 50-row threshold in the current seed data and were verified by code
     equivalence only;
