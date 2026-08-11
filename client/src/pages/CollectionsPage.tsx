@@ -18,6 +18,8 @@ function CollectionsPage() {
   const crew = data ? getCrewList(data) : [];
   const items = data ? getOwnedItems(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
+  // Called unconditionally (unlike the `data ? ... : <empty>` guards above) — both
+  // functions safely return an empty Map/Set when rawCollections is empty, so no guard is needed here.
   const qualifyingCrewByCollection = getQualifyingCrewByCollection(rawCollections, crew, items, frozenArchetypeIds);
   const upgradableIds = getUpgradableCollectionIds(rawCollections, qualifyingCrewByCollection, items);
   const collections = data

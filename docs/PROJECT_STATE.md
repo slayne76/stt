@@ -168,7 +168,8 @@ client/src/
                                 `CatalogEntry`s through the same logic — see "Missing 4 Stars tables"
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
-                                isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
+                                isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc,
+                                getQualifyingCrewByCollection, getUpgradableCollectionIds
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew),
                                  paginated by collection, not row (see "Table pagination" below)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted; its "Ready"/
@@ -825,6 +826,19 @@ roughly `n log n` times (~1,100+ calls for 88 collections) instead of
 once, a real performance defect this project specifically designed around
 rather than discovered after the fact:
 
+**Superseded 2026-08-11 — see "Collections upgradable-status dedup" above.**
+(Kept here, struck through in spirit, as a pointer for anyone who remembers
+this signature from before — the code below is history, not current fact.)
+The 4-parameter signature shown (`collections, crewList, items,
+frozenArchetypeIds`, filtering via an internal `getCollectionCrew` call) no
+longer compiles. The shipped factory takes a single precomputed
+`upgradableIds: Set<number>` parameter instead — the `Set` is now built
+once per page render by `getUpgradableCollectionIds` (over
+`getQualifyingCrewByCollection`'s output) rather than inside this factory.
+The *reasoning* below about precomputing the `Set` once instead of
+filtering inside the per-comparison function is unchanged; only where that
+precompute happens has moved.
+
 ```ts
 export function byUpgradableThenCompletionThenNameAsc(
   collections: Collection[],
@@ -891,24 +905,31 @@ chip color on this page, after `success` (green, "Ready") and `warning`
 (amber, "4/4 Stars" — see needsWork tier label above), each tier/state
 getting its own color, no collision.
 
-**Accepted duplication, reasoned about explicitly, not an oversight:**
-`getCollectionCrew` now runs once more per collection at the page level
+**Accepted duplication, reasoned about explicitly, not an oversight — historical, since fixed (see below):**
+`getCollectionCrew` used to run once more per collection at the page level
 (`CollectionsPage.tsx`, for the sort's upgradable set) in addition to
 `CollectionsTable`'s existing per-row call (for rendering) — 176 total
-calls per page render instead of 88. This project already accepts
+calls per page render instead of 88. This project already accepted
 comparable per-render filtering costs elsewhere (`byCollectionCountDesc`'s
-~12ms precedent). **A real consistency risk flagged at final review,
-parked as a deferred minor, not fixed in this feature:** the two
-computations agree today only because `CollectionsPage.tsx` passes
-`CollectionsTable` the same `crew`/`items`/`frozenArchetypeIds` the sort
-factory received — if those inputs ever diverge (e.g. the table gains its
-own filter), a row could show a chip that didn't sort to the top, or vice
-versa. The clean fix, deferred: have `byUpgradableThenCompletionThenNameAsc`
-expose its `upgradableIds` Set as a return value, thread it into
-`CollectionsTable` as a prop, and delete the per-row `isCollectionUpgradable`
-call — this would both halve the `getCollectionCrew` calls (176→88) and
-remove the dual-source-of-truth risk in one move. See "Deferred issues"
-below.
+~12ms precedent), so the duplication itself was a reasoned tradeoff, not
+an oversight, when this feature originally shipped.
+
+**Fixed 2026-08-11 — see "Collections upgradable-status dedup" above.**
+(Kept here, struck through in spirit, as a pointer for anyone who remembers
+this entry from before — the fix is real, not just noted.) Originally: a
+real consistency risk, flagged at final review and parked as a deferred
+minor rather than fixed in this feature — the two computations agreed only
+because `CollectionsPage.tsx` passed `CollectionsTable` the same
+`crew`/`items`/`frozenArchetypeIds` the sort factory received, and if those
+inputs ever diverged (e.g. the table gaining its own filter), a row could
+have shown a chip that didn't sort to the top, or vice versa. Fixed exactly
+as this section's own original proposal described: `getQualifyingCrewByCollection`/
+`getUpgradableCollectionIds` now compute both once per collection at the
+page level and thread the results down as props; `CollectionsTable` no
+longer takes `crew`/`frozenArchetypeIds` or calls `getCollectionCrew`/
+`isCollectionUpgradable` itself — it just reads the precomputed `Map`/`Set`.
+This both halved the `getCollectionCrew` calls (176→88) and removed the
+dual-source-of-truth risk in one move.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-collections-upgradable-chip-design.md`,
 `docs/superpowers/plans/2026-08-04-collections-upgradable-chip-plan.md`.
@@ -4711,7 +4732,8 @@ asset-cache-proxy fixes' own residual notes (a
 `renameSync`-can-throw-on-concurrent-refresh race, no temp-file cleanup
 on failure, the two `Snackbar`s sharing a default anchor position — all
 above); beyond those, unifying the dual upgradable-status computation
-between the Collections sort and chip, another crew classification
+between the Collections sort and chip (shipped 2026-08-11, see
+"Collections upgradable-status dedup" above), another crew classification
 factor (skills? traits?), building the `usePageData(...)` hook /
 `DEFAULT_CREW_COMPARATOR` helper the Page shell extraction's own final
 review surfaced as its natural next increment, reconsidering whether
