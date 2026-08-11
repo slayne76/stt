@@ -33,7 +33,7 @@ function FiveStarsCrewPage() {
       count={filteredCrew.length}
       totalCount={crew.length}
       emptyMessage={active && filteredCrew.length === 0 ? 'No results found for your search.' : 'No unmaxed 5-star crew.'}
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel="Search 5 Stars Crew by name" />}
     >
       <CrewTable crew={filteredCrew} collections={collections} showCollectionsNames={true} />
     </PageShell>

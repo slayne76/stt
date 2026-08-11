@@ -41,7 +41,7 @@ function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
       emptyMessage={
         active && filteredCrew.length === 0 ? 'No results found for your search.' : 'No duplicate crew at this rarity.'
       }
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel={`Search ${title} by name`} />}
     >
       <CrewTable crew={filteredCrew} collections={collections} showCollectionsNames={false} />
     </PageShell>

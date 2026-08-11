@@ -40,7 +40,7 @@ function ShipsPage({ rarity, title }: ShipsPageProps) {
       emptyMessage={
         active && filteredShips.length === 0 ? 'No results found for your search.' : 'No incomplete ships at this rarity.'
       }
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel={`Search ${title} by name`} />}
     >
       <ShipsTable ships={filteredShips} items={items} />
     </PageShell>

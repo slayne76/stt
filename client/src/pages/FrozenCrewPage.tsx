@@ -37,7 +37,7 @@ function FrozenCrewPage() {
             ? 'No results found for your search.'
             : 'No frozen 4 or 5-star crew.'
       }
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel="Search 5 & 4 Stars Frozen Crew by name" />}
     >
       <FrozenCrewTable crew={filteredCrew} />
     </PageShell>

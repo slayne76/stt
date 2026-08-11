@@ -36,7 +36,7 @@ function FourFourStarsCrewPage() {
       count={filteredCrew.length}
       totalCount={crew.length}
       emptyMessage={active && filteredCrew.length === 0 ? 'No results found for your search.' : 'No crew at 4/4 stars.'}
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel="Search 4/4 Stars crew by name" />}
     >
       <CrewTable crew={filteredCrew} collections={collections} showCollectionsNames={true} />
     </PageShell>

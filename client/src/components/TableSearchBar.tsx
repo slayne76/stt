@@ -5,10 +5,11 @@ import ClearIcon from '@mui/icons-material/Clear';
 export interface TableSearchBarProps {
   value: string;
   onChange: (value: string) => void;
+  ariaLabel: string;
   placeholder?: string;
 }
 
-function TableSearchBar({ value, onChange, placeholder = 'Search by name…' }: TableSearchBarProps) {
+function TableSearchBar({ value, onChange, ariaLabel, placeholder = 'Search by name…' }: TableSearchBarProps) {
   return (
     <TextField
       size="small"
@@ -29,6 +30,9 @@ function TableSearchBar({ value, onChange, placeholder = 'Search by name…' }: 
               </IconButton>
             </InputAdornment>
           ) : undefined,
+        },
+        htmlInput: {
+          'aria-label': ariaLabel,
         },
       }}
       sx={{ width: 260 }}

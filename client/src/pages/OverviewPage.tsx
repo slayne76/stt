@@ -118,7 +118,11 @@ function OverviewPage() {
             <Typography variant="h5">
               Missing 4 Stars (In Portal) ({inPortalSearch.filteredItems.length} of {missingInPortal.length})
             </Typography>
-            <TableSearchBar value={inPortalSearch.query} onChange={inPortalSearch.setQuery} />
+            <TableSearchBar
+              value={inPortalSearch.query}
+              onChange={inPortalSearch.setQuery}
+              ariaLabel="Search Missing 4 Stars (In Portal) by name"
+            />
           </Stack>
           {inPortalSearch.active && inPortalSearch.filteredItems.length === 0 ? (
             <Typography color="text.secondary">No results found for your search.</Typography>
@@ -129,7 +133,11 @@ function OverviewPage() {
             <Typography variant="h5">
               Missing 4 Stars (Not in Portal) ({notInPortalSearch.filteredItems.length} of {missingNotInPortal.length})
             </Typography>
-            <TableSearchBar value={notInPortalSearch.query} onChange={notInPortalSearch.setQuery} />
+            <TableSearchBar
+              value={notInPortalSearch.query}
+              onChange={notInPortalSearch.setQuery}
+              ariaLabel="Search Missing 4 Stars (Not in Portal) by name"
+            />
           </Stack>
           {notInPortalSearch.active && notInPortalSearch.filteredItems.length === 0 ? (
             <Typography color="text.secondary">No results found for your search.</Typography>

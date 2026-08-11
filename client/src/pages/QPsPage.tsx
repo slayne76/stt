@@ -31,7 +31,7 @@ function QPsPage() {
       count={filteredCrew.length}
       totalCount={crew.length}
       emptyMessage={active && filteredCrew.length === 0 ? 'No results found for your search.' : 'No crew need QP leveling.'}
-      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
+      titleActions={<TableSearchBar value={query} onChange={setQuery} ariaLabel="Search QPs by name" />}
     >
       <QPsTable crew={filteredCrew} />
     </PageShell>
