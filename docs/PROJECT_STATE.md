@@ -89,6 +89,8 @@ client/src/
                                  blocks player-identity rendering
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   hooks/useCrewCatalog.ts        Same shape, for CrewCatalogContext
+  hooks/usePageData.ts          Wraps usePlayerData, adds optional extraLoading + derived loaded
+                                 (see "usePageData hook + defaultCrewComparator")
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
   api/assetsApi.ts               refreshAssets (see "Asset cache proxy")
   api/catalogApi.ts              fetchCrewCatalog/refreshCrewCatalog (see "Crew catalog and Overview
@@ -1290,7 +1292,9 @@ export interface PageShellProps {
 Each page still calls `usePlayerData()` itself, does all of its own
 data-fetching/filtering/sorting, computes `loaded` itself
 (`!loading && !error && !!data`), and passes its table component as
-`children` — only the render shell moved. `loaded` is a caller-computed
+`children` — only the render shell moved (true at the time this feature
+shipped; closed 2026-08-12, see "usePageData hook +
+defaultCrewComparator" below). `loaded` is a caller-computed
 boolean rather than `PageShell` inferring it from a `data` prop
 specifically so the component stays reusable for anything with a
 loading/error/loaded shape, not coupled to this app's specific hook;
