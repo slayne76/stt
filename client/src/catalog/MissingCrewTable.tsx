@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import type { CatalogEntry } from '../types/catalogEntry';
 import type { Collection } from '../types/collection';
-import { getCollectionCount, getCrewCollections } from '../collections/getters';
+import { getCrewCollections } from '../collections/getters';
 import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
@@ -38,22 +38,21 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {pageItems.map((c, index) => (
-            <TableRow key={c.archetype_id}>
-              <TableCell>{page * pageSize + index + 1}</TableCell>
-              <TableCell>
-                <Thumbnail url={`${ASSET_BASE_URL}/${c.imageUrlPortrait}`} />
-              </TableCell>
-              <TableCell>{c.name}</TableCell>
-              <TableCell align="right">{c.data_score.toFixed(2)}</TableCell>
-              <TableCell align="right">{getCollectionCount(c, collections)}</TableCell>
-              <TableCell>
-                {getCrewCollections(c, collections)
-                  .map((col) => col.name)
-                  .join(', ')}
-              </TableCell>
-            </TableRow>
-          ))}
+          {pageItems.map((c, index) => {
+            const crewCollections = getCrewCollections(c, collections);
+            return (
+              <TableRow key={c.archetype_id}>
+                <TableCell>{page * pageSize + index + 1}</TableCell>
+                <TableCell>
+                  <Thumbnail url={`${ASSET_BASE_URL}/${c.imageUrlPortrait}`} />
+                </TableCell>
+                <TableCell>{c.name}</TableCell>
+                <TableCell align="right">{c.data_score.toFixed(2)}</TableCell>
+                <TableCell align="right">{crewCollections.length}</TableCell>
+                <TableCell>{crewCollections.map((col) => col.name).join(', ')}</TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
         {showPagination && (
           <TableFooter>

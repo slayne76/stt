@@ -12,7 +12,7 @@ import {
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
-import { getCollectionCount, getCrewCollections } from '../collections/getters';
+import { getCrewCollections } from '../collections/getters';
 import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
@@ -42,28 +42,27 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
           </TableRow>
         </TableHead>
         <TableBody>
-          {pageItems.map((c, index) => (
-            <TableRow key={c.id}>
-              <TableCell>{page * pageSize + index + 1}</TableCell>
-              <TableCell>
-                <Thumbnail asset={c.portrait} />
-              </TableCell>
-              <TableCell>
-                <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
-              </TableCell>
-              <TableCell>{c.name}</TableCell>
-              <TableCell align="right">{c.level}</TableCell>
-              <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
-              <TableCell align="right">{getCollectionCount(c, collections)}</TableCell>
-              {showCollectionsNames && (
+          {pageItems.map((c, index) => {
+            const crewCollections = getCrewCollections(c, collections);
+            return (
+              <TableRow key={c.id}>
+                <TableCell>{page * pageSize + index + 1}</TableCell>
                 <TableCell>
-                  {getCrewCollections(c, collections)
-                    .map((col) => col.name)
-                    .join(', ')}
+                  <Thumbnail asset={c.portrait} />
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
+                <TableCell>
+                  <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
+                </TableCell>
+                <TableCell>{c.name}</TableCell>
+                <TableCell align="right">{c.level}</TableCell>
+                <TableCell align="right">{getEquipmentSlotsRemaining(c)}</TableCell>
+                <TableCell align="right">{crewCollections.length}</TableCell>
+                {showCollectionsNames && (
+                  <TableCell>{crewCollections.map((col) => col.name).join(', ')}</TableCell>
+                )}
+              </TableRow>
+            );
+          })}
         </TableBody>
         {showPagination && (
           <TableFooter>
