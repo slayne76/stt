@@ -1,4 +1,4 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { getFrozenCrewArchetypeIds } from '../crew/getters';
 import { getFrozenCrew } from '../catalog/getters';
@@ -10,8 +10,8 @@ import PageShell from '../layout/PageShell';
 import TableSearchBar from '../components/TableSearchBar';
 
 function FrozenCrewPage() {
-  const { data, loading, error, refresh } = usePlayerData();
   const { data: catalog, loading: catalogLoading, error: catalogError } = useCrewCatalog();
+  const { data, loading, error, refresh, loaded } = usePageData(catalogLoading);
 
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const crew = catalog
@@ -19,12 +19,10 @@ function FrozenCrewPage() {
     : [];
   const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
 
-  const loaded = !loading && !catalogLoading && !error && !!data;
-
   return (
     <PageShell
       title="5 & 4 Stars Frozen Crew"
-      loading={loading || catalogLoading}
+      loading={loading}
       error={error}
       onRetry={() => void refresh()}
       loaded={loaded}
