@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (Small cleanup bundle). This document is the
+Last updated: 2026-08-11 (Collections upgradable-status dedup). This document is the
 durable, in-depth record of what has been built, why, and how the
 trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
@@ -3816,6 +3816,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     reproduced by the re-reviewer's own fresh browser test, not just
     re-read from the report. Tasks 2 and 3 delivered clean on the first
     review round. Zero Critical/Important across all three tasks.
+35. **Collections upgradable-status dedup** (`2026-08-11-collections-upgradable-dedup`)
+    — resolves the "Upgradable-status dual computation" deferred issue
+    below. `sorters.ts` gained `getQualifyingCrewByCollection` and
+    `getUpgradableCollectionIds`, each computed once per collection;
+    `byUpgradableThenCompletionThenNameAsc` now takes a precomputed
+    `upgradableIds: Set<number>` instead of recomputing it from
+    `(collections, crewList, items, frozenArchetypeIds)`.
+    `CollectionsPage.tsx` computes `qualifyingCrewByCollection` and
+    `upgradableIds` once over `rawCollections` and threads both down as
+    props; `CollectionsTable.tsx` no longer takes `crew`/`frozenArchetypeIds`
+    props or calls `getCollectionCrew`/`isCollectionUpgradable` per row —
+    it just reads from the passed-in `Map`/`Set`. `isCollectionUpgradable`
+    and `getCollectionCrew` themselves are unchanged. A data-driven
+    verification script (old-path vs. new-path, deleted before commit)
+    confirmed byte-identical output against all 88 real collections in
+    `example-data.json`: sort order, the upgradable set (5 of 88), and
+    every collection's qualifying-crew list all matched. Zero
+    Critical/Important.
 
 ## Current routes / nav (in order)
 
@@ -3966,18 +3984,18 @@ doing:
   above for the reasoning — domain-neutral logic vs. the app's two
   data-fetching hooks), not an oversight, but worth reconsidering if a
   future hook blurs that line further.
-- **Upgradable-status dual computation (new, from the Upgradable chip
-  feature):** `CollectionsPage.tsx`'s sort factory and `CollectionsTable.tsx`'s
-  per-row chip check each independently call `getCollectionCrew` and
-  `isCollectionUpgradable` for the same collection — 176 total calls per
-  page render instead of 88, and correct today only because both receive
-  identical `crew`/`items`/`frozenArchetypeIds`. If those inputs ever
-  diverge, a row's chip and its sort position could disagree. Fix:
-  `byUpgradableThenCompletionThenNameAsc` should expose its precomputed
-  `upgradableIds: Set<number>` as a return value (or a second output),
-  threaded into `CollectionsTable` as a prop, deleting the per-row
-  `isCollectionUpgradable` call entirely — halves the `getCollectionCrew`
-  calls and removes the dual-source-of-truth risk in one move.
+- **Upgradable-status dual computation — resolved 2026-08-11, see
+  "Collections upgradable-status dedup" above.** (Kept here, struck
+  through in spirit, as a pointer for anyone who remembers this entry
+  from before.) `CollectionsPage.tsx`'s sort factory and
+  `CollectionsTable.tsx`'s per-row chip check used to each independently
+  call `getCollectionCrew` and `isCollectionUpgradable` for the same
+  collection — 176 total calls per page render instead of 88, correct
+  only because both received identical `crew`/`items`/`frozenArchetypeIds`.
+  Fixed exactly as this entry proposed: `getQualifyingCrewByCollection`/
+  `getUpgradableCollectionIds` compute both once per collection at the
+  page level; `CollectionsTable` now just reads the precomputed
+  `Map`/`Set` props instead of recomputing anything.
 - **`combineComparators`/`Comparator<T>` living in `crew/sorters.ts` —
   resolved 2026-08-06, see "Sorting design" above.** (Kept here, struck
   through in spirit, as a pointer for anyone who remembers this entry
