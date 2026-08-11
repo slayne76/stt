@@ -3871,8 +3871,13 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     `MissingCrewTable`, `FrozenCrewTable`, `QPsTable`, `ShipsTable`,
     `CollectionsTable`). Pure mechanical extraction — no behavior change,
     no change to `usePagination.ts` itself, no change to any table's
-    header/body rendering. Real-browser verification across all 6 tables
-    confirmed identical rendering and functioning page/page-size controls;
+    header/body rendering. Real-browser verification covered `ShipsTable`,
+    `CrewTable` (8-column branch), `QPsTable`, `CollectionsTable`, and
+    `FrozenCrewTable` — identical rendering and functioning page/page-size
+    controls, plus six below-threshold routes confirming no footer renders.
+    `MissingCrewTable`'s footer and `CrewTable`'s 7-column branch are below
+    the 50-row threshold in the current seed data and were verified by code
+    equivalence only;
     one verification-rigor gap (a toolbar `textContent` read that
     concatenated multiple sibling text nodes into a garbled-looking
     string, e.g. `"Rows per page:501–50 of 55"`) was flagged at task
