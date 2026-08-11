@@ -1,6 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (Search clear button). This document is the durable, in-depth record of
+Last updated: 2026-08-11 (browser-automation tooling: MCP verification +
+CLAUDE.md). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -3854,6 +3855,31 @@ directly-clickable drawer entries.
   before implementation (e.g. the ready/needs-work edge case, the
   missing-slot-count generalization) — brainstorming questions are taken
   seriously, not rubber-stamped.
+- **Browser-automation tooling convention, now written down in a repo
+  `CLAUDE.md`** (didn't exist before 2026-08-11): `playwright` is a pinned
+  root `devDependency` (`1.62.1`, exact), added after recurring
+  tooling churn (an unauthorized `@playwright/test` addition, a failed
+  `puppeteer` install) — `npm install` alone now provisions it in every
+  fresh worktree. **CLAUDE.md now recommends the `playwright`/
+  `chrome-devtools` MCP servers first**, confirmed genuinely working
+  2026-08-11 in a fresh CLI session (real `navigate`/`new_page`,
+  `snapshot`, `click`, `fill`/`type` calls against the running dev app,
+  each tool independently) — a prior same-day attempt in a session that
+  had been running continuously since before the servers were configured
+  found zero matching `ToolSearch` tool schemas for either, which is a
+  known "MCP tools don't load into an already-running session" limitation,
+  not a real failure; a fresh session was needed to get a genuine result.
+  The raw `playwright` library (`chromium.launch()`, no
+  `@playwright/test`, no `puppeteer`) remains the documented fallback for
+  sessions where the MCP servers don't load or drop out mid-session —
+  never re-install `playwright` itself (already a project dependency) or
+  reach for any other browser-automation library. Scope is verification
+  only (task-level and code-review browser checks) — never a shipped-app
+  dependency. Chromium's browser binary lives at the `$HOME`-level
+  `~/.cache/ms-playwright` (shared across every worktree, trimmed from
+  1.9GB to 656MB on 2026-08-11 by removing a stale duplicate Chromium
+  build, Firefox, and WebKit, since this project has only ever used
+  headless Chromium).
 
 ## Deferred issues / recommendations backlog (not yet acted on)
 
