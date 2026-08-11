@@ -119,7 +119,7 @@ function AppLayout() {
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
-        <ErrorBoundary key={location.pathname}>
+        <ErrorBoundary key={location.key}>
           <Outlet />
         </ErrorBoundary>
       </Box>
