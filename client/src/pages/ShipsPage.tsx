@@ -4,8 +4,10 @@ import { combineComparators } from '../lib/comparator';
 import { getShipList } from '../ships/getters';
 import { filterIncompleteShipsByRarity } from '../ships/filters';
 import { byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc, byNameAsc, sortShips } from '../ships/sorters';
+import { useSearch } from '../lib/useSearch';
 import ShipsTable from '../ships/ShipsTable';
 import PageShell from '../layout/PageShell';
+import TableSearchBar from '../components/TableSearchBar';
 
 export interface ShipsPageProps {
   rarity: number;
@@ -22,6 +24,7 @@ function ShipsPage({ rarity, title }: ShipsPageProps) {
         combineComparators(byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc(items), byNameAsc)
       )
     : [];
+  const { query, setQuery, filteredItems: filteredShips, active } = useSearch(ships, (s) => [s.name]);
 
   const loaded = !loading && !error && !!data;
 
@@ -32,10 +35,14 @@ function ShipsPage({ rarity, title }: ShipsPageProps) {
       error={error}
       onRetry={() => void refresh()}
       loaded={loaded}
-      count={ships.length}
-      emptyMessage="No incomplete ships at this rarity."
+      count={filteredShips.length}
+      totalCount={ships.length}
+      emptyMessage={
+        active && filteredShips.length === 0 ? 'No results found for your search.' : 'No incomplete ships at this rarity.'
+      }
+      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
     >
-      <ShipsTable ships={ships} items={items} />
+      <ShipsTable ships={filteredShips} items={items} />
     </PageShell>
   );
 }
