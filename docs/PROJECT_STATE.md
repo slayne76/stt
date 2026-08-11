@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (Table pagination). This document is the durable, in-depth record of
+Last updated: 2026-08-11 (Table search). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -105,6 +105,9 @@ client/src/
                                   small, reusable, cross-domain presentational UI
   components/ErrorBoundary.tsx   Class-component error boundary, fallback Alert + "Try again" (see
                                   "Router-level ErrorBoundary" below)
+  components/TableSearchBar.tsx  Generic MUI search TextField (search icon, 260px, no state of its
+                                  own — controlled value/onChange), rendered in every list page's
+                                  title row (see "Table search" below)
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
@@ -112,6 +115,10 @@ client/src/
   lib/usePagination.ts          usePagination<T>(items) — shared page/pageSize state, safe
                                  clamping, dynamic show/hide; used by all 6 list tables (see
                                  "Table pagination" below)
+  lib/useSearch.ts               useSearch<T>(items, getSearchableText) — shared 3-char-threshold,
+                                 case-insensitive substring filter; used by all 13 list-table page
+                                 call sites, feeds the already-filtered array into each table's own
+                                 usePagination unchanged (see "Table search" below)
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
     crew.ts                    CrewMember interface (see below; `portrait?` added for the image column)
@@ -3134,6 +3141,132 @@ acted on (see "Deferred issues" below).
 **Spec/plan:** `docs/superpowers/specs/2026-08-10-table-pagination-design.md`,
 `docs/superpowers/plans/2026-08-10-table-pagination-plan.md`.
 
+## Table search
+
+A live-filtering search box in the title row of every list table — title
+left, search right — matching the same 6 tables Table pagination covers
+(`CrewTable`, `MissingCrewTable`, `FrozenCrewTable`, `QPsTable`,
+`ShipsTable`, `CollectionsTable`), across all 13 real page call sites.
+Direct, user-specified requirements: activates the moment the query
+reaches 3 characters (not before), free/anywhere-in-string substring
+match — `"oim"` matches `"Boimler"`, not just a prefix — case-insensitive,
+no debounce (filters on every keystroke once active), no persistence
+across navigation, and clearing back below 3 characters instantly
+restores the full list.
+
+**Filtering happens at the page level, not inside any table component —
+this feature ships with zero changes to any of the 6 table components.**
+Each page already computes a filtered/sorted item array before handing it
+to its table (that's what pagination already consumed); this feature
+inserts one more step in that pipeline — `useSearch` narrows the array
+further — and the array that reaches the table is just shorter when a
+search is active. The table's own `usePagination` hook (unchanged, from
+the prior feature) recalculates safely on any array-length change, which
+was already proven in that feature's final review — so search and
+pagination compose for free, with no new integration code anywhere.
+
+**`client/src/lib/useSearch.ts`:**
+
+```ts
+export const MIN_QUERY_LENGTH = 3;
+
+export function useSearch<T>(items: T[], getSearchableText: (item: T) => string[]): UseSearchResult<T> {
+  const [query, setQuery] = useState('');
+  const active = query.length >= MIN_QUERY_LENGTH;
+  const needle = query.toLowerCase();
+  const filteredItems = active
+    ? items.filter((item) => getSearchableText(item).some((text) => text.toLowerCase().includes(needle)))
+    : items;
+  return { query, setQuery, filteredItems, active };
+}
+```
+
+**Versatility lives in `getSearchableText`, not in the hook.** It returns
+an array of strings to match against, so a future multi-field search
+(name *and* trait, say) is a one-line change at whichever call site needs
+it — every call site today passes exactly `(item) => [item.name]`. The
+3-character threshold is checked against the **untrimmed** query length
+deliberately, matching the literal request rather than adding an
+unrequested trimming rule.
+
+**`PageShell` gained two new optional props**, additive only —
+`totalCount?: number` and `titleActions?: ReactNode` — turning its title
+row into a flex row (`title (count[, of totalCount]) | titleActions`).
+Every page that doesn't pass them (there are none left untouched by this
+feature, but the fallback path is still correct) renders exactly as
+before. All 10 `PageShell`-based pages follow one identical 3-part
+pattern: call `useSearch(items, (item) => [item.name])` right after the
+existing sort/filter pipeline, pass the filtered array to the table
+instead of the full one, and wire `count`/`totalCount`/`emptyMessage`/
+`titleActions` into `PageShell`. `emptyMessage` becomes a small
+conditional — the search's own "No results found for your search."
+message when active and zero results, otherwise the page's existing
+empty message — reusing `PageShell`'s pre-existing `count === 0 →
+emptyMessage` branch as-is, no new empty-state mechanism.
+
+**Two structural exceptions, both deliberate:**
+- **`CollectionsTable`/`CollectionsPage`** searches `collection.name`
+  only — never the names of crew inside each collection's expanded
+  sub-list. Consistent with how the pagination feature already treats
+  this table (paginates the outer `collections` array, not physical
+  rows); each surviving collection's crew sub-list still renders in full,
+  unfiltered.
+- **Overview page** doesn't use `PageShell` at all (its two "Missing 4
+  Stars" sections are hand-rolled), so it gets the same `useSearch`/
+  `TableSearchBar` building blocks wired by hand, with two fully
+  independent search states — searching one section never touches the
+  other. This is also the one place the feature changes visible behavior
+  beyond adding search: both headings previously showed no count at all;
+  they now show `"(N of N)"` even with no search active, matching every
+  other table's convention now that a search box lives there. Flagged
+  explicitly during design and approved before implementation.
+
+**Delivered via 4 subagent-driven-development tasks** (foundation +
+`CrewTable`'s first page; the remaining 5 `CrewTable` pages; the other 4
+table types; the Overview page). Two task reports each independently hit
+the same first-draft gap — every query they actually tested in the real
+browser matched zero rows, so the feature's actual core behavior (some
+rows surviving a filter, others disappearing) was never observed working,
+only the "no match" and "unfiltered" paths. Both were sent back and
+closed with real partial-match evidence, independently cross-checked by
+the controller against `example-data.json`/`crew-catalog-cache.json`
+before being trusted (exact name lists, exact counts, matching on the
+first attempt every time). The final review traced this recurring gap to
+a genuine plan-authoring defect, not implementer variance: two tasks'
+verification steps said "repeat Task 1's Step 6 checklist" when the
+non-zero-match requirement actually lived in Task 1's Step 7 — an
+off-by-one cross-reference that pointed implementers at the wrong step.
+Noted as a lesson for future plan authoring (state the non-zero-match
+requirement directly in every task, don't cross-reference it), not a
+defect in the shipped feature — both gaps closed with genuine evidence
+either way.
+
+**The `>50`-filtered-pagination scenario was investigated honestly and
+found absent from the real data, then closed on code-inspection grounds
+rather than left as a permanent untested gap.** Two separate tasks tried
+to find a real 3+ character substring producing more than 50 matches —
+including against the largest table in the app, 536 frozen crew — and
+never found one (the closest: `"and"` at 32 matches). The final review
+resolved this properly: `usePagination`'s only length-sensitive logic is
+`showPagination = items.length > pageSize`, a pure comparison with zero
+awareness of whether the array came from a search filter or not — a
+60-row filtered array and a 60-row unfiltered array take the identical
+code path, and the unfiltered ≥50 path is already exercised on every
+large page today. No code path exists that could only be reached by a
+real >50 filtered case, so the absence of one in this player's real data
+doesn't leave a genuine gap.
+
+**Final whole-branch review** independently confirmed the 3-character
+untrimmed threshold, substring (not prefix) matching, no debounce, no
+persistence mechanism anywhere, and — re-reading `usePagination.ts`
+specifically — that a search-driven array shrink can never strand a user
+on an out-of-range page (the hook's clamping is derived fresh every
+render, not synced via an effect). Zero Critical/Important findings. Five
+Minor, all deferred (see "Deferred issues" below).
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-11-table-search-design.md`,
+`docs/superpowers/plans/2026-08-11-table-search-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3578,6 +3711,24 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     limit and cleanly resumed mid-task. Final whole-branch review found
     zero Critical/Important; the only Important finding was this
     document lacking an entry, closed by this same update.
+32. **Table search** (`2026-08-11-table-search`) — deep dive above. A
+    shared `useSearch<T>` hook (3-character threshold, case-insensitive
+    free substring match, no debounce, no persistence) wired into all 13
+    real page call sites across the same 6 tables Table pagination
+    covers, filtering happens entirely at the page level so zero table
+    components needed changes. `PageShell` gained optional `totalCount`/
+    `titleActions` props; the Overview page's two Missing-4-Stars
+    sections got the pattern hand-wired since that page doesn't use
+    `PageShell`. Delivered in 4 tasks; two independently hit the same
+    verification gap (never testing a genuine partial match, only
+    zero-match queries), traced by final review to an off-by-one plan
+    cross-reference rather than implementer error — both closed with
+    real, controller-cross-checked evidence. The `>50`-filtered-
+    pagination scenario, searched for honestly across the largest table
+    in the app and never found in real data, was closed on code-
+    inspection grounds (the pagination hook's length check has zero
+    awareness of a filtered array's provenance). Final review: zero
+    Critical/Important, 5 Minor deferred.
 
 ## Current routes / nav (in order)
 
@@ -3667,6 +3818,25 @@ directly-clickable drawer entries.
 Collected across final reviews, roughly in the order they'd become worth
 doing:
 
+- **`TableSearchBar` has no accessible name beyond its placeholder (new,
+  from the Table search feature):** `RefreshControl.tsx` already sets a
+  precedent for an explicit `aria-label` on a form control in this
+  codebase; `TableSearchBar` should follow it, especially on the Overview
+  page where two identical-placeholder inputs coexist on one page.
+- **Overview's two Missing-4-Stars headings always show `"(N of N)"`,
+  never collapsing to `"(N)"` when no search is active (new, from the
+  Table search feature):** this is exactly what the plan specified (a
+  deliberate, user-approved behavior change), but it diverges from every
+  `PageShell`-based table's "(N)"-when-equal convention stated in the same
+  plan's own Global Constraints. Cosmetic only — a candidate for a small
+  follow-up if it reads as inconsistent in practice.
+- **Pagination page index survives a search-then-clear cycle (new, from
+  the Table search feature):** a user on page 2 who searches (dropping to
+  a 1-page result) and then clears the search lands back on page 2, not
+  page 1 — the two features' state was never explicitly coordinated to
+  reset one when the other changes. Arguably desirable (position
+  preserved) rather than a bug, flagged because nobody explicitly decided
+  this interaction either way.
 - **`TablePagination` footer JSX duplicated 6x verbatim (new, from the
   Table pagination feature):** each of the 6 tables repeats the same
   ~15-line `{showPagination && (<TableFooter>...)}` block. This project's
@@ -4388,7 +4558,11 @@ stale-shaped catalog cache that would have blanked the whole app); and
 most recently table pagination — a shared `usePagination` hook wired into
 all 6 list tables, closing the follow-up the "Two new crew pages" feature
 explicitly scoped out (that feature's 304- and 536-row tables were the
-concrete motivating case). Nothing is currently in flight.
+concrete motivating case); and most recently table search — a shared
+`useSearch` hook wired into all 13 real page call sites across the same 6
+tables, a natural companion to pagination now that large tables can be
+narrowed down instead of just paged through. Nothing is currently in
+flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
