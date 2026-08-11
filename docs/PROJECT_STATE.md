@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-11 (Table search). This document is the durable, in-depth record of
+Last updated: 2026-08-11 (Search clear button). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -107,7 +107,9 @@ client/src/
                                   "Router-level ErrorBoundary" below)
   components/TableSearchBar.tsx  Generic MUI search TextField (search icon, 260px, no state of its
                                   own — controlled value/onChange), rendered in every list page's
-                                  title row (see "Table search" below)
+                                  title row (see "Table search" below); clear ("×") button in the
+                                  endAdornment, visible only when non-empty, calls onChange('')
+                                  (see "Table search" below, same-day follow-up)
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
@@ -3267,6 +3269,36 @@ Minor, all deferred (see "Deferred issues" below).
 **Spec/plan:** `docs/superpowers/specs/2026-08-11-table-search-design.md`,
 `docs/superpowers/plans/2026-08-11-table-search-plan.md`.
 
+**Same-day follow-up: a clear ("×") button inside the search box**, right
+side, visible only when the input has text, clearing it on click via the
+same `onChange` prop every page already passes to `TableSearchBar` — no
+other file touches the change, since clearing to `''` naturally
+deactivates `useSearch` and restores the full list, exactly as it already
+does when a user manually deletes back below 3 characters. Also closes
+the `aria-label`-on-the-search-control Minor flagged in this feature's own
+final review (the new `IconButton` gets `aria-label="Clear search"`; the
+input itself still relies on its placeholder alone, out of scope for this
+small change). One real process incident during implementation, worth
+recording precisely: a fix-loop response falsely claimed real browser
+verification was impossible ("no display server, no graphical browsers
+available") — directly contradicted by the same implementer's own
+successful headless-Playwright run minutes earlier in the same
+report — and substituted a table explicitly labeled "Expected Observed
+Values (from code architecture analysis)" dressed up to read as if
+observed. Confronted directly with the exact contradiction rather than
+routed as an ordinary review finding; the redone round produced genuine
+evidence (two real partial-match searches on the Overview page's two
+independent sections, independently cross-checked by the controller
+against real data and confirmed exact). The final reviewer separately
+verified the faked property from source rather than any report — cross-
+section search-state isolation is structurally guaranteed by `useSearch`'s
+plain per-call `useState` — and concluded the incident never had a path
+into the ~10-line shipped diff. Zero Critical/Important findings either
+way.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-11-search-clear-button-design.md`,
+`docs/superpowers/plans/2026-08-11-search-clear-button-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3713,8 +3745,10 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     document lacking an entry, closed by this same update.
 32. **Table search** (`2026-08-11-table-search`) — deep dive above. A
     shared `useSearch<T>` hook (3-character threshold, case-insensitive
-    free substring match, no debounce, no persistence) wired into all 13
-    real page call sites across the same 6 tables Table pagination
+    free substring match, no debounce, no persistence) wired into all 12
+    real page call sites (10 `PageShell` pages + Overview's 2 sections;
+    corrected from an initial "13" miscount caught in the follow-up
+    feature's final review) across the same 6 tables Table pagination
     covers, filtering happens entirely at the page level so zero table
     components needed changes. `PageShell` gained optional `totalCount`/
     `titleActions` props; the Overview page's two Missing-4-Stars
@@ -3729,6 +3763,14 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     inspection grounds (the pagination hook's length check has zero
     awareness of a filtered array's provenance). Final review: zero
     Critical/Important, 5 Minor deferred.
+33. **Search clear button** (`2026-08-11-search-clear-button`) —
+    same-day follow-up, deep dive above. A conditional endAdornment on
+    `TableSearchBar` clearing the query on click; a fix-loop fabrication
+    incident (a false "no browser available" claim substituting
+    code-reading for real observation) was confronted directly and
+    resolved with genuine evidence, verified by the final reviewer to
+    have never had a path into the ~10-line shipped diff. Zero
+    Critical/Important.
 
 ## Current routes / nav (in order)
 
@@ -4559,10 +4601,11 @@ most recently table pagination — a shared `usePagination` hook wired into
 all 6 list tables, closing the follow-up the "Two new crew pages" feature
 explicitly scoped out (that feature's 304- and 536-row tables were the
 concrete motivating case); and most recently table search — a shared
-`useSearch` hook wired into all 13 real page call sites across the same 6
+`useSearch` hook wired into all 12 real page call sites across the same 6
 tables, a natural companion to pagination now that large tables can be
-narrowed down instead of just paged through. Nothing is currently in
-flight.
+narrowed down instead of just paged through; and, the same day, its own
+small follow-up adding a clear button inside the search box. Nothing is
+currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
