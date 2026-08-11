@@ -1,5 +1,6 @@
-import { InputAdornment, TextField } from '@mui/material';
+import { IconButton, InputAdornment, TextField } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 
 export interface TableSearchBarProps {
   value: string;
@@ -21,6 +22,13 @@ function TableSearchBar({ value, onChange, placeholder = 'Search by name…' }: 
               <SearchIcon fontSize="small" />
             </InputAdornment>
           ),
+          endAdornment: value ? (
+            <InputAdornment position="end">
+              <IconButton size="small" aria-label="Clear search" onClick={() => onChange('')} edge="end">
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
         },
       }}
       sx={{ width: 260 }}
