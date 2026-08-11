@@ -4,8 +4,10 @@ import { filterFrozenDuplicates } from '../crew/filters';
 import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
 import { combineComparators } from '../lib/comparator';
 import { getCollectionsList } from '../collections/getters';
+import { useSearch } from '../lib/useSearch';
 import CrewTable from '../crew/CrewTable';
 import PageShell from '../layout/PageShell';
+import TableSearchBar from '../components/TableSearchBar';
 
 export interface FrozenDuplicatesPageProps {
   maxRarity: number;
@@ -23,6 +25,7 @@ function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
         combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
       )
     : [];
+  const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
 
   const loaded = !loading && !error && !!data;
 
@@ -33,10 +36,14 @@ function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
       error={error}
       onRetry={() => void refresh()}
       loaded={loaded}
-      count={crew.length}
-      emptyMessage="No duplicate crew at this rarity."
+      count={filteredCrew.length}
+      totalCount={crew.length}
+      emptyMessage={
+        active && filteredCrew.length === 0 ? 'No results found for your search.' : 'No duplicate crew at this rarity.'
+      }
+      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
     >
-      <CrewTable crew={crew} collections={collections} showCollectionsNames={false} />
+      <CrewTable crew={filteredCrew} collections={collections} showCollectionsNames={false} />
     </PageShell>
   );
 }

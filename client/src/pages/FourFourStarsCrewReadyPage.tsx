@@ -4,8 +4,10 @@ import { filterByRarity, filterReadyToImmortalize } from '../crew/filters';
 import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
 import { combineComparators } from '../lib/comparator';
 import { getCollectionsList } from '../collections/getters';
+import { useSearch } from '../lib/useSearch';
 import CrewTable from '../crew/CrewTable';
 import PageShell from '../layout/PageShell';
+import TableSearchBar from '../components/TableSearchBar';
 
 function FourFourStarsCrewReadyPage() {
   const { data, loading, error, refresh } = usePlayerData();
@@ -20,6 +22,7 @@ function FourFourStarsCrewReadyPage() {
         combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
       )
     : [];
+  const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
 
   const loaded = !loading && !error && !!data;
 
@@ -30,10 +33,16 @@ function FourFourStarsCrewReadyPage() {
       error={error}
       onRetry={() => void refresh()}
       loaded={loaded}
-      count={crew.length}
-      emptyMessage="No crew ready to immortalize at 4/4 stars."
+      count={filteredCrew.length}
+      totalCount={crew.length}
+      emptyMessage={
+        active && filteredCrew.length === 0
+          ? 'No results found for your search.'
+          : 'No crew ready to immortalize at 4/4 stars.'
+      }
+      titleActions={<TableSearchBar value={query} onChange={setQuery} />}
     >
-      <CrewTable crew={crew} collections={collections} showCollectionsNames={true} />
+      <CrewTable crew={filteredCrew} collections={collections} showCollectionsNames={true} />
     </PageShell>
   );
 }
