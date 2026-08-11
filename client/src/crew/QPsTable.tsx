@@ -5,18 +5,17 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material';
 import type { CrewMember } from '../types/crew';
 import { getQPLevel, getQPProgressDisplay, getQPPointsNeeded, getQPRoundsLeft, QP_MAX_LEVEL } from './getters';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
 import StatusChip from '../components/StatusChip';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface QPsTableProps {
   crew: CrewMember[];
@@ -71,21 +70,15 @@ function QPsTable({ crew }: QPsTableProps) {
             );
           })}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={crew.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={8}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={crew.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={8}
+        />
       </Table>
     </TableContainer>
   );

@@ -6,17 +6,16 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material';
 import type { Ship } from '../types/ship';
 import type { OwnedItem } from '../types/item';
 import { getShipDisplayLevel, getShipSchematicsDisplay, getShipSchematicsProgress } from './getters';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import Thumbnail from '../assets/Thumbnail';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface ShipsTableProps {
   ships: Ship[];
@@ -56,21 +55,15 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
             </TableRow>
           ))}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={ships.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={5}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={ships.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={5}
+        />
       </Table>
     </TableContainer>
   );

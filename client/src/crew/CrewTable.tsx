@@ -4,18 +4,17 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
 } from '@mui/material';
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
 import { getCrewCollections } from '../collections/getters';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface CrewTableProps {
   crew: CrewMember[];
@@ -64,21 +63,15 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
             );
           })}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={crew.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={showCollectionsNames ? 8 : 7}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={crew.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={showCollectionsNames ? 8 : 7}
+        />
       </Table>
     </TableContainer>
   );

@@ -6,9 +6,7 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material';
@@ -17,8 +15,9 @@ import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
 import { getCuratedRewards } from './rewards';
 import { isMaxedOut } from './sorters';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import CollectionCrewList from './CollectionCrewList';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface CollectionsTableProps {
   collections: Collection[];
@@ -80,21 +79,15 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
             );
           })}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={collections.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={6}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={collections.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={6}
+        />
       </Table>
     </TableContainer>
   );

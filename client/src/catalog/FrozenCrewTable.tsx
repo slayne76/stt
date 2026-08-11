@@ -4,16 +4,15 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
 } from '@mui/material';
 import type { CatalogEntry } from '../types/catalogEntry';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import StarRating from '../crew/StarRating';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface FrozenCrewTableProps {
   crew: CatalogEntry[];
@@ -47,21 +46,15 @@ function FrozenCrewTable({ crew }: FrozenCrewTableProps) {
             </TableRow>
           ))}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={crew.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={4}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={crew.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={4}
+        />
       </Table>
     </TableContainer>
   );

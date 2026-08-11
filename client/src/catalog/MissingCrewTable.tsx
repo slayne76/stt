@@ -4,17 +4,16 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
-  TablePagination,
   TableRow,
 } from '@mui/material';
 import type { CatalogEntry } from '../types/catalogEntry';
 import type { Collection } from '../types/collection';
 import { getCrewCollections } from '../collections/getters';
-import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
+import { usePagination } from '../lib/usePagination';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
+import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface MissingCrewTableProps {
   crew: CatalogEntry[];
@@ -54,21 +53,15 @@ function MissingCrewTable({ crew, collections }: MissingCrewTableProps) {
             );
           })}
         </TableBody>
-        {showPagination && (
-          <TableFooter>
-            <TableRow>
-              <TablePagination
-                count={crew.length}
-                page={page}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handlePageSizeChange}
-                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                colSpan={6}
-              />
-            </TableRow>
-          </TableFooter>
-        )}
+        <TablePaginationFooter
+          show={showPagination}
+          count={crew.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          colSpan={6}
+        />
       </Table>
     </TableContainer>
   );
