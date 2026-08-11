@@ -1,4 +1,4 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getCrewList } from '../crew/getters';
 import { filterQPEligible } from '../crew/filters';
 import { byQPOnHoldAsc, byQPLevelDesc, byQPBitsDesc, byNameAsc, sortCrew } from '../crew/sorters';
@@ -9,7 +9,7 @@ import PageShell from '../layout/PageShell';
 import TableSearchBar from '../components/TableSearchBar';
 
 function QPsPage() {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const crew = data
     ? sortCrew(
@@ -18,8 +18,6 @@ function QPsPage() {
       )
     : [];
   const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell

@@ -1,4 +1,4 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedItems } from '../crew/getters';
 import { getCollectionsList } from '../collections/getters';
 import {
@@ -12,7 +12,7 @@ import PageShell from '../layout/PageShell';
 import TableSearchBar from '../components/TableSearchBar';
 
 function CollectionsPage() {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const rawCollections = data ? getCollectionsList(data) : [];
   const crew = data ? getCrewList(data) : [];
@@ -31,8 +31,6 @@ function CollectionsPage() {
     filteredItems: filteredCollections,
     active,
   } = useSearch(collections, (c) => [c.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell

@@ -1,4 +1,4 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getOwnedItems } from '../crew/getters';
 import { combineComparators } from '../lib/comparator';
 import { getShipList } from '../ships/getters';
@@ -15,7 +15,7 @@ export interface ShipsPageProps {
 }
 
 function ShipsPage({ rarity, title }: ShipsPageProps) {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const items = data ? getOwnedItems(data) : [];
   const ships = data
@@ -25,8 +25,6 @@ function ShipsPage({ rarity, title }: ShipsPageProps) {
       )
     : [];
   const { query, setQuery, filteredItems: filteredShips, active } = useSearch(ships, (s) => [s.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell
