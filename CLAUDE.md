@@ -2,9 +2,21 @@
 
 ## Browser automation for verification (real-browser task checks, code review)
 
-**Use the `playwright` npm package only** — it's a pinned root `devDependency`
-(`package.json`), already installed via a normal `npm install` in every
-worktree. Drive it directly as a library with a throwaway script:
+**Prefer the `playwright`/`chrome-devtools` MCP servers first, in a fresh
+session.** Confirmed working end-to-end 2026-08-11 (real `navigate`/
+`new_page`, `snapshot`, `click`, and `fill`/`type` calls against the running
+dev app, both tools independently, not just a `claude mcp list` connection
+check). If `ToolSearch` doesn't surface `mcp__playwright__*` /
+`mcp__chrome-devtools__*` tool schemas, or a call fails partway through, that
+means the servers didn't load into (or dropped out of) *this* session — a
+known limitation for sessions that were already running before the servers
+were configured, or long-running sessions in general, not evidence the tools
+are broken. In that case fall back to the raw `playwright` library below
+rather than retrying the MCP call repeatedly.
+
+**Fallback: the `playwright` npm package**, driven directly as a library —
+it's a pinned root `devDependency` (`package.json`), already installed via a
+normal `npm install` in every worktree:
 
 ```js
 const { chromium } = require('playwright'); // or: import { chromium } from 'playwright';
@@ -23,10 +35,6 @@ const browser = await chromium.launch(); // headless by default — this works f
   needed, not configured, and a prior attempt left a broken, empty download
   in `~/.cache/puppeteer` while a report falsely claimed no browser was
   available at all.
-- Reach for the `playwright`/`chrome-devtools` MCP servers as the primary
-  tool — they're configured but have repeatedly disconnected mid-session in
-  this sandbox; the raw `playwright` library is the reliable, established
-  path.
 
 **Scope:** this tool is for verification only (task-level and code-review
 browser checks) — never a dependency of the shipped application itself.
