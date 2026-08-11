@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-10 (Two new crew pages). This document is the durable, in-depth record of
+Last updated: 2026-08-11 (Table pagination). This document is the durable, in-depth record of
 what has been built, why, and how the trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
@@ -109,6 +109,9 @@ client/src/
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
                                  "Sorting design")
+  lib/usePagination.ts          usePagination<T>(items) — shared page/pageSize state, safe
+                                 clamping, dynamic show/hide; used by all 6 list tables (see
+                                 "Table pagination" below)
   types/
     player.ts                  PlayerData = Record<string, unknown> (deliberately loose)
     crew.ts                    CrewMember interface (see below; `portrait?` added for the image column)
@@ -140,10 +143,12 @@ client/src/
                                 from byMaxRarityDesc) added by "Two new crew pages" below
     CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/
                                  Total-collections/Collections-names — the last two conditional on a
-                                 required `showCollectionsNames` prop; see "Collections columns" below)
+                                 required `showCollectionsNames` prop; see "Collections columns"
+                                 below), paginated (see "Table pagination" below)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds left;
-                                  see "QPs page" and "StatusChip component and QPs Ready chip")
+                                  see "QPs page" and "StatusChip component and QPs Ready chip"),
+                                  paginated (see "Table pagination" below)
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
                                 getCollectionCount, getCollectionCrew (reverse direction);
@@ -154,7 +159,8 @@ client/src/
     rewards.ts                 getCuratedRewards — the reward/buff display allowlist
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc
-    CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew)
+    CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew),
+                                 paginated by collection, not row (see "Table pagination" below)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted; its "Ready"/
                                  needs-work chips now render via the shared `components/StatusChip.tsx`
                                  — see "StatusChip component and QPs Ready chip")
@@ -165,7 +171,8 @@ client/src/
     filters.ts                 filterIncompleteShipsByRarity
     sorters.ts                 byLevelDesc, byLevelProgressDesc, byMissingSchematicsAsc,
                                 byNameAsc, sortShips (reuses lib/comparator.ts's Comparator/combineComparators)
-    ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics)
+    ShipsTable.tsx               Shared table renderer (#/Image/Ship/Level/Schematics), paginated
+                                 (see "Table pagination" below)
   catalog/                       Pure logic over the external crew catalog (see "Crew catalog and
                                  Overview unique-crew counts" and "Missing 4 Stars tables")
     getters.ts                 getArchetypeMaxRarityMap, getCatalogCount (the `inPortal`
@@ -180,10 +187,13 @@ client/src/
                                  crew/sorters.ts) added by "Two new crew pages" below
     MissingCrewTable.tsx         Shared table renderer (#/Image/Name/DataScore/Total-collections/
                                  Collections-names — see "Collections columns" below), used twice on
-                                 the Overview page (in-portal / not-in-portal)
+                                 the Overview page (in-portal / not-in-portal); paginated (see
+                                 "Table pagination" below), though the Overview tables themselves
+                                 never exceed 50 rows in practice
     FrozenCrewTable.tsx          Shared table renderer (#/Image/Stars/Name only — frozen crew are
                                  always fully immortalized, so Level/Items/Collections would be
-                                 constant/meaningless; see "Two new crew pages" below)
+                                 constant/meaningless; see "Two new crew pages" below), paginated
+                                 (see "Table pagination" below)
   pages/
     OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
                                  (owned/total/pct%, see "Crew catalog and Overview unique-crew
@@ -3006,6 +3016,124 @@ a baseline for that follow-up to improve on.
 **Spec/plan:** `docs/superpowers/specs/2026-08-10-two-new-crew-pages-design.md`,
 `docs/superpowers/plans/2026-08-10-two-new-crew-pages-plan.md`.
 
+## Table pagination
+
+The follow-up the "Two new crew pages" feature explicitly set up: all 6
+list tables in the app (`CrewTable`, `MissingCrewTable`, `FrozenCrewTable`,
+`QPsTable`, `ShipsTable`, `CollectionsTable`) now paginate, with a
+dropdown (50/100/150/200, default 50) in a `TablePagination` control
+inside each table's `TableFooter`. Direct, user-specified requirements:
+no persistence across navigation/reload, no fixed/padded row height (the
+table visually shrinks on a partial last page — deliberate, confirmed by
+the user as the preferred UX over padding to a constant height), no
+route/URL change when switching pages (rows swap in place), and the
+control shown only when the *currently selected* page size can't fit
+every row — i.e. `items.length > pageSize`, dynamic, not a fixed `> 50`
+check (so e.g. a 62-row table shows pagination at size 50 but hides it the
+moment the user selects 100).
+
+**One shared hook, not 6 copies of page-state logic** —
+`client/src/lib/usePagination.ts`:
+
+```ts
+export const PAGE_SIZE_OPTIONS = [50, 100, 150, 200];
+const DEFAULT_PAGE_SIZE = 50;
+
+export function usePagination<T>(items: T[]): UsePaginationResult<T> {
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  const maxPage = Math.max(0, Math.ceil(items.length / pageSize) - 1);
+  const clampedPage = Math.min(page, maxPage);
+
+  const start = clampedPage * pageSize;
+  const pageItems = items.slice(start, start + pageSize);
+  const showPagination = items.length > pageSize;
+  // ...handlePageChange sets page; handlePageSizeChange sets pageSize and resets page to 0
+  return { pageItems, page: clampedPage, pageSize, showPagination, handlePageChange, handlePageSizeChange };
+}
+```
+
+**The clamping is what makes this safe without a `useEffect`.** `page` is
+plain `useState`, but `clampedPage` — never raw `page` — is what's
+returned, what slices `pageItems`, and what's fed to MUI's `page` prop.
+Recomputing the clamp fresh every render (rather than syncing it back into
+state via an effect) means a shrinking item list — e.g. a refresh that
+returns fewer rows than the page the user was on — can never render blank
+or hand MUI an out-of-range page; it silently and correctly falls back
+toward the new last page. Placed in `lib/` (not `hooks/`, where
+`usePlayerData`/`useCrewCatalog` live) as a deliberate choice: those two
+are the app's single sources of truth for *data fetching*, while this hook
+is domain-neutral UI-state logic with no fetch/context involved — closer
+in spirit to `lib/comparator.ts` than to the data hooks, even though it
+does call `useState` internally.
+
+**Every one of the 6 call sites follows the identical pattern:**
+destructure `usePagination(itemsArray)`, map over `pageItems` instead of
+the full array, use `page * pageSize + index + 1` for the `#` column
+(continuous numbering across pages — the pre-existing `index + 1` would
+have restarted at 1 on every page), and add
+`{showPagination && (<TableFooter><TableRow><TablePagination
+count={itemsArray.length} page={page} onPageChange={handlePageChange}
+rowsPerPage={pageSize} onRowsPerPageChange={handlePageSizeChange}
+rowsPerPageOptions={PAGE_SIZE_OPTIONS} colSpan={N} /></TableRow></TableFooter>)}`
+after `</TableBody>`. `colSpan` matches each table's real column count:
+`CrewTable` 7 or 8 (conditional on `showCollectionsNames`, same condition
+that already governed its header), `MissingCrewTable` 6, `FrozenCrewTable`
+4, `QPsTable` 8, `ShipsTable` 5, `CollectionsTable` 6.
+
+**`CollectionsTable` is the one structural exception, planned from the
+start, not discovered mid-implementation.** Every other table maps one
+item to one `<TableRow>`; `CollectionsTable` maps one collection to a
+`<Fragment>` containing *two* rows (the summary row plus an always-expanded
+crew sub-list row). Paginating individual `<TableRow>`s here would have
+split a collection's summary onto one page and its crew list onto another.
+Instead, `usePagination` is called on the outer `collections` array itself
+(88 items) — each `Fragment`, both its rows, moves as one unit per page.
+`count={collections.length}` in the pagination control reflects
+collections, not physical DOM rows, matching the "paginate by collection"
+scoping decision made during this feature's brainstorming.
+
+**Delivered via 3 subagent-driven-development tasks** (hook + `CrewTable`;
+`MissingCrewTable`/`FrozenCrewTable`/`QPsTable`; `ShipsTable`/
+`CollectionsTable`), each independently verified against real data before
+being trusted — continuing the practice established by "Two new crew
+pages" of the controller cross-checking implementer claims rather than
+accepting report narratives at face value. Concretely: Task 1's report
+read as a close paraphrase of its brief's predicted numbers with no raw
+artifacts, so the controller ran its own independent Playwright session
+against a real dev server rather than accept-or-reject on the report
+alone (confirmed: 50 rows page 1, pagination control present, URL
+unchanged across a page change, page 2 starting at row 51 — matching both
+the report and the task reviewer's code analysis). Task 3's report cited
+specific `CollectionsTable` data (Ruthless Aggression 114/120 milestone 8;
+Animated 61/80 milestone 6, 9 crew, "Bold Boimler" first in the sub-list);
+the controller independently recomputed all of it from `example-data.json`
+(exact match) and visually inspected the claimed screenshot (genuine,
+matched exactly). Task 3 was also interrupted mid-task by a platform
+session-limit reset and resumed on the same subagent after diffing its
+partial work to confirm it was already complete and correct — no rework
+needed. One incidental cleanup: the Task 3 implementer had left an
+unauthorized, uncommitted `@playwright/test` devDependency addition in
+`package.json`/`package-lock.json` (not part of the actual shipped commit,
+outside the plan's scope) — reverted before merge.
+
+**Final whole-branch review** (the first review pass with visibility
+across all 3 tasks' diffs at once) independently re-verified the shared
+hook's clamping logic against edge cases no single task's reviewer could
+have exercised (the `CollectionsTable` 2-rows-per-item case didn't exist
+until Task 3), re-checked every `colSpan` against its table's actual header
+cell count, and confirmed structurally — by tracing `App.tsx`'s route
+table — that no route reuses a table component instance across navigation,
+so "resets on navigation" holds by React's normal unmount/remount
+behavior rather than needing an explicit reset. Zero Critical/Important
+findings. One Important, doc-only: this file itself had no entry yet for
+the feature — closed by this update. Two Minor follow-ups noted, not
+acted on (see "Deferred issues" below).
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-10-table-pagination-design.md`,
+`docs/superpowers/plans/2026-08-10-table-pagination-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -3440,6 +3568,16 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     label casing mismatch) fixed in the same round. Pagination was
     scoped out from the start into its own planned follow-up — these two
     pages' real row counts are the concrete argument for it.
+31. **Table pagination** (`2026-08-10-table-pagination`) — deep dive
+    above. A shared `usePagination<T>` hook (50/100/150/200 dropdown,
+    default 50, no persistence, no route change, visible only when the
+    current page size can't fit every row) wired identically into all 6
+    list tables; `CollectionsTable` paginates by collection, not row, to
+    keep each collection's summary+crew-sublist `Fragment` intact across
+    pages. Delivered in 3 tasks, one interrupted by a platform session
+    limit and cleanly resumed mid-task. Final whole-branch review found
+    zero Critical/Important; the only Important finding was this
+    document lacking an entry, closed by this same update.
 
 ## Current routes / nav (in order)
 
@@ -3529,6 +3667,20 @@ directly-clickable drawer entries.
 Collected across final reviews, roughly in the order they'd become worth
 doing:
 
+- **`TablePagination` footer JSX duplicated 6x verbatim (new, from the
+  Table pagination feature):** each of the 6 tables repeats the same
+  ~15-line `{showPagination && (<TableFooter>...)}` block. This project's
+  own precedent (`StatusChip` extracted at 2 call sites, `PageShell`
+  similarly) suggests a `components/TablePaginationFooter.tsx` taking
+  `{ show, count, page, pageSize, onPageChange, onPageSizeChange, colSpan }`
+  would remove the duplication and give pagination UI a single point of
+  change. Explicitly out of the approved plan's scope — noted as a
+  follow-up, not a defect.
+- **`usePagination.ts` placement in `lib/` vs `hooks/` (new, from the
+  Table pagination feature):** a deliberate call (see "Table pagination"
+  above for the reasoning — domain-neutral logic vs. the app's two
+  data-fetching hooks), not an oversight, but worth reconsidering if a
+  future hook blurs that line further.
 - **Upgradable-status dual computation (new, from the Upgradable chip
   feature):** `CollectionsPage.tsx`'s sort factory and `CollectionsTable.tsx`'s
   per-row chip check each independently call `getCollectionCrew` and
@@ -4232,8 +4384,11 @@ whole-number to 2-decimal ceiling-rounded display; and most recently the
 Missing 4 Stars tables — two more Overview tables listing unowned 4★
 crew split by portal availability, sorted by DataScore, whose final
 review caught and closed a real bug already live in the deployment (a
-stale-shaped catalog cache that would have blanked the whole app).
-Nothing is currently in flight.
+stale-shaped catalog cache that would have blanked the whole app); and
+most recently table pagination — a shared `usePagination` hook wired into
+all 6 list tables, closing the follow-up the "Two new crew pages" feature
+explicitly scoped out (that feature's 304- and 536-row tables were the
+concrete motivating case). Nothing is currently in flight.
 
 **Plausible next asks, roughly by how directly they follow from what's
 already built:** with the `getShipSchematicsProgress` guard, the
