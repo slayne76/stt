@@ -1,8 +1,7 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getCrewList, getOwnedItems } from '../crew/getters';
 import { filterByRarity, filterReadyToImmortalize } from '../crew/filters';
-import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
-import { combineComparators } from '../lib/comparator';
+import { defaultCrewComparator, sortCrew } from '../crew/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
 import CrewTable from '../crew/CrewTable';
@@ -10,21 +9,16 @@ import PageShell from '../layout/PageShell';
 import TableSearchBar from '../components/TableSearchBar';
 
 function FourFourStarsCrewReadyPage() {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const collections = data ? getCollectionsList(data) : [];
   const crew = data
     ? sortCrew(
-        filterReadyToImmortalize(
-          filterByRarity(getCrewList(data), { rarity: 4, maxRarity: 4 }),
-          getOwnedItems(data)
-        ),
-        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
+        filterReadyToImmortalize(filterByRarity(getCrewList(data), { rarity: 4, maxRarity: 4 }), getOwnedItems(data)),
+        defaultCrewComparator(collections)
       )
     : [];
   const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell

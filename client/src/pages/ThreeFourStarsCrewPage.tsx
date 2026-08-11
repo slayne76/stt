@@ -1,8 +1,7 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getCrewList } from '../crew/getters';
 import { filterByRarity } from '../crew/filters';
-import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
-import { combineComparators } from '../lib/comparator';
+import { defaultCrewComparator, sortCrew } from '../crew/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
 import CrewTable from '../crew/CrewTable';
@@ -10,18 +9,13 @@ import PageShell from '../layout/PageShell';
 import TableSearchBar from '../components/TableSearchBar';
 
 function ThreeFourStarsCrewPage() {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const collections = data ? getCollectionsList(data) : [];
   const crew = data
-    ? sortCrew(
-        filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 }),
-        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
-      )
+    ? sortCrew(filterByRarity(getCrewList(data), { rarity: 3, maxRarity: 4 }), defaultCrewComparator(collections))
     : [];
   const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell

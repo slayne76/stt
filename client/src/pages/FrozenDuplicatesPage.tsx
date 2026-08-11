@@ -1,8 +1,7 @@
-import { usePlayerData } from '../hooks/usePlayerData';
+import { usePageData } from '../hooks/usePageData';
 import { getCrewList, getFrozenCrewArchetypeIds } from '../crew/getters';
 import { filterFrozenDuplicates } from '../crew/filters';
-import { byCollectionCountDesc, byEquipmentSlotsRemainingDesc, byLevelDesc, byNameAsc, sortCrew } from '../crew/sorters';
-import { combineComparators } from '../lib/comparator';
+import { defaultCrewComparator, sortCrew } from '../crew/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
 import CrewTable from '../crew/CrewTable';
@@ -15,19 +14,17 @@ export interface FrozenDuplicatesPageProps {
 }
 
 function FrozenDuplicatesPage({ maxRarity, title }: FrozenDuplicatesPageProps) {
-  const { data, loading, error, refresh } = usePlayerData();
+  const { data, loading, error, refresh, loaded } = usePageData();
 
   const collections = data ? getCollectionsList(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const crew = data
     ? sortCrew(
         filterFrozenDuplicates(getCrewList(data), frozenArchetypeIds, maxRarity),
-        combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc)
+        defaultCrewComparator(collections)
       )
     : [];
   const { query, setQuery, filteredItems: filteredCrew, active } = useSearch(crew, (c) => [c.name]);
-
-  const loaded = !loading && !error && !!data;
 
   return (
     <PageShell
