@@ -6,7 +6,9 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableFooter,
   TableHead,
+  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material';
@@ -25,6 +27,7 @@ import {
   sortCrew,
 } from '../crew/sorters';
 import { combineComparators } from '../lib/comparator';
+import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import CollectionCrewList from './CollectionCrewList';
 
 export interface CollectionsTableProps {
@@ -35,6 +38,9 @@ export interface CollectionsTableProps {
 }
 
 function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: CollectionsTableProps) {
+  const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } =
+    usePagination(collections);
+
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -49,7 +55,7 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
           </TableRow>
         </TableHead>
         <TableBody>
-          {collections.map((collection, index) => {
+          {pageItems.map((collection, index) => {
             const qualifyingCrew = sortCrew(
               getCollectionCrew(collection, crew, items, frozenArchetypeIds),
               combineComparators(
@@ -68,7 +74,7 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
             return (
               <Fragment key={collection.id}>
                 <TableRow>
-                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{page * pageSize + index + 1}</TableCell>
                   <TableCell>
                     {collection.name}
                     {upgradable && <Chip label="Upgradable" size="small" color="info" sx={{ ml: 1 }} />}
@@ -93,6 +99,21 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
             );
           })}
         </TableBody>
+        {showPagination && (
+          <TableFooter>
+            <TableRow>
+              <TablePagination
+                count={collections.length}
+                page={page}
+                onPageChange={handlePageChange}
+                rowsPerPage={pageSize}
+                onRowsPerPageChange={handlePageSizeChange}
+                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                colSpan={6}
+              />
+            </TableRow>
+          </TableFooter>
+        )}
       </Table>
     </TableContainer>
   );

@@ -1,7 +1,21 @@
-import { Box, LinearProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import {
+  Box,
+  LinearProgress,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableFooter,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Typography,
+} from '@mui/material';
 import type { Ship } from '../types/ship';
 import type { OwnedItem } from '../types/item';
 import { getShipDisplayLevel, getShipSchematicsDisplay, getShipSchematicsProgress } from './getters';
+import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import Thumbnail from '../assets/Thumbnail';
 
 export interface ShipsTableProps {
@@ -10,6 +24,8 @@ export interface ShipsTableProps {
 }
 
 function ShipsTable({ ships, items }: ShipsTableProps) {
+  const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(ships);
+
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -23,9 +39,9 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {ships.map((s, index) => (
+          {pageItems.map((s, index) => (
             <TableRow key={s.id}>
-              <TableCell>{index + 1}</TableCell>
+              <TableCell>{page * pageSize + index + 1}</TableCell>
               <TableCell>
                 <Thumbnail asset={s.icon} />
               </TableCell>
@@ -40,6 +56,21 @@ function ShipsTable({ ships, items }: ShipsTableProps) {
             </TableRow>
           ))}
         </TableBody>
+        {showPagination && (
+          <TableFooter>
+            <TableRow>
+              <TablePagination
+                count={ships.length}
+                page={page}
+                onPageChange={handlePageChange}
+                rowsPerPage={pageSize}
+                onRowsPerPageChange={handlePageSizeChange}
+                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                colSpan={5}
+              />
+            </TableRow>
+          </TableFooter>
+        )}
       </Table>
     </TableContainer>
   );
