@@ -1,7 +1,7 @@
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
-import type { Comparator } from '../lib/comparator';
+import { combineComparators, type Comparator } from '../lib/comparator';
 import { getEquipmentSlotsRemaining, getCrewTier, getQPLevel, getQPPointsNeeded, type CrewTier } from './getters';
 import { getCollectionCount } from '../collections/getters';
 
@@ -33,6 +33,10 @@ export function byNameAsc(a: CrewMember, b: CrewMember): number {
 
 export function byRarityDesc(a: CrewMember, b: CrewMember): number {
   return b.rarity - a.rarity;
+}
+
+export function defaultCrewComparator(collections: Collection[]): Comparator<CrewMember> {
+  return combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc, byCollectionCountDesc(collections), byNameAsc);
 }
 
 export function sortCrew(crew: CrewMember[], comparator: Comparator<CrewMember>): CrewMember[] {
