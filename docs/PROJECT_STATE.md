@@ -1,8 +1,8 @@
 # STT Tracker — Project State
 
 Last updated: 2026-08-11 (Small cleanup bundle). This document is the
-durable, in-depth record of
-what has been built, why, and how the trickier pieces of logic work. It's
+durable, in-depth record of what has been built, why, and how the
+trickier pieces of logic work. It's
 meant to let a fresh session (or a fresh person) get back up to speed
 without re-deriving anything from scratch. For phase-by-phase rationale,
 the full spec/plan trail is in `docs/superpowers/specs/` and
@@ -95,7 +95,7 @@ client/src/
                                  unique-crew counts")
   layout/AppLayout.tsx          AppBar + Drawer nav shell; hosts <RefreshControl /> (below) for the
                                  topbar's refresh trigger; wraps `<Outlet />` in `ErrorBoundary`, keyed
-                                 by `location.pathname` (see "Router-level ErrorBoundary" below) — its
+                                 by `location.key` (see "Router-level ErrorBoundary" below) — its
                                  first non-page `usePlayerData()` consumer
   layout/RefreshControl.tsx     Dropdown + Apply button covering player data / assets / catalog /
                                  all-three-at-once refresh (see "Consolidated refresh dropdown" below)
@@ -2642,11 +2642,17 @@ the boundary, unchanged; a crash in that shell layer is still uncaught,
 same as before — a deliberate, scoped decision (no concrete trigger found
 there), not an oversight.
 
-**Auto-reset via `key={location.pathname}`:** wrapping `<Outlet />` in
-`<ErrorBoundary key={location.pathname}>` means React remounts a fresh
-`ErrorBoundary` instance whenever the route changes, clearing any stale
-`hasError` state automatically — navigating to a different page always
-works, without needing to click "Try again" first. This keeps
+**Auto-reset via `key={location.key}`:** wrapping `<Outlet />` in
+`<ErrorBoundary key={location.key}>` means React remounts a fresh
+`ErrorBoundary` instance (and, with it, the page component underneath)
+on every navigation, clearing any stale `hasError` state automatically.
+`location.key` changes on *every* navigation event, not just when the
+pathname changes, so there are now two distinct triggers for a remount:
+navigating to a genuinely different page (pathname changes — always
+remounted, same as before this fix) and re-navigating to the *same* page
+via its own nav entry (pathname unchanged, but `location.key` still
+changes — new as of the Small cleanup bundle feature; previously, keyed
+on `location.pathname`, this was a no-op). Either way this keeps
 `ErrorBoundary` itself free of any react-router dependency; the
 route-awareness lives entirely in `AppLayout`, which already owns routing
 concerns (the same reasoning already applied to `NavGroupItem`).
@@ -2655,18 +2661,29 @@ concerns (the same reasoning already applied to `NavGroupItem`).
 scale** (per the final review): `PlayerDataProvider`/`CrewCatalogProvider`
 wrap `BrowserRouter` in `App.tsx`, sitting *above* the keyed boundary, so
 remounting on navigation can never remount those providers or re-trigger
-their fetch effects; and no code under `<Outlet />` persists state across
-navigations (no `useSearchParams`, `localStorage`, `sessionStorage`, or
-scroll-position tracking anywhere in the client), so the remount never
-discards anything a page would have wanted to keep.
+their fetch effects. The second risk is more nuanced since the
+`location.key` fix: no code under `<Outlet />` persists state through a
+mechanism that would survive a remount anyway (no `useSearchParams`,
+`localStorage`, `sessionStorage`, or scroll-position tracking anywhere in
+the client) — but ordinary in-memory `useState` is a different matter.
+`useSearch`'s query state and `usePagination`'s page/pageSize state are
+both plain per-call `useState`, and a same-pathname re-navigation now
+genuinely remounts the page component that owns them (it never did
+before this fix), so that state IS reset. Confirmed empirically by the
+final reviewer: a search query and the current pagination page both
+reverted to their defaults after clicking a page's own nav entry while
+already on it.
 
-**Known, accepted gap:** keying on `location.pathname` rather than
-`location.key` means re-clicking the *current* page's own nav entry while
-its fallback is showing won't auto-clear it — mitigated by the always-
-visible "Try again" button, and tracked as a Minor deferred finding (see
-"Deferred issues" below) rather than fixed, since the one-token
-`location.key` swap wasn't judged worth a fix round for a case with an
-obvious in-place workaround.
+**Known, accepted trade-off:** the `location.key` swap shipped in the
+Small cleanup bundle feature, and re-clicking a crashed page's own nav
+entry now correctly clears the fallback — the originally-reported gap is
+fixed, not merely mitigated. The trade-off that comes with it is the
+state-reset behavior described above: a same-pathname nav click now also
+resets that page's local search/pagination state, even when there's no
+error to clear. This was judged an acceptable, deliberate UX choice at
+final review — click-to-reset on your own nav entry is a common,
+defensible pattern — rather than something to code around or a
+regression to fix further.
 
 **Verification:** no automated test framework exists in this project (by
 repeated, deliberate choice); verified via a real running dev server with
@@ -3650,8 +3667,9 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     dive below. Closes the "no `ErrorBoundary` anywhere in this client"
     gap flagged by the previous feature. A new class component,
     `components/ErrorBoundary.tsx`, wraps `<Outlet />` in `AppLayout`,
-    keyed by `location.pathname` so navigating to a new route auto-clears
-    a tripped boundary. Single-task plan, zero findings at the task
+    keyed by `location.pathname` (later changed to `location.key` — see
+    entry #34) so navigating to a new route auto-clears a tripped
+    boundary. Single-task plan, zero findings at the task
     review, zero Critical/Important at the final whole-branch review
     (5 Minor findings, all deferred — see "Deferred issues" below).
     First feature whose implementer was dispatched on the cheapest model
@@ -3777,7 +3795,15 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     (see the three now-resolved entries above): `AppLayout.tsx`'s
     `ErrorBoundary` now keys on `location.key` instead of
     `location.pathname`, so re-clicking a crashed page's own nav entry
-    actually clears the fallback; `TableSearchBar` gained a required
+    actually clears the fallback. The final reviewer found a previously-
+    undocumented side effect: because `location.key` changes on every
+    navigation, not just pathname changes, re-clicking a page's own nav
+    entry now also remounts that page even with no error present,
+    resetting its local `useState`-backed search/pagination state — this
+    was confirmed via a real browser (search query and pagination page
+    both observed reverting to default) and judged an acceptable
+    trade-off rather than a regression to fix (see "Router-level
+    ErrorBoundary" above). `TableSearchBar` gained a required
     `ariaLabel` prop (set via `slotProps.htmlInput`) with a distinguishing
     value at all 12 call sites; and `CrewTable`/`MissingCrewTable` now
     bind `getCrewCollections`'s result once per row instead of calling it
