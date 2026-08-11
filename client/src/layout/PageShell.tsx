@@ -8,17 +8,33 @@ export interface PageShellProps {
   onRetry: () => void;
   loaded: boolean;
   count: number;
+  totalCount?: number;
   emptyMessage: string;
+  titleActions?: ReactNode;
   children: ReactNode;
 }
 
-function PageShell({ title, loading, error, onRetry, loaded, count, emptyMessage, children }: PageShellProps) {
+function PageShell({
+  title,
+  loading,
+  error,
+  onRetry,
+  loaded,
+  count,
+  totalCount,
+  emptyMessage,
+  titleActions,
+  children,
+}: PageShellProps) {
   return (
     <Stack spacing={2}>
-      <Typography variant="h4">
-        {title}
-        {loaded ? ` (${count})` : ''}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+        <Typography variant="h4">
+          {title}
+          {loaded ? ` (${count}${totalCount !== undefined && totalCount !== count ? ` of ${totalCount}` : ''})` : ''}
+        </Typography>
+        {titleActions}
+      </Stack>
 
       {loading && <CircularProgress />}
       {error && (
