@@ -18,8 +18,13 @@ import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '..
 import { getArchetypeMaxRarityMap, getCatalogCount, getMissingCrew } from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
 import { getCollectionsList } from '../collections/getters';
+import { useSearch } from '../lib/useSearch';
 import MissingCrewTable from '../catalog/MissingCrewTable';
+import TableSearchBar from '../components/TableSearchBar';
 import type { PlayerIdentity } from '../types/player';
+import type { CatalogEntry } from '../types/catalogEntry';
+
+const getCatalogEntryName = (c: CatalogEntry) => [c.name];
 
 const FIELD_LABELS: Record<keyof PlayerIdentity, string> = {
   playerId: 'Player ID',
@@ -47,6 +52,8 @@ function OverviewPage() {
   const owned4 = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, 4);
   const missingInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, true)].sort(byDataScoreDesc) : [];
   const missingNotInPortal = catalog ? [...getMissingCrew(catalog, owned4, 4, false)].sort(byDataScoreDesc) : [];
+  const inPortalSearch = useSearch(missingInPortal, getCatalogEntryName);
+  const notInPortalSearch = useSearch(missingNotInPortal, getCatalogEntryName);
 
   const showMissingTables = Boolean(
     !loading && !error && identity && !catalogLoading && !catalogError && catalog
@@ -107,10 +114,28 @@ function OverviewPage() {
       {showMissingTables && (
         <>
           <Divider sx={{ my: 2 }} />
-          <Typography variant="h5">Missing 4 Stars (In Portal)</Typography>
-          <MissingCrewTable crew={missingInPortal} collections={collectionsList} />
-          <Typography variant="h5">Missing 4 Stars (Not in Portal)</Typography>
-          <MissingCrewTable crew={missingNotInPortal} collections={collectionsList} />
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+            <Typography variant="h5">
+              Missing 4 Stars (In Portal) ({inPortalSearch.filteredItems.length} of {missingInPortal.length})
+            </Typography>
+            <TableSearchBar value={inPortalSearch.query} onChange={inPortalSearch.setQuery} />
+          </Stack>
+          {inPortalSearch.active && inPortalSearch.filteredItems.length === 0 ? (
+            <Typography color="text.secondary">No results found for your search.</Typography>
+          ) : (
+            <MissingCrewTable crew={inPortalSearch.filteredItems} collections={collectionsList} />
+          )}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+            <Typography variant="h5">
+              Missing 4 Stars (Not in Portal) ({notInPortalSearch.filteredItems.length} of {missingNotInPortal.length})
+            </Typography>
+            <TableSearchBar value={notInPortalSearch.query} onChange={notInPortalSearch.setQuery} />
+          </Stack>
+          {notInPortalSearch.active && notInPortalSearch.filteredItems.length === 0 ? (
+            <Typography color="text.secondary">No results found for your search.</Typography>
+          ) : (
+            <MissingCrewTable crew={notInPortalSearch.filteredItems} collections={collectionsList} />
+          )}
         </>
       )}
     </Stack>
