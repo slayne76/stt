@@ -1,7 +1,11 @@
 import { usePlayerData } from '../hooks/usePlayerData';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedItems } from '../crew/getters';
 import { getCollectionsList } from '../collections/getters';
-import { byUpgradableThenCompletionThenNameAsc } from '../collections/sorters';
+import {
+  byUpgradableThenCompletionThenNameAsc,
+  getQualifyingCrewByCollection,
+  getUpgradableCollectionIds,
+} from '../collections/sorters';
 import { useSearch } from '../lib/useSearch';
 import CollectionsTable from '../collections/CollectionsTable';
 import PageShell from '../layout/PageShell';
@@ -14,8 +18,10 @@ function CollectionsPage() {
   const crew = data ? getCrewList(data) : [];
   const items = data ? getOwnedItems(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
+  const qualifyingCrewByCollection = getQualifyingCrewByCollection(rawCollections, crew, items, frozenArchetypeIds);
+  const upgradableIds = getUpgradableCollectionIds(rawCollections, qualifyingCrewByCollection, items);
   const collections = data
-    ? [...rawCollections].sort(byUpgradableThenCompletionThenNameAsc(rawCollections, crew, items, frozenArchetypeIds))
+    ? [...rawCollections].sort(byUpgradableThenCompletionThenNameAsc(upgradableIds))
     : [];
   const {
     query,
@@ -42,9 +48,9 @@ function CollectionsPage() {
     >
       <CollectionsTable
         collections={filteredCollections}
-        crew={crew}
         items={items}
-        frozenArchetypeIds={frozenArchetypeIds}
+        qualifyingCrewByCollection={qualifyingCrewByCollection}
+        upgradableIds={upgradableIds}
       />
     </PageShell>
   );

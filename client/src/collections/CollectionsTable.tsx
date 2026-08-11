@@ -15,29 +15,19 @@ import {
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
-import { getCollectionCrew } from './getters';
 import { getCuratedRewards } from './rewards';
-import { isCollectionUpgradable, isMaxedOut } from './sorters';
-import {
-  byEquipmentSlotsRemainingDesc,
-  byLevelDesc,
-  byMaxRarityDesc,
-  byNameAsc,
-  byTierAsc,
-  sortCrew,
-} from '../crew/sorters';
-import { combineComparators } from '../lib/comparator';
+import { isMaxedOut } from './sorters';
 import { PAGE_SIZE_OPTIONS, usePagination } from '../lib/usePagination';
 import CollectionCrewList from './CollectionCrewList';
 
 export interface CollectionsTableProps {
   collections: Collection[];
-  crew: CrewMember[];
   items: OwnedItem[];
-  frozenArchetypeIds: Set<number>;
+  qualifyingCrewByCollection: Map<number, CrewMember[]>;
+  upgradableIds: Set<number>;
 }
 
-function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: CollectionsTableProps) {
+function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgradableIds }: CollectionsTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } =
     usePagination(collections);
 
@@ -56,17 +46,8 @@ function CollectionsTable({ collections, crew, items, frozenArchetypeIds }: Coll
         </TableHead>
         <TableBody>
           {pageItems.map((collection, index) => {
-            const qualifyingCrew = sortCrew(
-              getCollectionCrew(collection, crew, items, frozenArchetypeIds),
-              combineComparators(
-                byTierAsc(items),
-                byMaxRarityDesc,
-                byLevelDesc,
-                byEquipmentSlotsRemainingDesc,
-                byNameAsc
-              )
-            );
-            const upgradable = isCollectionUpgradable(collection, qualifyingCrew, items);
+            const qualifyingCrew = qualifyingCrewByCollection.get(collection.id) ?? [];
+            const upgradable = upgradableIds.has(collection.id);
             const rewards = getCuratedRewards(collection);
             const progressDisplay = isMaxedOut(collection)
               ? 'MAX'

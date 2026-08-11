@@ -2,6 +2,7 @@ import type { Collection } from '../types/collection';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
 import { getCrewTier } from '../crew/getters';
+import { byEquipmentSlotsRemainingDesc, byLevelDesc, byMaxRarityDesc, byNameAsc, byTierAsc, sortCrew } from '../crew/sorters';
 import { combineComparators, type Comparator } from '../lib/comparator';
 import { getCollectionCrew } from './getters';
 
@@ -31,17 +32,38 @@ export function isCollectionUpgradable(collection: Collection, qualifyingCrew: C
   return eligible >= remaining;
 }
 
-export function byUpgradableThenCompletionThenNameAsc(
+export function getQualifyingCrewByCollection(
   collections: Collection[],
   crewList: CrewMember[],
   items: OwnedItem[],
   frozenArchetypeIds: Set<number>
-): Comparator<Collection> {
-  const upgradableIds = new Set(
+): Map<number, CrewMember[]> {
+  const result = new Map<number, CrewMember[]>();
+  for (const collection of collections) {
+    result.set(
+      collection.id,
+      sortCrew(
+        getCollectionCrew(collection, crewList, items, frozenArchetypeIds),
+        combineComparators(byTierAsc(items), byMaxRarityDesc, byLevelDesc, byEquipmentSlotsRemainingDesc, byNameAsc)
+      )
+    );
+  }
+  return result;
+}
+
+export function getUpgradableCollectionIds(
+  collections: Collection[],
+  qualifyingCrewByCollection: Map<number, CrewMember[]>,
+  items: OwnedItem[]
+): Set<number> {
+  return new Set(
     collections
-      .filter((c) => isCollectionUpgradable(c, getCollectionCrew(c, crewList, items, frozenArchetypeIds), items))
+      .filter((c) => isCollectionUpgradable(c, qualifyingCrewByCollection.get(c.id) ?? [], items))
       .map((c) => c.id)
   );
+}
+
+export function byUpgradableThenCompletionThenNameAsc(upgradableIds: Set<number>): Comparator<Collection> {
   return combineComparators(
     (a, b) => Number(upgradableIds.has(b.id)) - Number(upgradableIds.has(a.id)),
     byCompletionThenNameAsc
