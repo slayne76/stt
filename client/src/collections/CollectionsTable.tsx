@@ -13,7 +13,7 @@ import {
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
-import { groupStripeBgcolor, ROW_EMPHASIS_COLOR } from '../theme';
+import { BLOCK_BOUNDARY_COLOR, FORCE_TRANSPARENT_BGCOLOR } from '../theme';
 import { getCuratedRewards } from './rewards';
 import { isMaxedOut } from './sorters';
 import { usePagination } from '../lib/usePagination';
@@ -52,10 +52,9 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
             const progressDisplay = isMaxedOut(collection)
               ? 'MAX'
               : `${collection.progress}/${collection.milestone.goal}`;
-            const stripeBgcolor = groupStripeBgcolor(index);
             return (
               <Fragment key={collection.id}>
-                <TableRow sx={{ bgcolor: stripeBgcolor }}>
+                <TableRow sx={{ bgcolor: FORCE_TRANSPARENT_BGCOLOR }}>
                   <TableCell>{page * pageSize + index + 1}</TableCell>
                   <TableCell>
                     {collection.name}
@@ -66,8 +65,11 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
                   <TableCell align="right">{collection.claimable_milestone_index}</TableCell>
                   <TableCell align="right">{qualifyingCrew.length}</TableCell>
                 </TableRow>
-                <TableRow sx={{ bgcolor: stripeBgcolor }}>
-                  <TableCell sx={{ bgcolor: ROW_EMPHASIS_COLOR }} colSpan={6}>
+                <TableRow sx={{ bgcolor: FORCE_TRANSPARENT_BGCOLOR }}>
+                  <TableCell
+                    colSpan={6}
+                    sx={{ borderBottom: `2px solid ${BLOCK_BOUNDARY_COLOR}` }}
+                  >
                     {qualifyingCrew.length === 0 ? (
                       <Typography color="text.secondary" sx={{ py: 1 }}>
                         No crew match.

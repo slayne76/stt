@@ -4,6 +4,7 @@ import type { OwnedItem } from '../types/item';
 import { getCrewTier, getEquipmentSlotsRemaining } from '../crew/getters';
 import StarRating from '../crew/StarRating';
 import StatusChip from '../components/StatusChip';
+import { STRIPE_COLOR } from '../theme';
 
 export interface CollectionCrewListProps {
   crew: CrewMember[];
@@ -13,12 +14,23 @@ export interface CollectionCrewListProps {
 function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
   return (
     <Box sx={{ py: 1 }}>
-      {crew.map((c) => {
+      {crew.map((c, i) => {
         const tier = getCrewTier(c, items);
         const isReady = tier === 'ready';
         const isNeedsWork = tier === 'needsWork';
         return (
-          <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+          <Box
+            key={c.id}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              py: 0.5,
+              px: 2,
+              mx: -2,
+              bgcolor: i % 2 === 1 ? STRIPE_COLOR : 'transparent',
+            }}
+          >
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
             <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
             {isReady && <StatusChip label="Ready" color="success" />}

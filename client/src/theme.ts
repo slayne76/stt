@@ -1,21 +1,36 @@
 import { createTheme } from '@mui/material/styles';
 
-// Both constants below must stay literal `rgba(...)` strings — never MUI
-// palette-shorthand paths like `'action.hover'`. `groupStripeBgcolor` (below)
-// appends `!important` to whatever `STRIPE_COLOR` holds, and MUI's `sx` prop
+// Must stay a literal `rgba(...)` string — never an MUI palette-shorthand
+// path like `'action.hover'`. `groupStripeBgcolor` (below) appends
+// `!important` to whatever `STRIPE_COLOR` holds, and MUI's `sx` prop
 // resolves a palette-shorthand string via an exact dotted-path lookup against
 // `theme.palette`; appending anything to that string breaks the lookup, so
 // `sx` can no longer resolve it to a real color and silently drops the
 // declaration instead — no error, no warning, the row just stops getting a
-// stripe. `ROW_EMPHASIS_COLOR` is held to the same rule for consistency and
-// because it's composed as a second flat-alpha layer on top of a row whose
-// own background is already one of these `!important`-bearing values; a
-// resolved palette token wouldn't compose the same predictable way. This is
-// the exact trap an earlier version of this feature hit, which is why that
-// version reached for a `theme` callback instead — these two constants let
-// every call site skip that ceremony, but only as long as they stay literal.
+// stripe. This is the exact trap an earlier version of this feature hit,
+// which is why that version reached for a `theme` callback instead — this
+// constant lets every call site skip that ceremony, but only as long as it
+// stays literal.
 export const STRIPE_COLOR = 'rgba(0, 0, 0, 0.08)';
-export const ROW_EMPHASIS_COLOR = 'rgba(0, 0, 0, 0.16)';
+
+// A third tier in the same flat-alpha family as `STRIPE_COLOR`, for a
+// visible-but-not-heavy divider between grouped blocks of rows (e.g. one
+// collection's rows vs. the next in `CollectionsTable.tsx`) — distinct from
+// the much fainter default `MuiTableCell` border MUI already draws between
+// every row.
+export const BLOCK_BOUNDARY_COLOR = 'rgba(0, 0, 0, 0.24)';
+
+/**
+ * Forces a `TableRow`'s background to transparent regardless of its DOM
+ * position, overriding the `MuiTableBody` rule below's generic
+ * `nth-of-type(even)` stripe. Needed by any row in a multi-row-per-record
+ * table that intentionally does not participate in row-level striping —
+ * without this, the generic rule would still tint whichever row happens to
+ * land on an even DOM position, independent of which record it actually
+ * belongs to (see `groupStripeBgcolor`'s doc comment below for the full
+ * DOM-position-vs-record-parity explanation this shares).
+ */
+export const FORCE_TRANSPARENT_BGCOLOR = 'transparent !important';
 
 /**
  * For tables that render more than one <TableRow> per logical record —
@@ -36,9 +51,15 @@ export const ROW_EMPHASIS_COLOR = 'rgba(0, 0, 0, 0.16)';
  * declaration's specificity of (0,1,0). `!important` is what makes this
  * row's own record-based color win instead; dropping it would silently let
  * some rows fall back to the generic DOM-position stripe instead of their
- * record's actual color, with no other visible symptom. See
- * `collections/CollectionsTable.tsx` for a concrete two-row-per-record
- * example.
+ * record's actual color, with no other visible symptom.
+ *
+ * Not currently called by any table in the app — `CollectionsTable.tsx`
+ * (the motivating case this was built for) moved to a flat, non-
+ * alternating per-collection background instead (see that file, and
+ * `FORCE_TRANSPARENT_BGCOLOR` above) after user feedback that block-level
+ * alternation competed visually with per-crew-member striping inside the
+ * detail block. Kept as documented infrastructure for the next table that
+ * genuinely needs per-record (not per-DOM-row) alternation.
  */
 export function groupStripeBgcolor(recordIndex: number): string {
   return `${recordIndex % 2 === 1 ? STRIPE_COLOR : 'transparent'} !important`;
@@ -62,8 +83,8 @@ const theme = createTheme({
         // Assumes one <TableRow> per record — DOM position and record position line up 1:1,
         // so striping by nth-of-type(even) is equivalent to striping by record index.
         // Tables with more than one <TableRow> per record break that assumption and must
-        // opt out with `groupStripeBgcolor(recordIndex)` (above) applied to every row of
-        // the record instead. See client/src/collections/CollectionsTable.tsx.
+        // opt out with `groupStripeBgcolor(recordIndex)` or `FORCE_TRANSPARENT_BGCOLOR`
+        // (above) applied to every row of the record instead.
         root: () => ({
           '& .MuiTableRow-root:nth-of-type(even)': {
             backgroundColor: STRIPE_COLOR,
