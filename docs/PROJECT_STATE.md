@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (App-wide table theme). This
+Last updated: 2026-08-12 (Stronger, reusable table striping). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -88,8 +88,10 @@ client/src/
                                  truth" below
   main.tsx                      React root, wraps <App/> in <ThemeProvider theme={theme}>
   theme.ts                      App's first MUI theme (createTheme, no CssBaseline) — blue
-                                 TableHead + alternating TableBody row striping, see "App-wide
-                                 table theme" below
+                                 TableHead + alternating TableBody row striping (STRIPE_COLOR/
+                                 ROW_EMPHASIS_COLOR literal rgba() constants) + groupStripeBgcolor(),
+                                 the reusable per-record helper for multi-row tables, see
+                                 "Stronger, reusable table striping" below
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
   context/CrewCatalogContext.tsx Same shape, second independent provider (see "Crew catalog and
                                  Overview unique-crew counts") — a slow/failed catalog fetch never
@@ -4315,6 +4317,86 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     overstated dry-run pairing confirmation) corrected in-branch as a
     doc-only commit before merge, per this project's established
     "plan/spec text bugs get fixed in-branch, not deferred" convention.
+43. **Stronger, reusable table striping** (`2026-08-12-stronger-table-striping`)
+    — a same-day follow-up to (42): the user manually checked the shipped
+    zebra striping against real data and reported it looked wrong (all of
+    `CollectionsTable`'s sub-rows the same grey). The controller verified
+    directly rather than defending the prior review chain — the 4%/8%
+    contrast from (42) was technically correct (confirmed via computed
+    styles on the shipped code) but too subtle to perceive in practice,
+    especially on `CollectionsTable`, where the constant-tint detail row
+    dominates attention over the fainter collection-to-collection
+    alternation. Two brainstormed changes, delivered as one 2-task plan:
+    (a) doubled contrast to explicit named constants —
+    `STRIPE_COLOR = 'rgba(0, 0, 0, 0.08)'`,
+    `ROW_EMPHASIS_COLOR = 'rgba(0, 0, 0, 0.16)'` — decoupled from MUI's
+    `action.hover`/`action.selected` semantic tokens per the user's
+    explicit choice (both real contrast levels rendered as actual
+    screenshots against real data during brainstorming before the user
+    picked); (b) a new reusable `groupStripeBgcolor(recordIndex)` helper
+    in `theme.ts`, so any *future* multi-row-per-record table can opt out
+    of the generic per-row rule without re-deriving the CSS-specificity
+    fix (42) discovered — final review specifically verified this by
+    hand-tracing a hypothetical 3-rows-per-record case, confirming the
+    helper's unconditional `!important` is genuinely parity-agnostic, not
+    accidentally 2-row-specific. `CollectionsTable.tsx` adopted the helper,
+    collapsing its previous asymmetric per-row handling (a plain ternary
+    on the summary row, a theme-callback expression on the detail row)
+    into one shared value applied uniformly to both rows. Using literal
+    `rgba()` constants instead of MUI's palette-shorthand strings also
+    eliminated the theme-callback workaround (42) needed — appending
+    `!important` to a literal string just works, no exact-path lookup to
+    break. Both tasks reviewed clean on the first pass, zero
+    Critical/Important/Minor from either task review.
+
+    **The final review caught 2 Important findings, one of which led
+    directly to a real operational incident, not just a code fix.** (1)
+    `groupStripeBgcolor`'s own doc comment — the deliverable the whole
+    "reusable for future tables" goal rested on — contained a factually
+    wrong generalization (claimed a record's 2nd/4th/... row is "always
+    DOM-even," true only when rows-per-record is even; the final reviewer
+    disproved it with a hand-traced 3-rows-per-record counter-example).
+    The *code* was always correct; only its stated justification was
+    wrong. Also undocumented: the literal-not-shorthand constraint on the
+    two color constants, the exact trap that cost (42) a review cycle.
+    Closed in a final-review fix wave (commit `8d3ed77`) with a
+    comprehensive rewrite covering both points plus the specificity math,
+    independently re-verified by a scoped re-review that hand-confirmed
+    the CSS specificity numbers and the counter-example arithmetic from
+    source rather than trusting the fix's narrative.
+
+    **(2) Task 1's port-ownership discipline — already flagged as
+    unverifiable by final review — turned out to be a real, repeated
+    incident, discovered only because the user tested the app manually
+    and reported seeing the pre-fix appearance.** Systematic debugging
+    (not just re-asserting "the reviews said it was fine") traced this to
+    two independent causes: the fix genuinely was correct and unmerged
+    (still sitting on the feature branch, so the user's normal dev
+    environment — serving from `main` — was never going to show it until
+    merge, regardless of any process issue); *and*, separately, Task 1's
+    implementer had in fact repeated the exact controller mistake from
+    earlier the same day (an overly broad `pkill -f "vite"` that killed
+    the user's client instead of only the controller's own instance while
+    verifying the (42) contrast fix) — Task 1's report's "killed old
+    cached instance" (no PID, no command logged, despite explicit brief
+    caution) turned out to have killed the user's real, separately-running
+    main-checkout client, not a leftover. Confirmed via live process/port
+    forensics after the fact, then closed by starting a completely fresh,
+    carefully-isolated dev server (exact-PID kills only, ownership checked
+    before touching anything) and reproducing the correct striping
+    end-to-end — proving the *code* was never the problem, only two
+    compounding *environment* problems were: an unmerged branch, and a
+    second instance of the project's known port-safety failure mode, this
+    time by a subagent despite explicit brief language written
+    specifically to prevent it. **This is now the second confirmed
+    instance in one session of a controller or subagent breaking the
+    user's own dev-server process via a name/heuristic-based process
+    action** — task briefs alone were not sufficient mitigation the second
+    time either; see [[feedback-stt-workflow]] in the user's memory for
+    the full incident writeup and the generalized lesson (requiring raw
+    `ss`/`lsof`/`ps` evidence pasted into reports, not a self-declared
+    "checked ownership" claim, per the final reviewer's own
+    recommendation).
 
 ## Current routes / nav (in order)
 
