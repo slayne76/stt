@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from '@mui/icons-material';
 import { List, ListItemButton, ListItemText, Paper, Popper } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { NavLink } from '../routes';
 
 export interface NavGroupItemProps {
@@ -18,6 +18,8 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
   const focusFirstItemRef = useRef(false);
   const suppressTriggerFocusOpenRef = useRef(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isGroupActive = items.some((item) => item.path === pathname);
 
   const cancelClose = () => {
     if (closeTimeoutRef.current !== undefined) {
@@ -140,6 +142,7 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
     >
       <ListItemButton
         ref={triggerRef}
+        selected={isGroupActive}
         sx={{ cursor: 'default' }}
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="true"
@@ -163,6 +166,8 @@ function NavGroupItem({ label, items }: NavGroupItemProps) {
                 key={item.path}
                 ref={setItemRef(index)}
                 role="menuitem"
+                selected={item.path === pathname}
+                aria-current={item.path === pathname ? 'page' : undefined}
                 onClick={() => {
                   navigate(item.path);
                   suppressTriggerFocusOpenRef.current = true;

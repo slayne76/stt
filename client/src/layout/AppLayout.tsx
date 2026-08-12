@@ -71,7 +71,12 @@ function AppLayout() {
             isNavGroup(item) ? (
               <NavGroupItem key={item.label} label={item.label} items={item.children} />
             ) : (
-              <ListItemButton key={item.path} onClick={() => navigate(item.path)}>
+              <ListItemButton
+                key={item.path}
+                selected={location.pathname === item.path}
+                aria-current={location.pathname === item.path ? 'page' : undefined}
+                onClick={() => navigate(item.path)}
+              >
                 <ListItemText primary={item.label} />
               </ListItemButton>
             )
