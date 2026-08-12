@@ -8,12 +8,14 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableHead,
   TableRow,
   Typography,
 } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
+import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
 import { getArchetypeMaxRarityMap, getCatalogCount, getMissingCrew } from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
@@ -40,6 +42,8 @@ function OverviewPage() {
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const catalogMaxRarityById = catalog ? getArchetypeMaxRarityMap(catalog) : new Map<number, number>();
   const collectionsList = data ? getCollectionsList(data) : [];
+  const baseSkillBonuses = data ? getBaseSkillBonuses(data) : [];
+  const proficiencyBonuses = data ? getProficiencyBonuses(data) : [];
 
   function uniqueCrewCell(maxRarity: number): string {
     if (!catalog) return '—';
@@ -144,6 +148,53 @@ function OverviewPage() {
           ) : (
             <MissingCrewTable crew={notInPortalSearch.filteredItems} collections={collectionsList} />
           )}
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Base Skill Bonus</Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Skill</TableCell>
+                  <TableCell align="right">Bonus</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {baseSkillBonuses.map((row) => (
+                  <TableRow key={row.skill}>
+                    <TableCell component="th" scope="row">
+                      {row.skill}
+                    </TableCell>
+                    <TableCell align="right">+{row.value}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <Typography variant="h5">Proficiency Bonus</Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Skill</TableCell>
+                  <TableCell align="right">Min Bonus</TableCell>
+                  <TableCell align="right">Max Bonus</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {proficiencyBonuses.map((row) => (
+                  <TableRow key={row.skill}>
+                    <TableCell component="th" scope="row">
+                      {row.skill}
+                    </TableCell>
+                    <TableCell align="right">+{row.min}%</TableCell>
+                    <TableCell align="right">+{row.max}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </>
       )}
     </Stack>
