@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from '@mui/icons-material';
 import { List, ListItemButton, ListItemText, Paper, Popper } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import type { NavLink } from '../routes';
 
 export interface NavGroupItemProps {
   label: string;
-  items: { label: string; path: string }[];
+  items: NavLink[];
 }
 
 function NavGroupItem({ label, items }: NavGroupItemProps) {

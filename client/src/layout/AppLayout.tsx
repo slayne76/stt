@@ -4,51 +4,12 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { refreshAssets } from '../api/assetsApi';
+import { NAV_ITEMS, isNavGroup } from '../routes';
 import NavGroupItem from './NavGroupItem';
 import ErrorBoundary from '../components/ErrorBoundary';
 import RefreshControl from './RefreshControl';
 
 const DRAWER_WIDTH = 220;
-
-interface NavLink {
-  label: string;
-  path: string;
-}
-
-interface NavGroup {
-  label: string;
-  children: NavLink[];
-}
-
-function isNavGroup(item: NavLink | NavGroup): item is NavGroup {
-  return 'children' in item;
-}
-
-const NAV_ITEMS: (NavLink | NavGroup)[] = [
-  { label: 'Overview', path: '/' },
-  {
-    label: 'Crew',
-    children: [
-      { label: '5 Stars Crew', path: '/5-stars-crew' },
-      { label: '3/4 Stars crew', path: '/3-4-stars-crew' },
-      { label: '4/5 Stars crew', path: '/4-5-stars-crew' },
-      { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready' },
-      { label: '4/4 Stars crew', path: '/4-4-stars-crew' },
-      { label: '4 Stars Duplicates', path: '/4-stars-duplicates' },
-      { label: '5 Stars Duplicates', path: '/5-stars-duplicates' },
-      { label: 'QPs', path: '/qps' },
-      { label: '5 & 4 Stars Frozen Crew', path: '/5-4-stars-frozen-crew' },
-    ],
-  },
-  {
-    label: 'Ships',
-    children: [
-      { label: '5 Stars Ships', path: '/5-stars-ships' },
-      { label: '4 Stars Ships', path: '/4-stars-ships' },
-    ],
-  },
-  { label: 'Collections', path: '/collections' },
-];
 
 function AppLayout() {
   const navigate = useNavigate();
