@@ -10,8 +10,19 @@ export function getCrewList(data: PlayerData): CrewMember[] {
   return Array.isArray(crew) ? (crew as CrewMember[]) : [];
 }
 
+const ALL_SLOT_INDICES = [0, 1, 2, 3];
+
+export function getFilledSlotIndices(crew: CrewMember): Set<number> {
+  return new Set(crew.equipment.map(([slot]) => slot));
+}
+
+export function getMissingSlotIndices(crew: CrewMember): number[] {
+  const filledSlots = getFilledSlotIndices(crew);
+  return ALL_SLOT_INDICES.filter((i) => !filledSlots.has(i));
+}
+
 export function getEquipmentSlotsRemaining(crew: CrewMember): number {
-  return (crew.equipment?.length ?? 0) - 4;
+  return -getMissingSlotIndices(crew).length;
 }
 
 export function getOwnedItems(data: PlayerData): OwnedItem[] {
@@ -22,8 +33,7 @@ export function getOwnedItems(data: PlayerData): OwnedItem[] {
 }
 
 export function getMissingEquipmentArchetypeIds(crew: CrewMember): number[] {
-  const filledSlots = new Set(crew.equipment.map(([slot]) => slot));
-  const missingIndices = [0, 1, 2, 3].filter((i) => !filledSlots.has(i));
+  const missingIndices = getMissingSlotIndices(crew);
   const slots = crew.equipment_slots ?? [];
   return missingIndices.map((i) => slots[i]?.archetype ?? -1);
 }
@@ -34,7 +44,7 @@ export function areAllMissingItemsOwned(crew: CrewMember, items: OwnedItem[]): b
 }
 
 export function isImmortalized(crew: CrewMember): boolean {
-  return crew.rarity === crew.max_rarity && crew.level === 100 && crew.equipment.length === 4;
+  return crew.rarity === crew.max_rarity && crew.level === 100 && getMissingSlotIndices(crew).length === 0;
 }
 
 export function isReadyToImmortalize(crew: CrewMember, items: OwnedItem[]): boolean {
