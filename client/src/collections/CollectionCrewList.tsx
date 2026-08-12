@@ -26,6 +26,7 @@ function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
               alignItems: 'center',
               gap: 1,
               py: 0.5,
+              // Cancels parent TableCell's 16px padding so each stripe reaches the cell edges
               px: 2,
               mx: -2,
               bgcolor: i % 2 === 1 ? STRIPE_COLOR : 'transparent',

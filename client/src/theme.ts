@@ -54,12 +54,12 @@ export const FORCE_TRANSPARENT_BGCOLOR = 'transparent !important';
  * record's actual color, with no other visible symptom.
  *
  * Not currently called by any table in the app — `CollectionsTable.tsx`
- * (the motivating case this was built for) moved to a flat, non-
- * alternating per-collection background instead (see that file, and
- * `FORCE_TRANSPARENT_BGCOLOR` above) after user feedback that block-level
- * alternation competed visually with per-crew-member striping inside the
- * detail block. Kept as documented infrastructure for the next table that
- * genuinely needs per-record (not per-DOM-row) alternation.
+ * (the motivating case this was built for) moved to fully transparent rows
+ * (`FORCE_TRANSPARENT_BGCOLOR`) with striping applied per crew member
+ * inside the detail cell instead (see `CollectionCrewList.tsx`) after
+ * user feedback that block-level alternation competed visually with
+ * per-crew-member striping. Kept as documented infrastructure for the
+ * next table that genuinely needs per-record (not per-DOM-row) alternation.
  */
 export function groupStripeBgcolor(recordIndex: number): string {
   return `${recordIndex % 2 === 1 ? STRIPE_COLOR : 'transparent'} !important`;
