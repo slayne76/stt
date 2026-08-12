@@ -15,4 +15,5 @@ export interface CrewMember {
   traits_hidden: string[];
   portrait?: DatacoreAsset;
   q_bits: number;
+  in_buy_back_state: boolean;
 }
