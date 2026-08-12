@@ -51,9 +51,10 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
             const progressDisplay = isMaxedOut(collection)
               ? 'MAX'
               : `${collection.progress}/${collection.milestone.goal}`;
+            const stripeColor = index % 2 === 1 ? 'action.hover' : 'transparent';
             return (
               <Fragment key={collection.id}>
-                <TableRow>
+                <TableRow sx={{ bgcolor: stripeColor }}>
                   <TableCell>{page * pageSize + index + 1}</TableCell>
                   <TableCell>
                     {collection.name}
@@ -65,7 +66,7 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
                   <TableCell align="right">{qualifyingCrew.length}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell sx={{ bgcolor: 'action.hover' }} colSpan={6}>
+                  <TableCell sx={{ bgcolor: 'action.selected' }} colSpan={6}>
                     {qualifyingCrew.length === 0 ? (
                       <Typography color="text.secondary" sx={{ py: 1 }}>
                         No crew match.
