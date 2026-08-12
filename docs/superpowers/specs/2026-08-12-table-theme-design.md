@@ -228,10 +228,12 @@ observation, not data-driven:
 - Real-browser check, screenshots for each: at least one of the 5
   simple-structure tables (confirm blue header with white text, rows
   alternating white/light-grey starting from the first row), the
-  Overview page (confirm all 3 of its tables — identity, Base Skill
-  Bonus, Proficiency Bonus — get the same header/striping treatment with
-  zero code changes to `OverviewPage.tsx` itself, proving the theme-only
-  approach actually covers it), and `CollectionsTable` specifically
+  Overview page (confirm Base Skill Bonus and Proficiency Bonus get the
+  blue header, and all 3 of its tables — including the identity table,
+  which has no `TableHead` and so never gets the blue banner, correctly —
+  get the alternating-row striping, with zero code changes to
+  `OverviewPage.tsx` itself, proving the theme-only approach actually
+  covers it), and `CollectionsTable` specifically
   (confirm each collection's summary+detail row pair share one stripe
   color, alternating per collection not per raw row, and that the detail
   row is still visually distinguishable from its own summary row via the
