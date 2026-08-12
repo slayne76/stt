@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (Base Skill Bonus / Proficiency Bonus tables). This
+Last updated: 2026-08-12 (getFilledSlotIndices / getMissingSlotIndices). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -315,12 +315,17 @@ pairs. So:
   below never assumes contiguity; it always diffs against the full
   `{0,1,2,3}` index set.
 
-**`getEquipmentSlotsRemaining(crew)`** (`crew/getters.ts:12-14`) — the
+**`getEquipmentSlotsRemaining(crew)`** (`crew/getters.ts:25-27`, updated
+2026-08-12 — see "getFilledSlotIndices/getMissingSlotIndices" below) — the
 first, simplest derived value:
 
 ```ts
-return (crew.equipment?.length ?? 0) - 4;
+return -getMissingSlotIndices(crew).length;
 ```
+
+(Was `(crew.equipment?.length ?? 0) - 4` before 2026-08-12 — byte-identical
+result for all real/normal data, now derived from the shared slot-index
+primitive instead of a raw array-length count; see below for why.)
 
 Returns a value from **-4** (nothing equipped) to **0** (fully equipped).
 This is an intentional sign convention the user specified explicitly —
@@ -343,18 +348,21 @@ This value is displayed as the "Items to equip" table column and used as
 a secondary sort key (`byEquipmentSlotsRemainingDesc` — see "Sorting
 design" below).
 
-**`getMissingEquipmentArchetypeIds(crew)`** (`crew/getters.ts:23-28`) —
-the piece that figures out *which specific items* are needed, not just
-*how many*:
+**`getMissingEquipmentArchetypeIds(crew)`** (`crew/getters.ts:29-33`,
+updated 2026-08-12) — the piece that figures out *which specific items*
+are needed, not just *how many*:
 
 ```ts
 export function getMissingEquipmentArchetypeIds(crew: CrewMember): number[] {
-  const filledSlots = new Set(crew.equipment.map(([slot]) => slot));
-  const missingIndices = [0, 1, 2, 3].filter((i) => !filledSlots.has(i));
+  const missingIndices = getMissingSlotIndices(crew);
   const slots = crew.equipment_slots ?? [];
   return missingIndices.map((i) => slots[i]?.archetype ?? -1);
 }
 ```
+
+(The `filledSlots`/`missingIndices` computation shown inline here before
+2026-08-12 is now the shared `getMissingSlotIndices(crew)` primitive — see
+below.)
 
 Algorithm: build the set of filled slot indices from `equipment`'s first
 tuple element → the complement against `{0,1,2,3}` is the missing slot
@@ -394,12 +402,19 @@ Ownership is presence-in-array only (no `quantity` check — the real data
 never had a zero-quantity entry, but this is a known, accepted latent gap,
 see "Deferred issues" below).
 
-**`isImmortalized(crew)`** (`crew/getters.ts:35-37`) — the terminal state
-this whole feature is oriented around:
+**`isImmortalized(crew)`** (`crew/getters.ts:45-47`, updated
+2026-08-12) — the terminal state this whole feature is oriented around:
 
 ```ts
-return crew.rarity === crew.max_rarity && crew.level === 100 && crew.equipment.length === 4;
+return crew.rarity === crew.max_rarity && crew.level === 100 && getMissingSlotIndices(crew).length === 0;
 ```
+
+(Was `crew.equipment.length === 4` before 2026-08-12 — see
+"getFilledSlotIndices/getMissingSlotIndices" below for why the raw-count
+form was replaced: it could theoretically disagree with
+`getMissingEquipmentArchetypeIds`'s Set-based check in the presence of a
+duplicate or out-of-range slot index, something real data has never had
+but wasn't structurally guaranteed against.)
 
 Three conditions, all must hold: maxed rarity, level 100, all 4 slots
 physically equipped (not just owned — *equipped*).
@@ -447,10 +462,13 @@ exhaustive** during the final review of that feature:
   contradiction, impossible for any data shape.
 - *Exhaustive by construction:* "in neither set" reduces algebraically to
   `isImmortalized && !isReadyToImmortalize`, and `isImmortalized` implies
-  `equipment.length === 4` implies `getEquipmentSlotsRemaining() === 0`
-  implies `!(< 0)` implies `!isReadyToImmortalize` — so "in neither" is
-  exactly "is Immortalized," which is the intended third bucket, not a
-  logic gap.
+  `getMissingSlotIndices(crew).length === 0` implies
+  `getEquipmentSlotsRemaining() === 0` implies `!(< 0)` implies
+  `!isReadyToImmortalize` — so "in neither" is exactly "is Immortalized,"
+  which is the intended third bucket, not a logic gap. (Proof form updated
+  2026-08-12 to match the shared-primitive implementation; the logic itself
+  is unchanged — both functions have always agreed for real data, they're
+  now guaranteed to agree structurally too, see below.)
 - Empirically confirmed across every populated rarity bucket in the real
   data (not just the 4/4 bucket that motivated the feature): counts always
   summed to `ready + needsWork + immortalized === total` for that bucket.
@@ -460,6 +478,69 @@ exhaustive** during the final review of that feature:
   never actually exercised by that bucket alone — the reviewer caught this
   vacuous-pass risk and separately confirmed the exclusion logic against
   the 5/5 bucket (`ready=0, needsWork=0, immortalized=131`, correct).
+
+**`getFilledSlotIndices`/`getMissingSlotIndices` (`crew/getters.ts`,
+added 2026-08-12)** — closes the "`getFilledSlotIndices` not extracted"
+backlog item. Before this, `isImmortalized` checked slot fullness via a
+raw count (`crew.equipment.length === 4`) while
+`getMissingEquipmentArchetypeIds` checked the same concept via a `Set` of
+slot indices — the two computations only ever agreed because real data
+has never had a duplicate or out-of-range equipment slot index, not
+because it was structurally guaranteed. Now both (plus
+`getEquipmentSlotsRemaining`) derive from one shared pair of primitives:
+
+```ts
+const ALL_SLOT_INDICES = [0, 1, 2, 3];
+
+export function getFilledSlotIndices(crew: CrewMember): Set<number> {
+  return new Set(crew.equipment.map(([slot]) => slot));
+}
+
+export function getMissingSlotIndices(crew: CrewMember): number[] {
+  const filledSlots = getFilledSlotIndices(crew);
+  return ALL_SLOT_INDICES.filter((i) => !filledSlots.has(i));
+}
+```
+
+**The fullness check is deliberately `getMissingSlotIndices(crew).length
+=== 0`, not `getFilledSlotIndices(crew).size === 4`** — the size-based
+form isn't actually equivalent: an out-of-range slot index (e.g. `4`,
+never observed in real data) could inflate the `Set`'s size to 4 while a
+real slot (0-3) stays empty, and a size check would wrongly call that
+crew fully equipped. Checking that none of the 4 *real* slots are missing
+is the genuinely correct definition — exactly what
+`getMissingEquipmentArchetypeIds` already computed before this change,
+now generalized into the shared primitive rather than left as a
+coincidental parallel.
+
+**Proven, not assumed, to be a pure refactor:** an exhaustive (not
+sampled) old-vs-new comparison across all 604 real crew in the user's
+live-refreshed data found zero mismatches across
+`isImmortalized`/`getEquipmentSlotsRemaining`/
+`getMissingEquipmentArchetypeIds` (and, in the final review's own
+extended check, `isReadyToImmortalize` end-to-end against the real
+894-item inventory too) — independently re-derived three times (by the
+controller pre-dispatch, by task review, and by final review, each with
+its own separately-written script, not reusing a prior one's code).
+**Final review also constructed and ran a real hypothetical
+duplicate-slot crew** (`equipment: [[0,…],[0,…],[1,…],[2,…]]`, slot 3
+genuinely empty) proving the fix is load-bearing, not decorative: the old
+code would have wrongly called it `isImmortalized: true` (raw length 4)
+while simultaneously having `getMissingEquipmentArchetypeIds` list a
+still-missing archetype for slot 3 — the exact internal contradiction
+this refactor eliminates by construction.
+
+**One deliberately-parked Minor from final review:** `getFilledSlotIndices`
+dropped the old `getEquipmentSlotsRemaining`'s `crew.equipment?.length ??
+0` defensive guard — it now reads `crew.equipment` unguarded, matching
+`getMissingEquipmentArchetypeIds`'s pre-existing (already unguarded)
+pattern, but losing the one defensive read that function used to have.
+Real risk is low (`CrewMember.equipment` is non-optional in the type,
+0/604 real crew lack it, and `AppLayout`'s route-level `ErrorBoundary` now
+exists as a backstop where none did when the original guard was added) —
+parked as a deliberate call rather than fixed, per final review's own
+explicit "fine to defer, just make it deliberate" framing. A one-line
+`(crew.equipment ?? []).map(...)` would restore it if ever wanted.
 
 **Known real examples used throughout development/verification** (from
 `example-data.json`, at rarity 4 / max_rarity 4, level 100):
@@ -4103,6 +4184,54 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     in-code, a comment suggestion not a fix; a `SKILL_LABELS[key]`
     prototype-chain nit is unreachable since output only ever iterates
     `Object.keys`) — parked, no fix loop needed on either task.
+41. **getFilledSlotIndices / getMissingSlotIndices**
+    (`2026-08-12-filled-slot-indices`) — resolves the "`getFilledSlotIndices`
+    not extracted" deferred backlog item, see the deep-dive in the "Crew
+    equipment slots" section above for the full technical detail.
+    `isImmortalized` used to check equipment-slot fullness via a raw
+    array-length count while `getMissingEquipmentArchetypeIds` checked the
+    same concept via a `Set` of slot indices — they only ever agreed
+    because real data never had a duplicate or out-of-range slot index,
+    not because it was structurally guaranteed. Two new shared primitives
+    (`getFilledSlotIndices`/`getMissingSlotIndices`) now back all three
+    functions (`isImmortalized`, `getEquipmentSlotsRemaining`,
+    `getMissingEquipmentArchetypeIds`), guaranteeing agreement by
+    construction. Also extended past what the backlog entry literally
+    named: `getEquipmentSlotsRemaining` had the identical bug pattern and
+    is the most heavily-used of the three (drives `CrewTable`'s "Items"
+    column, the crew sort order, and `isReadyToImmortalize`'s own guard) —
+    fixing 2 of 3 identical latent bugs and leaving the most-used one
+    would have been an incomplete fix, confirmed as the right call during
+    brainstorming rather than assumed.
+
+    **Every review stage independently proved the "zero behavior change"
+    claim from scratch, each with its own separately-written script, never
+    reusing a prior one's code:** the controller before finalizing the
+    plan, the task implementer, the task reviewer, and the final reviewer
+    all separately confirmed 0 mismatches across all 604 real crew (with
+    the final reviewer additionally checking `isReadyToImmortalize`
+    end-to-end against the real 894-item inventory, beyond what the plan
+    required). The final reviewer went further still: constructed and
+    executed a real hypothetical duplicate-slot crew member proving the
+    fix is load-bearing, not decorative — the old code would have wrongly
+    called it `isImmortalized: true` while its own
+    `getMissingEquipmentArchetypeIds` simultaneously still listed a
+    missing archetype for the genuinely-empty slot, the exact internal
+    contradiction this refactor eliminates by construction — and separately
+    confirmed a tempting-but-wrong alternative implementation
+    (`getFilledSlotIndices(crew).size === 4`) would have failed on an
+    out-of-range-index variant where the shipped missing-indices form
+    succeeds. Zero Critical/Important from either review; 4 Minor from
+    final review, all parked: a dropped defensive `equipment ?? []` guard
+    (real but low-risk — non-optional type, 0/604 real crew affected, an
+    `ErrorBoundary` backstop now exists where none did originally; a
+    one-line fix if ever wanted); `getEquipmentSlotsRemaining` now returns
+    `-0` instead of `+0` for fully-equipped crew (proven fully benign
+    across every real consumer — string/JSON/comparison semantics all
+    treat it as `0`); `getFilledSlotIndices` has no external caller yet
+    (intentional, the named deliverable); and a measured, imperceptible
+    performance cost (~1.2ms per full 604-crew sort) that the reviewer
+    explicitly said not to optimize away.
 
 ## Current routes / nav (in order)
 
@@ -4322,13 +4451,14 @@ doing:
   for history): an earlier version of this entry predicted the Page shell
   refactor would resolve this. It didn't — `PageShell` is presentational,
   with no bearing on route registration.
-- **`getFilledSlotIndices` not extracted:** `isImmortalized` checks slot
-  fullness via `equipment.length === 4` (a count), while
-  `getMissingEquipmentArchetypeIds` checks it via a `Set` of indices — they
-  currently agree only because real data never has duplicate/out-of-range
-  equipment slot indices (verified true for all 597 sample crew, but not
-  structurally guaranteed). A shared primitive would remove this
-  data-dependent assumption.
+- **`getFilledSlotIndices` not extracted — resolved 2026-08-12, see the
+  "getFilledSlotIndices/getMissingSlotIndices" deep-dive above.** (Kept
+  here, struck through in spirit, as a pointer for anyone who remembers
+  this entry from before — the fix is real, not just noted.)
+  `isImmortalized`, `getEquipmentSlotsRemaining`, and
+  `getMissingEquipmentArchetypeIds` now all derive from a shared
+  `getMissingSlotIndices(crew)` primitive instead of each computing slot
+  fullness independently.
 - **`OwnedItem` doesn't track `quantity`:** ownership is presence-in-array
   only. A transient `quantity: 0` entry (not observed in the sample) would
   count as owned; two crew both needing the same single-copy item would
