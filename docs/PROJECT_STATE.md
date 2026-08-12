@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (Nav active-state indicator). This
+Last updated: 2026-08-12 (Base Skill Bonus / Proficiency Bonus tables). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -118,6 +118,9 @@ client/src/
                                   endAdornment, visible only when non-empty, calls onChange('')
                                   (see "Table search" below, same-day follow-up)
   lib/extractPlayerIdentity.ts  Overview page's player-identity extraction
+  lib/skillBuffs.ts             getBaseSkillBonuses/getProficiencyBonuses — reads
+                                 player.character.all_buffs (see "Base Skill Bonus /
+                                 Proficiency Bonus tables" below)
   lib/comparator.ts             Comparator<T>/combineComparators — domain-neutral sort
                                  composition, extracted from crew/sorters.ts (see
                                  "Sorting design")
@@ -4047,6 +4050,59 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     state has no screen-reader equivalent (no ARIA token means "contains
     the current page"), a deliberate, correct trade-off already made in
     the spec rather than an oversight.
+40. **Base Skill Bonus / Proficiency Bonus tables**
+    (`2026-08-12-skill-proficiency-bonus-tables`) — two new Overview-page
+    tables (6 rows each) showing the player's accumulated collection-buff
+    skill percentages ("Active buffs" in the game): "Base Skill Bonus"
+    (Skill | Bonus) and "Proficiency Bonus" (Skill | Min Bonus | Max
+    Bonus), appended after the existing Missing-4-Stars tables.
+
+    **New reusable data source, reverse-engineered against the user's
+    real, live-refreshed `server/data/player-cache.json`** (explicitly
+    not `example-data.json`, which was stale at the time — 2026-08-04 vs.
+    the live file's 2026-08-12) **and cross-checked against 18 real
+    in-game values the user reported directly; every single one matched
+    exactly.** `player.character.all_buffs` is a flat, already-aggregated
+    array of the player's current buffs across all sources
+    (`crew_collection`/`captains_bridge`/`starbase`) — confirmed (not
+    assumed) zero duplicate `stat` keys across all 33 real entries, so a
+    plain per-`stat` lookup is correct with no summing needed. The 6 base
+    values live at `stat` matching `^(\w+)_skill_core$`, the 12
+    proficiency values at `^(\w+)_skill_range_(min|max)$` — confirmed (not
+    assumed) these two patterns match nothing outside the intended 6-skill
+    set among all 33 real entries, so no future stat could be silently
+    mis-bucketed or dropped. This reuses the identical buff-naming
+    convention (`"X Core Skill +1%"` / `"X Skill Proficiency Min/Max
+    +1%"`) `client/src/collections/rewards.ts`'s pre-existing
+    `CORE_SKILL_PATTERN`/`SKILL_PROFICIENCY_PATTERN` regexes already parse
+    from a *different* buff list (`collection.milestone.buffs[].name`, a
+    per-tier reward description with no numeric total) — same underlying
+    domain concept, different data source, now available in a second
+    place (`lib/skillBuffs.ts`'s `getBaseSkillBonuses`/
+    `getProficiencyBonuses`).
+
+    Delivered in 2 tasks (data module, then UI wiring) — deliberately
+    split since the data module is independently testable with no UI
+    dependency. Both task reports gave genuine, specific evidence (Task
+    1's data-driven script output byte-matched the controller's own
+    pre-dispatch dry run; Task 2's real-browser DOM reads were cross-checked
+    against an independent manual read of the live data file and correctly
+    reasoned through a real 4-way tie-break at 33% proficiency, alphabetical
+    per the shipped sort comparator) — both task reviews and the final
+    review independently re-derived the reverse-engineered values from the
+    raw JSON themselves rather than trusting any report, confirming the
+    same zero-duplicate/zero-unmatched-stat/zero-float-rounding-hazard
+    properties the implementers found. Zero Critical/Important from either
+    task review or the final review; 4 Minor findings from final review,
+    all explicitly argued as better deferred (an unguarded `buff.stat`
+    access matches this codebase's own established defensive-casting
+    convention elsewhere and is contained by the route-level
+    `ErrorBoundary`; a fractional-percent-buff edge case is nil-risk since
+    only whole-percent `crew_collection` sources currently touch these
+    stats; the "already-aggregated" assumption is real but undocumented
+    in-code, a comment suggestion not a fix; a `SKILL_LABELS[key]`
+    prototype-chain nit is unreachable since output only ever iterates
+    `Object.keys`) — parked, no fix loop needed on either task.
 
 ## Current routes / nav (in order)
 
