@@ -65,7 +65,7 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
                   <TableCell align="right">{collection.claimable_milestone_index}</TableCell>
                   <TableCell align="right">{qualifyingCrew.length}</TableCell>
                 </TableRow>
-                <TableRow>
+                <TableRow sx={{ bgcolor: 'transparent !important' }}>
                   <TableCell sx={{ bgcolor: 'action.selected' }} colSpan={6}>
                     {qualifyingCrew.length === 0 ? (
                       <Typography color="text.secondary" sx={{ py: 1 }}>
