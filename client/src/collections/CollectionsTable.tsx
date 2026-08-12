@@ -65,7 +65,21 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
                   <TableCell align="right">{collection.claimable_milestone_index}</TableCell>
                   <TableCell align="right">{qualifyingCrew.length}</TableCell>
                 </TableRow>
-                <TableRow sx={{ bgcolor: 'transparent !important' }}>
+                {/* Both this row and the summary row above alternate by collection index. This row is
+                    always at an even DOM position (detail rows always follow their summary row), so
+                    theme.ts's `nth-of-type(even)` rule (specificity (0,3,0)) would otherwise override a
+                    plain `sx` background (specificity (0,1,0)) regardless of this collection's actual
+                    parity. `!important` is required to make this row's own alternating color win.
+                    Do not remove it — that would silently make every detail row the same shade again.
+                    We use the theme-callback form of `sx` (not the `'action.hover'` shorthand string)
+                    because appending `!important` to that shorthand breaks its palette-path lookup —
+                    the callback resolves the token to its real `rgba(...)` value first. */}
+                <TableRow
+                  sx={{
+                    bgcolor: (theme) =>
+                      `${index % 2 === 1 ? theme.palette.action.hover : 'transparent'} !important`,
+                  }}
+                >
                   <TableCell sx={{ bgcolor: 'action.selected' }} colSpan={6}>
                     {qualifyingCrew.length === 0 ? (
                       <Typography color="text.secondary" sx={{ py: 1 }}>
