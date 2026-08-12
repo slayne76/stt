@@ -109,7 +109,23 @@ export const ROW_EMPHASIS_COLOR = 'rgba(0, 0, 0, 0.16)';
 export function groupStripeBgcolor(recordIndex: number): string {
   return `${recordIndex % 2 === 1 ? STRIPE_COLOR : 'transparent'} !important`;
 }
+```
 
+**Correction, added after this feature's final review:** the doc comment
+above (and the literal-color constraint on `STRIPE_COLOR`/
+`ROW_EMPHASIS_COLOR`, not documented in code at all at this point in the
+design) both had real gaps, caught by final review rather than up front.
+The "2nd, 4th, ... row per record, always DOM-even" claim is only true
+when rows-per-record is *even* — with 3 rows per record, record 1's 2nd
+row lands at DOM position 5 (odd), disproving the general claim (the
+*code* was never wrong, only this stated justification). The shipped
+`client/src/theme.ts` has the corrected version — see that file directly
+rather than this spec for the authoritative comment text, since it now
+also documents the literal-vs-palette-shorthand constraint and the exact
+CSS specificity numbers, neither of which this section originally
+specified.
+
+```ts
 const theme = createTheme({
   components: {
     MuiTableHead: {

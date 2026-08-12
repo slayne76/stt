@@ -94,6 +94,20 @@ const theme = createTheme({
 export default theme;
 ```
 
+**Correction, added after this feature's final review:** the code block
+above is the plan's original literal text and is kept as-written for
+historical accuracy, but it has two real gaps the final review caught: no
+code documented that `STRIPE_COLOR`/`ROW_EMPHASIS_COLOR` must stay
+literal `rgba()` strings (not MUI palette-shorthand paths — appending
+`!important` to a shorthand string breaks `sx`'s exact-string palette-path
+lookup and silently drops the declaration), and `groupStripeBgcolor`'s
+doc comment's "2nd, 4th, ... row per record, always DOM-even" claim is
+only true when rows-per-record is *even* (a 3-rows-per-record
+counter-example disproves it generally — the *code* was always correct,
+only this justification was wrong). Both were fixed in a final-review fix
+wave, commit `8d3ed77`. See the shipped `client/src/theme.ts` for the
+corrected, authoritative comment text rather than this block.
+
 - [ ] **Step 3: Build and lint**
 
 Run: `npm run build -w client` — expect success, 0 errors.
