@@ -88,10 +88,13 @@ client/src/
                                  truth" below
   main.tsx                      React root, wraps <App/> in <ThemeProvider theme={theme}>
   theme.ts                      App's first MUI theme (createTheme, no CssBaseline) — blue
-                                 TableHead + alternating TableBody row striping (STRIPE_COLOR/
-                                 ROW_EMPHASIS_COLOR literal rgba() constants) + groupStripeBgcolor(),
-                                 the reusable per-record helper for multi-row tables, see
-                                 "Stronger, reusable table striping" below
+                                 TableHead + alternating TableBody row striping (STRIPE_COLOR
+                                 literal rgba() constant) + BLOCK_BOUNDARY_COLOR (collection-
+                                 boundary divider) + FORCE_TRANSPARENT_BGCOLOR (defeats the
+                                 generic stripe rule on rows that opt out) + groupStripeBgcolor(),
+                                 a reusable per-record helper for multi-row tables — currently
+                                 caller-less, kept as documented infrastructure — see
+                                 "Per-member crew-row striping in CollectionsTable" below
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
   context/CrewCatalogContext.tsx Same shape, second independent provider (see "Crew catalog and
                                  Overview unique-crew counts") — a slow/failed catalog fetch never
@@ -4397,6 +4400,81 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     `ss`/`lsof`/`ps` evidence pasted into reports, not a self-declared
     "checked ownership" claim, per the final reviewer's own
     recommendation).
+
+44. **Per-member crew-row striping in CollectionsTable**
+    (`2026-08-12-collection-crew-row-striping`) — same-day follow-up to
+    (43): after that feature merged, the user tested `/collections` again
+    and reported the crew-member sub-rows inside one collection's detail
+    block (e.g. "Klingon Quark" and "Human Q" under the same collection)
+    all shared one flat background — a real, confirmed gap, not a repeat
+    of (43)'s regression. Root cause, confirmed live via computed-style
+    reads against the running dev server (not just source reading):
+    `CollectionCrewList.tsx` rendered each crew member as a plain `Box`,
+    never a `TableRow`, so it never participated in any striping
+    mechanism at all — the detail block's single flat
+    `ROW_EMPHASIS_COLOR` tint was the same value for every crew member in
+    it, by design of (43), which only ever alternated at the
+    *collection* level.
+
+    Two brainstorming/dry-run rounds, each with a live screenshot the
+    user confirmed before finalizing the spec: **round 1** added
+    per-member striping (`STRIPE_COLOR`, restarting at index 0 per
+    collection) on top of (43)'s existing per-collection block
+    alternation and flat detail tint — dry-run screenshot showed both
+    layered together. **The user rejected that combination**: the
+    block-level grey tint on alternating summary rows was "ruining the
+    visual effect." **Round 2** (the shipped design): removed *all*
+    block-level striping/tint from `CollectionsTable.tsx` — both rows
+    now force plain transparent via a new `FORCE_TRANSPARENT_BGCOLOR`
+    constant (`'transparent !important'`, still needed even though
+    nothing alternates anymore, since the generic app-wide
+    `nth-of-type(even)` rule would otherwise still tint whichever row
+    lands on an even DOM position) — and `ROW_EMPHASIS_COLOR` was
+    deleted outright (zero remaining callers). Since removing the block
+    tint also removed the only visual marker of where one collection's
+    rows end and the next begins, a new `BLOCK_BOUNDARY_COLOR`
+    (`'rgba(0, 0, 0, 0.24)'`, a third tier in the same flat-alpha family
+    as `STRIPE_COLOR`) drives a 2px divider on the detail cell's bottom
+    border — placed on the detail row specifically (not the following
+    summary row) so it fires exactly once per collection regardless of
+    crew count, including the zero-crew "No crew match." case. Per-member
+    striping itself is `CollectionCrewList.tsx`'s `Box.map((c, i) => ...)`
+    alternating `STRIPE_COLOR`/`transparent` by `i`, full-bled edge to
+    edge via `px: 2, mx: -2` canceling the parent `TableCell`'s 16px
+    padding. `groupStripeBgcolor` (43)'s helper is now caller-less
+    everywhere in the app but was deliberately kept, not deleted — an
+    explicit non-goal in the spec — as documented infrastructure for the
+    next multi-row-per-record table, with its doc comment corrected to
+    stop pointing at `CollectionsTable.tsx` as a still-current example.
+
+    Single-task plan, delivered via subagent-driven-development. Task
+    review: spec ✅, zero Critical/Important, approved on the first pass —
+    the implementer's report included raw computed-style output for
+    every claimed color (not summarized), and disclosed rather than
+    silently worked around a port-3001 conflict (an unrelated,
+    pre-existing main-checkout server already held it; verified
+    ownership via PID/cwd before declining to touch it, reused it
+    read-only through the existing dev proxy instead, since this
+    task never touched `server/`). Final review independently
+    re-derived the `FORCE_TRANSPARENT_BGCOLOR` mechanism live against a
+    fresh dev server rather than trusting the report — confirmed all 10
+    sampled body rows read `rgba(0, 0, 0, 0)` regardless of DOM-even/odd
+    position, confirmed the per-collection restart is real (not a global
+    counter leaking across collections), and confirmed the full-bleed
+    padding-cancellation math held pixel-for-pixel. Zero Critical; one
+    Important (this doc itself being stale after the branch — closed by
+    this same update, per the project's established convention that
+    `PROJECT_STATE.md` staleness is a post-merge step, not a merge
+    blocker); two Minor closed in a same-branch fix round
+    (`groupStripeBgcolor`'s doc comment still described a "per-collection
+    background" that no longer exists; the padding-cancellation trick in
+    `CollectionCrewList.tsx` had no inline comment despite this exact
+    file's prior history of stale/missing comments biting later readers)
+    — both fixed and re-reviewed clean in one round. Two Minor parked
+    with rulings: `groupStripeBgcolor` staying caller-less is correct per
+    the spec's explicit non-goal; the backend's hardcoded port 3001
+    (out of this branch's diff) is a standalone chore candidate for a
+    future session, not this one's problem.
 
 ## Current routes / nav (in order)
 
