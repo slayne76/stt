@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (getFilledSlotIndices / getMissingSlotIndices). This
+Last updated: 2026-08-12 (App-wide table theme). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -86,7 +86,10 @@ client/src/
   routes.tsx                    Single source of truth for pages: NAV_ITEMS (nested, for the nav)
                                  and ROUTES (flat, derived) — see "routes.tsx single source of
                                  truth" below
-  main.tsx                      React root
+  main.tsx                      React root, wraps <App/> in <ThemeProvider theme={theme}>
+  theme.ts                      App's first MUI theme (createTheme, no CssBaseline) — blue
+                                 TableHead + alternating TableBody row striping, see "App-wide
+                                 table theme" below
   context/PlayerDataContext.tsx Shared fetch state (data/loading/error/refresh)
   context/CrewCatalogContext.tsx Same shape, second independent provider (see "Crew catalog and
                                  Overview unique-crew counts") — a slow/failed catalog fetch never
@@ -4232,6 +4235,86 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     (intentional, the named deliverable); and a measured, imperceptible
     performance cost (~1.2ms per full 604-crew sort) that the reviewer
     explicitly said not to optimize away.
+42. **App-wide table theme** (`2026-08-12-table-theme`) — the app's first
+    MUI `ThemeProvider`, ever (previously ran on pure MUI defaults). Two
+    additive `styleOverrides` in the new `client/src/theme.ts`: every
+    `TableHead` gets `primary.main` (the same blue already in the
+    `AppBar`) with white bold text, and every `TableBody`'s rows
+    alternate `transparent`/`action.hover` starting from the first row.
+    Deliberately excludes `CssBaseline` — this app has no CSS files at
+    all, so the browser's default `body { margin: 8px }` is in effect;
+    adding `CssBaseline` would have shifted the whole page layout, out of
+    scope for a table-styling change. Covers 6 of the app's 7 `TableHead`
+    files automatically with zero per-file changes (including Overview's
+    3 ad-hoc tables, proving the theme-only approach). The 7th,
+    `CollectionsTable.tsx`, renders 2 `TableRow`s per collection (a
+    summary row + an expandable crew-detail row) instead of 1, so it
+    needed its own per-collection `sx`-driven striping — both rows now
+    share one alternating base color (`transparent`/`action.hover` by
+    collection index), with the detail row's cell additionally carrying
+    `action.selected` layered on top for distinction from its own summary
+    row.
+
+    **A real bug surfaced during the fix-round loop, not obvious from
+    reading the plan's code alone:** `CollectionsTable`'s detail row is
+    always at an even DOM position (it always follows its summary row),
+    so the generic `TableBody` rule kept painting `action.hover` onto it
+    regardless of which `sx` override was applied — first neutralizing it
+    entirely (`bgcolor: 'transparent !important'`), which the task
+    implementer discovered required `!important` specifically: a plain
+    `sx={{ bgcolor: 'transparent' }}` does not win against the theme
+    rule's 3-part compound selector (`(0,3,0)` specificity vs. a plain
+    `sx` class's `(0,1,0)`) regardless of stylesheet insertion order — the
+    implementer verified this empirically (the suggested non-`!important`
+    fix produced zero visible change) before diagnosing the real cause via
+    `document.styleSheets` inspection. Both the task reviewer and (later)
+    an independent scoped re-reviewer confirmed this specificity math
+    from source rather than trusting the narrative.
+
+    **The final whole-branch review then caught a deeper, genuinely
+    unnoticed design gap**, not a code bug in the strict sense: the
+    originally-planned code (and the spec's own prose) never actually
+    made the detail row's *base* color depend on the collection's index
+    at all — only the summary row alternated, so a collection's two rows
+    never actually shared one stripe, contrary to what the spec/plan text
+    claimed ("both rows of a collection share the same alternating
+    base") and contrary to what the controller's own pre-implementation
+    dry-run screenshot check was supposed to have confirmed but hadn't
+    precisely verified. Surfaced directly to the user with a screenshot
+    (not silently auto-fixed or silently parked, per this project's
+    established "genuine correctness/design finding → user decides"
+    convention) — user chose to make the detail row alternate too. Closed
+    in a final-review fix wave: the detail row's background now uses a
+    theme-callback form of `sx`
+    (`bgcolor: (theme) => \`${...} !important\``) rather than the
+    `'action.hover'` palette-shorthand string, because appending
+    `!important` to that shorthand breaks `sx`'s exact-string palette-path
+    lookup (confirmed by the scoped re-reviewer tracing through
+    `@mui/system`'s actual `style.js`/`styleFunctionSx.js` source, not
+    just accepting the implementer's explanation). Both task reviews, the
+    scoped re-review, and the final review each independently verified
+    the shipped colors via real canvas `getImageData` pixel sampling
+    cross-checked against `getComputedStyle` — not just visual assertion.
+
+    Zero Critical from any review stage. 2 Important (the detail-row
+    pairing gap, closed per the user's direction above; a missing
+    `PROJECT_STATE.md` docs commit from final review, overridden per this
+    project's own established convention that docs land as a separate
+    post-merge commit, not inside the feature branch — closed by this
+    same update). Several Minor findings across the three review rounds,
+    all parked or folded into the fix waves as appropriate (an
+    explanatory comment added for the `!important` usage per an explicit
+    "fix this before merge" from final review; a comment added in
+    `theme.ts` pointing at the `CollectionsTable` exception; a final,
+    genuinely new Minor from the closing scoped re-review — the
+    summary-row and detail-row parity expressions are now duplicated with
+    no shared constant tying them together, a latent future-drift risk,
+    not a live bug — parked). The spec's and plan's own text had two real
+    inaccuracies (the Overview "3 tables get headers" claim — the
+    identity table has no `TableHead` and only gets striping; the
+    overstated dry-run pairing confirmation) corrected in-branch as a
+    doc-only commit before merge, per this project's established
+    "plan/spec text bugs get fixed in-branch, not deferred" convention.
 
 ## Current routes / nav (in order)
 
