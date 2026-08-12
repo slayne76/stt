@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (routes.tsx single source of truth). This
+Last updated: 2026-08-12 (Nav active-state indicator). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -3995,6 +3995,58 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     the final review; one Important (this document's own staleness) was
     correctly parked rather than looped into the branch, per this
     project's established post-merge-docs-commit convention.
+39. **Nav active-state indicator** (`2026-08-12-nav-active-state`) —
+    resolves the "Nav active-state" deferred issue below: the sidebar nav's
+    `ListItemButton`s never showed which page was current. `AppLayout.tsx`'s
+    two flat top-level entries (Overview, Collections) get MUI's `selected`
+    prop plus `aria-current="page"` on an exact `location.pathname ===
+    item.path` match. `NavGroupItem.tsx` gained its own independent
+    `useLocation()` call (matching the file's existing self-contained
+    pattern of already calling `useNavigate()` itself rather than taking
+    router behavior as a prop from `AppLayout`) — its group trigger
+    (Crew/Ships) gets `selected` whenever `items.some((item) => item.path
+    === pathname)`, i.e. whenever the current route is any of that group's
+    children, but deliberately **never** `aria-current`, since a group
+    trigger isn't itself a page; each flyout child gets the same
+    leaf-match treatment as the top-level entries (`selected` +
+    `aria-current` together). This two-signal split (leaf: both; group:
+    `selected` only) was the one part of the design most likely to be
+    gotten wrong, and both the implementer's self-review and the task
+    reviewer independently re-verified it directly against the diff hunks
+    rather than trusting the pattern by description. Zero behavior change
+    to click/keyboard/hover/Escape/focus logic — purely additive props.
+    Final review independently proved two structural safety properties
+    from the code itself, not just observed them working: `aria-current`
+    can never land on two nav items simultaneously (all 13 paths are
+    distinct, and a closed flyout's `Popper` renders no DOM at all, so
+    there's no hidden duplicate in the accessibility tree), and the group
+    trigger's `selected` state can never disagree with its matching
+    child's, since both derive from the same `pathname` in the same render
+    pass. **Directly following the routes.tsx feature's verification-trust
+    incident (see above), this task's implementer was given an explicit
+    strict-evidence bar up front, and met it** — its report contains
+    granular, per-element DOM reads (exact `className`/`aria-current`
+    values for all 4 top-level items and all 11 flyout children, across 6
+    checks) rather than aggregate pass/fail claims. The final reviewer
+    independently spot-checked the report's authenticity against the code
+    (not just its internal consistency) and found specific details a
+    fabricated report would be unlikely to reproduce — e.g. the report's
+    DOM selector needing `[role="button"]` because `ListItemButton`
+    defaults to rendering a `<div>`, not a `<button>`; a duplicated
+    `Mui-selected` class-string artifact matching a known MUI
+    styled-component quirk; and the flyout's item order in the report
+    matching real DOM order rather than the plan's own (differently
+    ordered) listing. Zero Critical/Important from either review; 3 Minor
+    findings, each explicitly argued by the final reviewer as not worth
+    fixing and parked with a ruling rather than looped: a trailing-slash
+    URL (e.g. `/qps/`, unreachable through the app's own navigation) would
+    match the route but highlight no nav item; `pathname === item.path` is
+    evaluated twice per item (once for `selected`, once for
+    `aria-current`) instead of being hoisted to a shared local, judged
+    negligible on a render path this cheap; and the group trigger's active
+    state has no screen-reader equivalent (no ARIA token means "contains
+    the current page"), a deliberate, correct trade-off already made in
+    the spec rather than an oversight.
 
 ## Current routes / nav (in order)
 
@@ -4197,8 +4249,13 @@ doing:
   covers the 5 pages that shared the identical
   `combineComparators(byLevelDesc, byEquipmentSlotsRemainingDesc,
   byCollectionCountDesc(collections), byNameAsc)` composition named here.
-- **Nav active-state:** the nav `ListItemButton`s don't show which page is
-  currently selected (no `selected` prop / `useLocation` check). Cosmetic.
+- **Nav active-state — resolved 2026-08-12, see "Nav active-state
+  indicator" below.** (Kept here, struck through in spirit, as a pointer
+  for anyone who remembers this entry from before — the fix is real, not
+  just noted.) `AppLayout.tsx`'s two top-level buttons and
+  `NavGroupItem.tsx`'s group triggers/flyout children now all carry MUI's
+  `selected` prop, driven by comparing `useLocation().pathname` against
+  each entry's path.
 - **`NAV_ITEMS` and `<Routes>` were hand-synced lists — resolved
   2026-08-12, see "routes.tsx single source of truth" below.** (Kept here,
   struck through in spirit, as a pointer for anyone who remembers this
