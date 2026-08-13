@@ -4476,6 +4476,70 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     (out of this branch's diff) is a standalone chore candidate for a
     future session, not this one's problem.
 
+45. **Hide buyback-state crew from the duplicate pages**
+    (`2026-08-12-duplicates-hide-buyback-crew`) — the "4 Stars
+    Duplicates" and "5 Stars Duplicates" pages (`filterFrozenDuplicates`
+    in `client/src/crew/filters.ts`, the single filter both pages route
+    through via `FrozenDuplicatesPage.tsx`) were showing crew the user
+    had already trashed in-game. The game moves a trashed crew member
+    into a temporary, recoverable "buyback" state rather than deleting
+    it instantly (`in_buy_back_state: true` on the raw crew record), so
+    it still existed in the player's crew list and still matched the
+    frozen-archetype-duplicate check. `CrewMember` gained one required
+    field, `in_buy_back_state: boolean`, and `filterFrozenDuplicates`
+    gained one added condition, `&& !c.in_buy_back_state` — a genuinely
+    minimal, two-file, two-line fix.
+
+    **Data-freshness caught before any code was written:** the repo's
+    static `example-data.json` (dated Aug 4) happens to have zero
+    buyback-state crew, so verifying against it would have made a
+    broken implementation look correct. The controller instead verified
+    against `server/data/player-cache.json` (the file the running dev
+    server actually serves, refreshed same-day) before writing the
+    spec, reproducing the user's own report exactly: of 10 crew shown on
+    the 4-star duplicates page, 7 were buyback-state and should
+    disappear, leaving exactly Captain Janeway, Anxious Kirk, and
+    Indignant Seven. The 5-star duplicates page had zero duplicates
+    either way, so no visible change there.
+
+    Single-task plan via subagent-driven-development. Task review: spec
+    ✅, zero Critical/Important — confirmed the required-field addition
+    is safe (no file in the codebase constructs a `CrewMember` object
+    literal; the only place raw data becomes `CrewMember` is a type
+    cast in `getCrewList`) and that `filterFrozenDuplicates` has exactly
+    one call site, so no other page's crew counts (Collections, QPs,
+    Overview, the tier pages) are affected. Final review independently
+    re-derived every data claim from scratch against
+    `server/data/player-cache.json` rather than trusting the report (confirmed
+    all 608 crew records carry a real boolean, confirmed the 10→3
+    reduction and the exact 7 excluded names) and traced the field's
+    path from the server's route handler (`res.json` passthrough, no
+    whitelist) through to the browser to rule out server-side field
+    stripping as a possible gap. Zero Critical/Important either
+    stage. Both task-level and final review flagged the same disclosed
+    deviation as reasonable: the worktree's own backend (port 3001,
+    hardcoded, no env override) couldn't start because an unrelated
+    pre-existing process already held it, so browser verification used
+    only the worktree's client dev server against that already-running,
+    checksum-verified-identical backend rather than touching it — a
+    now-recurring, well-established workaround for this project's
+    hardcoded-backend-port limitation (see also feature 44's Task 1).
+    One Minor closed in a same-branch fix round (`filterFrozenDuplicates`
+    had no comment explaining the exclusion is deliberately scoped to
+    this one function, not a general crew-list rule — a future reader
+    could otherwise "generalize" it into `getCrewList` and silently
+    violate the spec's explicit non-goal that every other page keeps
+    counting buyback crew). This doc entry itself was the other Minor,
+    closed by this same update per the established post-merge
+    convention.
+
+    **The final review's session was cut off mid-review by a platform
+    session-limit reset — the second time this exact interruption has
+    hit this project (see feature 31's Task 3 for the first).** Same
+    handling as before: resumed the same agent via `SendMessage` rather
+    than redoing the whole review from scratch, since the interruption
+    was a platform event with no bearing on work quality already done.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
