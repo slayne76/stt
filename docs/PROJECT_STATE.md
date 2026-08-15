@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-15 (QPs page top-2-skills column). This
+Last updated: 2026-08-15 (Unified Duplicates page). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -160,8 +160,11 @@ client/src/
                                  QPsTable/MissingCrewTable; takes EITHER `asset` (a `DatacoreAsset`)
                                  OR a raw `url` string directly (see "Missing 4 Stars tables")
   crew/                         All crew-related pure logic + shared components
-    getters.ts                 Data extraction + derived single-crew values
-    filters.ts                 Array-in-array-out crew filtering (incl. filterFrozenDuplicates,
+    getters.ts                 Data extraction + derived single-crew values; also
+                                getDuplicateCrewGroups (array-in, DuplicateCrewGroup[]-out —
+                                see "Duplicates page" below)
+    filters.ts                 Array-in-array-out crew filtering (filterFrozenDuplicates
+                                removed 2026-08-15, superseded by getDuplicateCrewGroups;
                                 filterUnmaxed — `!isImmortalized(c)`, deliberately looser than
                                 filterNeedsWork, see "Two new crew pages" below)
     sorters.ts                 Composable comparators (see "Sorting design";
@@ -180,6 +183,11 @@ client/src/
     skillLabels.ts               Shared skill full-name/abbreviation maps (`SKILL_LABELS`,
                                   `SKILL_ABBREVIATIONS`), keyed by bare skill name — see "QPs page
                                   top-2-skills column" below
+    DuplicatesTable.tsx           Duplicates page's table (#/Image/Stars/Name/Level/Items to
+                                  equip/Collections/Total Owned), dedicated component (not a
+                                  CrewTable consumer — operates on DuplicateCrewGroup[], not
+                                  CrewMember[]) — see "Duplicates page" below, paginated (see
+                                  "Table pagination" below)
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
                                 getCollectionCount, getCollectionCrew (reverse direction);
@@ -238,9 +246,9 @@ client/src/
     FourFourStarsCrewReadyPage.tsx  rarity=4, max_rarity=4, "ready to immortalize"
     FourFourStarsCrewPage.tsx      rarity=4, max_rarity=4, "needs work"
     CollectionsPage.tsx             one row per collection, reverse (collection→crew) view
-    FrozenDuplicatesPage.tsx        internal, parameterized (maxRarity/title) — see below
-    FourStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=4
-    FiveStarsDuplicatesPage.tsx     thin wrapper: FrozenDuplicatesPage maxRarity=5
+    DuplicatesPage.tsx               all rarities, one row per duplicate group — see
+                                      "Duplicates page" below (replaced the 3 files above
+                                      2026-08-15)
     ShipsPage.tsx                    internal, parameterized (rarity/title) — see "Ships pages"
     FiveStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=5
     FourStarsShipsPage.tsx           thin wrapper: ShipsPage rarity=4
@@ -1148,72 +1156,106 @@ existed, since they're more than one star from their ceiling.
 **Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-crew-exclusion-design.md`,
 `docs/superpowers/plans/2026-08-03-frozen-crew-exclusion-plan.md`.
 
-## Frozen duplicates pages (surfacing, not hiding)
+## Duplicates page (surfacing, not hiding)
 
 **The deliberate opposite of "Frozen crew and duplicate exclusion"
 above** — that feature *hides* frozen-archetype duplicates from the
 Collections page because they can never advance a collection; this one
-*surfaces* them explicitly, on two new pages ("4 Stars Duplicates," "5
-Stars Duplicates"), so the user can look at each short list and decide,
-in the game itself, whether to keep leveling a duplicate or dismiss/fuse
-it. Both features read the same `getFrozenCrewArchetypeIds` set; they
-just do opposite things with membership in it. If a future session sees
-both filters and assumes one must be a mistake given the other exists —
-it isn't. They serve different questions ("what still needs my
+*surfaces* them explicitly, on one unified "Duplicates" page
+(`/duplicates`, all rarities 5★→1★), so the user can look at the list and
+decide, in the game itself, whether to keep leveling a duplicate or
+dismiss/fuse it. Both features read the same `getFrozenCrewArchetypeIds`
+set; they just do opposite things with membership in it. If a future
+session sees both and assumes one must be a mistake given the other
+exists — it isn't. They serve different questions ("what still needs my
 attention toward a collection?" vs. "what active crew are redundant
 copies I should decide about?").
 
+**As of 2026-08-15 (see "Unified Duplicates page" in the feature history
+below), this replaced the original two rarity-scoped pages** ("4 Stars
+Duplicates"/"5 Stars Duplicates", `FrozenDuplicatesPage`/
+`FourStarsDuplicatesPage`/`FiveStarsDuplicatesPage` — all three files
+deleted) with one page spanning every rarity, and changed the underlying
+data model from "one row per owned crew instance" to "one row per
+distinct duplicate *group*, with a count":
+
 ```ts
-// crew/filters.ts
-export function filterFrozenDuplicates(crew: CrewMember[], frozenArchetypeIds: Set<number>, maxRarity: number): CrewMember[] {
-  return crew.filter((c) => frozenArchetypeIds.has(c.archetype_id) && c.max_rarity === maxRarity);
+// crew/getters.ts
+export interface DuplicateCrewGroup {
+  crew: CrewMember;
+  totalOwned: number;
+}
+
+function duplicateGroupKey(crew: CrewMember): string {
+  return `${crew.archetype_id}|${crew.rarity}|${crew.level}|${getEquipmentSlotsRemaining(crew)}`;
+}
+
+export function getDuplicateCrewGroups(
+  crew: CrewMember[],
+  frozenArchetypeIds: Set<number>
+): DuplicateCrewGroup[] {
+  const candidates = crew.filter((c) => frozenArchetypeIds.has(c.archetype_id) && !c.in_buy_back_state);
+  // ...groups candidates by duplicateGroupKey, counting group size into totalOwned
 }
 ```
 
-**No completion-state filtering, by explicit user decision** — every
-active-roster crew whose archetype is frozen and whose `max_rarity`
-matches shows up, regardless of the duplicate's own level/equipment/
-rarity. The frozen twin itself is never a double-counting risk:
-`stored_immortals` entries aren't part of `player.character.crew` at
-all. **Two things worth knowing if this page ever looks "wrong":**
-- **The "5 Stars Duplicates" page is empty in the sample data, and that's
-  a data fact, not a bug.** Of the 12 archetypes with a frozen twin, the
-  `max_rarity` distribution is `{1:1, 2:5, 3:1, 4:5, 5:0}` — none happen
-  to be 5-star, despite 435 owned 5-star crew in the sample. A future
-  session seeing this page empty next to a large 5-star roster should
-  check the actual overlap before assuming something's broken.
-- **None of the 12 overlapping archetypes is itself already-immortalized
-  on the active roster in the sample**, so the "no completion-state
-  filtering" decision has never actually been exercised by real data yet.
-  If a listed duplicate is ever leveled all the way to Immortalized, it
-  will *still* appear on these pages — that's the intended, explicitly-
-  decided behavior, not something to "fix" if it's noticed later.
+- **Candidate rule, unchanged from the old `filterFrozenDuplicates`**:
+  archetype has a frozen/stored twin (`getFrozenCrewArchetypeIds`) and
+  `!c.in_buy_back_state` (buyback/trashed crew excluded, per feature 45).
+  The old `max_rarity` restriction is gone — every rarity is included now.
+- **New: grouping.** Two owned copies only collapse into one row if they
+  match on all four of archetype, `rarity`, `level`, and items-to-equip
+  (`getEquipmentSlotsRemaining`) — an explicit user decision during
+  brainstorming (a 1-rarity-higher copy that's otherwise identical is a
+  genuinely different row, not noise to round away). The row's `Total
+  Owned` column is the group's size — a real, verified example:
+  "Tribunal Pike" (2 identical level-1 spares) shows one row with `Total
+  Owned = 2`.
+  - **Any group member is a safe, arbitrary representative for display**:
+    since rarity/level/items-to-equip are part of the grouping key, and
+    Collections membership (`crewBelongsToCollection`) is a pure function
+    of `archetype_id`/traits (never level/rarity/equipment), every
+    displayed field is provably identical across a group's members.
+  - **No completion-state filtering, same as the old pages**: an
+    already-immortalized active duplicate still counts toward
+    `totalOwned` — no `isImmortalized` exclusion.
+- **New: sort.** `max_rarity` desc (5★ top, 1★ bottom) → `defaultCrewComparator`
+  (level desc, items-to-equip desc, collections desc, name asc) →
+  `byRarityDesc` as a final tiebreak (added same-day after the final
+  review — without it, two duplicate groups of the *same* archetype/level/
+  items differing only by rarity would tie on every other comparator and
+  fall back to unstable data-array order; placed at the very end of the
+  chain specifically so it never changes any ordering that
+  `defaultCrewComparator` already resolves).
+- **`DuplicatesTable.tsx` is a new, dedicated component**, not a
+  `CrewTable` extension — `CrewTable` operates on `CrewMember[]` (one row
+  per instance), this page's rows are `DuplicateCrewGroup[]`, a
+  structurally different shape. It duplicates roughly half of
+  `CrewTable`'s column-rendering code (the `#`/Image/Stars/Name/Level/
+  Items-to-equip/Collections columns, plus `Total Owned` as the new last
+  column) — accepted as consistent with this codebase's established
+  per-row-shape-gets-its-own-table pattern (`QPsTable`,
+  `catalog/FrozenCrewTable`, `catalog/MissingCrewTable` all do the same),
+  not a DRY violation worth fixing. **If a 6th such table ever appears,
+  that's the signal to extract a shared crew-row-cells component** — not
+  before.
+- **`filterFrozenDuplicates` was deleted** from `crew/filters.ts` (its
+  only caller, `FrozenDuplicatesPage.tsx`, was deleted in the same
+  change) — `filterByRarity`/`filterReadyToImmortalize`/`filterNeedsWork`/
+  `filterQPEligible`/`filterUnmaxed` are unaffected.
+- **The page header count is rows, not raw copies** — "Duplicates (15)"
+  means 15 distinct duplicate situations, not the 30 raw spare crew
+  instances those rows represent (Tribunal Pike's row counts as 1 even
+  though `Total Owned` is 2). The user was asked directly and confirmed
+  this is the wanted behavior (matches every other page's count
+  convention) over showing the summed total.
 
-`FrozenDuplicatesPage` (internal, not itself routed) takes `maxRarity`/
-`title` props; `FourStarsDuplicatesPage`/`FiveStarsDuplicatesPage` are
-thin wrappers (7 lines each, zero logic) rendering it with fixed values
-— chosen specifically because the two pages differ by exactly one
-number, without touching the broader page-shell duplication tracked
-below (adding two routes cost one shell copy, not two).
-
-**`filterFrozenDuplicates` takes the frozen-id `Set` as a plain
-parameter** rather than importing `getFrozenCrewArchetypeIds` itself —
-`crew/filters.ts` stays oblivious to where the set came from, same
-module-boundary discipline as `getCollectionCrew`'s call-site-composed
-sorting. **At the time this feature shipped**, `FrozenDuplicatesPage.tsx`
-imported both `getFrozenCrewArchetypeIds` and `getCollectionsList` from
-`collections/getters.ts` — unremarkable on its own (every crew page
-already imports `getCollectionsList` for `byCollectionCountDesc`), but
-this was the first page with nothing to do with collections that needed
-a `collections/` import at all, which a prior review had flagged as the
-condition where `getFrozenCrewArchetypeIds`'s placement would start to
-matter. **It did — see "Deferred issues" below: `getFrozenCrewArchetypeIds`
-moved to `crew/getters.ts` on 2026-08-07**, so `FrozenDuplicatesPage.tsx`
-now imports it from there instead, alongside `getCollectionsList` still
-from `collections/getters.ts`.
-
-**Spec/plan:** `docs/superpowers/specs/2026-08-03-frozen-duplicates-pages-design.md`,
+**Spec/plan (original two-page version):**
+`docs/superpowers/specs/2026-08-03-frozen-duplicates-pages-design.md`,
 `docs/superpowers/plans/2026-08-03-frozen-duplicates-pages-plan.md`.
+**Spec/plan (2026-08-15 unification):**
+`docs/superpowers/specs/2026-08-15-unified-duplicates-page-design.md`,
+`docs/superpowers/plans/2026-08-15-unified-duplicates-page-plan.md`.
 
 ## Sorting design
 
@@ -4602,6 +4644,54 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     this row count). This doc entry itself was one of the recommended
     follow-ups, closed by this same update per the established convention.
 
+47. **Unified Duplicates page** (`2026-08-15-unified-duplicates-page`) —
+    replaced the two rarity-scoped "4 Stars Duplicates"/"5 Stars
+    Duplicates" pages (`FrozenDuplicatesPage`/`FourStarsDuplicatesPage`/
+    `FiveStarsDuplicatesPage`, all 3 files deleted) with one "Duplicates"
+    page (`/duplicates`) spanning every rarity 5★→1★, previously
+    hard-excluded. New `getDuplicateCrewGroups` (`crew/getters.ts`) groups
+    duplicate-candidate crew by archetype+rarity+level+items-to-equip — a
+    deliberate, explicit user correction during brainstorming away from
+    "show the most-progressed copy as representative" toward "exact-match
+    grouping, anything differing is a genuinely different row" — and a
+    new "Total Owned" column shows each group's size. Full mechanics in
+    "Duplicates page (surfacing, not hiding)" above. Real-data verified
+    throughout: the user's own worked example ("Tribunal Pike" → 2
+    identical spares) was independently reproduced at design time, by
+    both tasks' implementers, and again from scratch by the final
+    reviewer. Two tasks (data layer, then page/table/nav), both task
+    reviews clean, zero Critical/Important. **Final review independently
+    re-derived every real number from scratch** (own grouping/sorting
+    implementation against the live `server/data/player-cache.json`, not
+    the branch's code — exact match on all 15 real rows) and verified the
+    "any group member is a safe display representative" claim both from
+    `crewBelongsToCollection`'s source and empirically across all 15
+    groups (zero intra-group variance found). Zero Critical; one
+    Important (this doc's own staleness — closed by this same update,
+    per the established convention that `PROJECT_STATE.md` staleness is
+    a post-merge step, not a merge blocker) and 4 Minor. **One Minor was
+    escalated back to the user rather than silently parked**: no rarity
+    tiebreak existed in the sort chain for two duplicate groups of the
+    same crew differing only by rarity — latent (zero real cases today)
+    but directly matching the user's own brainstorming example, so it
+    was surfaced via a direct question rather than auto-fixed or
+    auto-deferred. User confirmed fixing it; closed same-day in a
+    one-round final-review fix wave (`byRarityDesc` appended at the
+    *end* of the comparator chain, deliberately not right after
+    `byMaxRarityDesc`, so today's already-verified real row order
+    provably can't shift — confirmed both by a real-data before/after
+    byte-identity check and a synthetic two-fake-crew tiebreak proof),
+    scoped re-review clean. The other 3 Minor were resolved by user
+    choice or accepted as consistent with established patterns: the page
+    header count stays "rows" not "raw copies" (user's explicit pick);
+    `DuplicatesTable.tsx` duplicating ~half of `CrewTable.tsx`'s
+    column-rendering code is accepted, matching this codebase's existing
+    per-row-shape-gets-its-own-table pattern (`QPsTable`,
+    `catalog/FrozenCrewTable`, `catalog/MissingCrewTable`); a plan-text
+    inaccuracy (called `tsx` a "root" devDependency; it's actually in
+    `server/package.json`, hoisted to root `node_modules/.bin` — `npx
+    tsx` from root still works) is doc-only, no code impact.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
@@ -4612,8 +4702,7 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Crew → 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
 | Crew → 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
 | Crew → 4/4 Stars crew | `/4-4-stars-crew` | rarity=4, max_rarity=4, needs work |
-| Crew → 4 Stars Duplicates | `/4-stars-duplicates` | max_rarity=4, archetype has a frozen twin |
-| Crew → 5 Stars Duplicates | `/5-stars-duplicates` | max_rarity=5, archetype has a frozen twin |
+| Crew → Duplicates | `/duplicates` | all rarities, archetype has a frozen twin, grouped by archetype+rarity+level+items-to-equip |
 | Crew → QPs | `/qps` | immortalized, QL<4, sorted by on-hold/QL/q_bits/name |
 | Crew → 5 & 4 Stars Frozen Crew | `/5-4-stars-frozen-crew` | frozen archetype (`stored_immortals`), catalog max_rarity 4 or 5 |
 | Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
