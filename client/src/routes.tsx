@@ -6,8 +6,7 @@ import FourFiveStarsCrewPage from './pages/FourFiveStarsCrewPage';
 import FourFourStarsCrewReadyPage from './pages/FourFourStarsCrewReadyPage';
 import FourFourStarsCrewPage from './pages/FourFourStarsCrewPage';
 import CollectionsPage from './pages/CollectionsPage';
-import FourStarsDuplicatesPage from './pages/FourStarsDuplicatesPage';
-import FiveStarsDuplicatesPage from './pages/FiveStarsDuplicatesPage';
+import DuplicatesPage from './pages/DuplicatesPage';
 import FiveStarsShipsPage from './pages/FiveStarsShipsPage';
 import FourStarsShipsPage from './pages/FourStarsShipsPage';
 import QPsPage from './pages/QPsPage';
@@ -38,8 +37,7 @@ export const NAV_ITEMS: (NavLink | NavGroup)[] = [
       { label: '4/5 Stars crew', path: '/4-5-stars-crew', element: <FourFiveStarsCrewPage /> },
       { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready', element: <FourFourStarsCrewReadyPage /> },
       { label: '4/4 Stars crew', path: '/4-4-stars-crew', element: <FourFourStarsCrewPage /> },
-      { label: '4 Stars Duplicates', path: '/4-stars-duplicates', element: <FourStarsDuplicatesPage /> },
-      { label: '5 Stars Duplicates', path: '/5-stars-duplicates', element: <FiveStarsDuplicatesPage /> },
+      { label: 'Duplicates', path: '/duplicates', element: <DuplicatesPage /> },
       { label: 'QPs', path: '/qps', element: <QPsPage /> },
       { label: '5 & 4 Stars Frozen Crew', path: '/5-4-stars-frozen-crew', element: <FrozenCrewPage /> },
     ],
