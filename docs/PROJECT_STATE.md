@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-15 (Overview page split tables). This
+Last updated: 2026-08-15 (Collections rewards priority + abbreviation). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -195,7 +195,10 @@ client/src/
                                 `CollectionMatchable` shape (`archetype_id, traits, traits_hidden`),
                                 not `CrewMember`, since Missing 4 Stars needs to pass unowned
                                 `CatalogEntry`s through the same logic — see "Missing 4 Stars tables"
-    rewards.ts                 getCuratedRewards — the reward/buff display allowlist
+    rewards.ts                 getCuratedRewards — the reward/buff display allowlist;
+                                Skill/Proficiency entries sort first and use
+                                crew/skillLabels.ts abbreviations (see "Curated
+                                collection rewards" below)
     sorters.ts                 isMaxedOut, getCollectionCompletionRatio, byCompletionThenNameAsc,
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc,
                                 getQualifyingCrewByCollection, getUpgradableCollectionIds
@@ -784,8 +787,8 @@ a general-purpose reward formatter:
 | Crew | `reward.type === 1` | `reward.full_name` |
 | The Niners Avatar | `reward.symbol === 'niners_avatar'` | as-is |
 | Legendary Honorable Citation | `reward.symbol === 'honorable_citation_quality5'` | as-is |
-| Core Skill buffs | `buff.name` matches `/^(.+) Core Skill \+\d+%$/` | `Skill: {captured name}` |
-| Skill Proficiency buffs | `buff.name` matches `/^(.+) Skill Proficiency (?:Min\|Max) \+\d+%$/` | `Proficiency: {captured name}` |
+| Core Skill buffs | `buff.name` matches `/^(.+) Core Skill \+\d+%$/` | `Skill: {abbreviation}` |
+| Skill Proficiency buffs | `buff.name` matches `/^(.+) Skill Proficiency (?:Min\|Max) \+\d+%$/` | `Proficiency: {abbreviation}` |
 
 Excluded (verified present, deliberately not shown): Chronitons, Merits,
 Federation Credits, Honor (common — 63 of 88 collections — but still
@@ -818,12 +821,26 @@ and this is the part worth remembering if it's ever touched again:**
   sample is exactly `+1%`, confirmed exhaustively, so showing it would be
   redundant, not informative.
 - **Verified worked example** — "Their Royal Highnesses" grants Command's
-  Min, Max, *and* Core buffs together, and must produce exactly
-  `['Portal (5)', 'Skill: Command', 'Proficiency: Command']` (3 entries,
-  not 4) — this is the case that actually proves the dedup works, not
+  Min, Max, *and* Core buffs together, and must produce exactly 3 entries
+  (not 4) — this is the case that actually proves the dedup works, not
   just the more common single-buff case.
 
+**As of 2026-08-15 (see "Collections rewards priority + abbreviation" in
+the feature history below), the array order and skill-name spelling both
+changed** — Skill entries, then Proficiency entries, then item rewards
+(previously item rewards came first), and the captured skill name is now
+abbreviated via the shared `SKILL_ABBREVIATIONS` map
+(`crew/skillLabels.ts`, `SCI`/`ENG`/`DIP`/`CMD`/`SEC`/`MED`) instead of
+spelled out in full. "Their Royal Highnesses" (still 3 entries, dedup
+unaffected) now produces `['Skill: CMD', 'Proficiency: CMD', 'Portal
+(5)']`, not the pre-2026-08-15 order/spelling shown in the worked example
+above. The `"Skill: "`/`"Proficiency: "` prefixes are unchanged; only the
+array order and the text after each colon changed.
+
 **Spec:** `docs/superpowers/specs/2026-08-03-collections-row-detail-design.md`.
+**Spec/plan (2026-08-15 reorder + abbreviation):**
+`docs/superpowers/specs/2026-08-15-collections-rewards-priority-abbrev-design.md`,
+`docs/superpowers/plans/2026-08-15-collections-rewards-priority-abbrev-plan.md`.
 
 ## Collection completion sort
 
@@ -4782,6 +4799,58 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     and the gating logic from source) sufficient. Standing lesson: never
     delete a plan's SDD workspace until the final review has actually
     completed, even for single-task plans.
+
+49. **Collections rewards priority + abbreviation**
+    (`2026-08-15-collections-rewards-priority-abbrev`) — on the
+    Collections page's "Rewards" column, `getCuratedRewards`
+    (`collections/rewards.ts`) now emits Skill entries, then Proficiency
+    entries, then item rewards — previously item rewards came first, with
+    Skill/Proficiency at the end. The captured skill name is also now
+    abbreviated via the shared `SKILL_ABBREVIATIONS` map
+    (`crew/skillLabels.ts`, built for the earlier QPs-page "Skills"
+    column feature — this is its second consumer beyond
+    `getTopSkillAbbreviations`, plus `lib/skillBuffs.ts`'s
+    `SKILL_LABELS` use, making 3 consistent consumers of that module).
+    Full mechanics in "Curated collection rewards" above. Real-data
+    verified against the user's own worked example throughout: "Heh
+    Cho'mruak tah" went from `"10x Portal (1), Skill: Command"` to
+    `"Skill: CMD, 10x Portal (1)"`, exactly as the user specified.
+
+    Single-task plan. **Both the task review and the final review came
+    back with zero findings at any severity on the first pass** — the
+    only "finding" either surfaced was a genuine live-data drift ("Their
+    Royal Highnesses"'s Portal quantity had changed since the plan was
+    written), independently confirmed harmless and unrelated to the code
+    by both the implementer and the task reviewer, each reading the raw
+    `player-cache.json` directly rather than trusting the other's claim.
+    **Final review went beyond the plan's own two named collections**:
+    independently swept all 88 real collections in the live data,
+    confirming zero buff names fail to match either curation regex, zero
+    captured skill names fail the abbreviation lookup (proving the `??
+    skill` defensive fallback is unreachable against all real data, not
+    just theoretically unlikely), and — the strongest evidence — that
+    old-vs-new output compared as a multiset across all 88 rows has zero
+    mismatches, i.e. the reorder provably never changes *which* rewards
+    get curated, only their order and spelling. 4 Minor noted, none
+    load-bearing: the `?? skill` fallback is type-invisible (this
+    project's `tsconfig` doesn't enable `noUncheckedIndexedAccess`, so
+    TS sees the lookup as never-`undefined` even though it's
+    runtime-load-bearing) — not worth changing now, just worth knowing
+    if strictness ever tightens; `abbreviateSkill` (falls back to the
+    full name) and `getTopSkillAbbreviations` (filters unknown skills
+    out entirely) use different idioms for the same "unknown skill"
+    question — confirmed as a deliberate, context-appropriate difference
+    (collections wants to still show the reward; the QPs column wants to
+    drop it), not an inconsistency to unify; `abbreviateSkill` stays
+    module-private in `rewards.ts` (correct for its single call-site
+    pair — would move to `skillLabels.ts` if a 4th consumer appears); 13
+    pre-existing collections render an empty Rewards cell, unrelated to
+    and unworsened by this branch. **This final review's session was
+    also cut off mid-review by a platform session-limit reset** — the
+    third time this exact interruption has hit this project (see
+    feature 31's Task 3 and feature 45's final review for the first
+    two). Same established handling: resumed the same agent via
+    `SendMessage` rather than redoing the review from scratch.
 
 ## Current routes / nav (in order)
 
