@@ -45,12 +45,23 @@ function OverviewPage() {
   const baseSkillBonuses = data ? getBaseSkillBonuses(data) : [];
   const proficiencyBonuses = data ? getProficiencyBonuses(data) : [];
 
-  function uniqueCrewCell(maxRarity: number): string {
-    if (!catalog) return '—';
+  function getUniqueCrewStats(maxRarity: number): { owned: number; total: number } | null {
+    if (!catalog) return null;
     const owned = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, maxRarity).size;
     const total = getCatalogCount(catalog, maxRarity);
-    const pct = total > 0 ? Math.ceil((owned / total) * 10000 - 1e-9) / 100 : 0;
-    return `${owned}/${total} (${pct.toFixed(2)}%)`;
+    return { owned, total };
+  }
+
+  function uniqueCrewCell(maxRarity: number): string {
+    const stats = getUniqueCrewStats(maxRarity);
+    if (!stats) return '—';
+    const pct = stats.total > 0 ? Math.ceil((stats.owned / stats.total) * 10000 - 1e-9) / 100 : 0;
+    return `${stats.owned}/${stats.total} (${pct.toFixed(2)}%)`;
+  }
+
+  function uniqueCrewLabel(baseLabel: string, maxRarity: number): string {
+    const stats = getUniqueCrewStats(maxRarity);
+    return stats ? `${baseLabel} (${stats.owned - stats.total})` : baseLabel;
   }
 
   const owned4 = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, 4);
@@ -73,6 +84,15 @@ function OverviewPage() {
       {!loading && !error && identity && (
         <TableContainer component={Paper}>
           <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={2}>
+                  <Typography variant="h5" component="span">
+                    Player Info
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableHead>
             <TableBody>
               {(Object.keys(FIELD_LABELS) as (keyof PlayerIdentity)[]).map((field) => (
                 <TableRow key={field}>
@@ -82,9 +102,27 @@ function OverviewPage() {
                   <TableCell align="right">{identity[field] ?? '—'}</TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {!loading && !error && identity && (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={2}>
+                  <Typography variant="h5" component="span">
+                    Missing Crew recap
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               <TableRow>
                 <TableCell component="th" scope="row">
-                  5 Stars unique crew
+                  {uniqueCrewLabel('5 Stars unique crew', 5)}
                 </TableCell>
                 <TableCell align="right">
                   {catalogLoading ? (
@@ -98,7 +136,7 @@ function OverviewPage() {
               </TableRow>
               <TableRow>
                 <TableCell component="th" scope="row">
-                  4 Stars unique crew
+                  {uniqueCrewLabel('4 Stars unique crew', 4)}
                 </TableCell>
                 <TableCell align="right">
                   {catalogLoading ? (
