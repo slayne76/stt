@@ -7,4 +7,5 @@ export interface CatalogEntry {
   data_score: number;
   traits: string[];
   traits_hidden: string[];
+  uniquely_retrievable: boolean;
 }

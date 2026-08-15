@@ -30,3 +30,8 @@ export function getFrozenCrew(
   if (!Array.isArray(catalog)) return [];
   return catalog.filter((c) => maxRarities.includes(c.max_rarity) && frozenArchetypeIds.has(c.archetype_id));
 }
+
+export function getUniquelyRetrievableArchetypeIds(catalog: CatalogEntry[]): Set<number> {
+  if (!Array.isArray(catalog)) return new Set();
+  return new Set(catalog.filter((c) => c.uniquely_retrievable).map((c) => c.archetype_id));
+}

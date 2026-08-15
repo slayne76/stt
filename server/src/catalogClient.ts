@@ -11,6 +11,7 @@ export interface CatalogEntry {
   data_score: number;
   traits: string[];
   traits_hidden: string[];
+  uniquely_retrievable: boolean;
 }
 
 interface RawCatalogEntry {
@@ -22,6 +23,7 @@ interface RawCatalogEntry {
   traits?: string[];
   traits_hidden?: string[];
   ranks?: { scores?: { overall?: number } };
+  unique_polestar_combos?: string[][];
   [key: string]: unknown;
 }
 
@@ -47,5 +49,6 @@ export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
     data_score: e.ranks?.scores?.overall ?? 0,
     traits: e.traits ?? [],
     traits_hidden: e.traits_hidden ?? [],
+    uniquely_retrievable: Boolean(e.in_portal) && (e.unique_polestar_combos?.length ?? 0) > 0,
   }));
 }
