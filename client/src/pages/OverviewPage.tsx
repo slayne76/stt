@@ -46,7 +46,7 @@ function OverviewPage() {
   const proficiencyBonuses = data ? getProficiencyBonuses(data) : [];
 
   function getUniqueCrewStats(maxRarity: number): { owned: number; total: number } | null {
-    if (!catalog) return null;
+    if (!catalog || catalogLoading || catalogError) return null;
     const owned = getOwnedArchetypeIds(crewList, frozenArchetypeIds, catalogMaxRarityById, maxRarity).size;
     const total = getCatalogCount(catalog, maxRarity);
     return { owned, total };
