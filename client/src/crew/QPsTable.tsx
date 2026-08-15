@@ -10,7 +10,14 @@ import {
   Typography,
 } from '@mui/material';
 import type { CrewMember } from '../types/crew';
-import { getQPLevel, getQPProgressDisplay, getQPPointsNeeded, getQPRoundsLeft, QP_MAX_LEVEL } from './getters';
+import {
+  getQPLevel,
+  getQPProgressDisplay,
+  getQPPointsNeeded,
+  getQPRoundsLeft,
+  getTopSkillAbbreviations,
+  QP_MAX_LEVEL,
+} from './getters';
 import { usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
 import Thumbnail from '../assets/Thumbnail';
@@ -37,6 +44,7 @@ function QPsTable({ crew }: QPsTableProps) {
             <TableCell align="right">QPs</TableCell>
             <TableCell align="right">Points left</TableCell>
             <TableCell align="right">Rounds left</TableCell>
+            <TableCell>Skills</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -66,6 +74,7 @@ function QPsTable({ crew }: QPsTableProps) {
                 <TableCell align="right">{getQPProgressDisplay(c)}</TableCell>
                 <TableCell align="right">-{getQPPointsNeeded(c)}</TableCell>
                 <TableCell align="right">-{getQPRoundsLeft(c)}</TableCell>
+                <TableCell>{getTopSkillAbbreviations(c)}</TableCell>
               </TableRow>
             );
           })}
@@ -77,7 +86,7 @@ function QPsTable({ crew }: QPsTableProps) {
           pageSize={pageSize}
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
-          colSpan={8}
+          colSpan={9}
         />
       </Table>
     </TableContainer>
