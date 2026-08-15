@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import OverviewPage from './pages/OverviewPage';
 import FiveStarsCrewPage from './pages/FiveStarsCrewPage';
+import ThreeFiveStarsCrewPage from './pages/ThreeFiveStarsCrewPage';
 import ThreeFourStarsCrewPage from './pages/ThreeFourStarsCrewPage';
 import FourFiveStarsCrewPage from './pages/FourFiveStarsCrewPage';
 import FourFourStarsCrewReadyPage from './pages/FourFourStarsCrewReadyPage';
@@ -33,6 +34,7 @@ export const NAV_ITEMS: (NavLink | NavGroup)[] = [
     label: 'Crew',
     children: [
       { label: '5 Stars Crew', path: '/5-stars-crew', element: <FiveStarsCrewPage /> },
+      { label: '3/5 Stars Crew', path: '/3-5-stars-crew', element: <ThreeFiveStarsCrewPage /> },
       { label: '3/4 Stars crew', path: '/3-4-stars-crew', element: <ThreeFourStarsCrewPage /> },
       { label: '4/5 Stars crew', path: '/4-5-stars-crew', element: <FourFiveStarsCrewPage /> },
       { label: '4/4 Stars crew (ready)', path: '/4-4-stars-crew-ready', element: <FourFourStarsCrewReadyPage /> },

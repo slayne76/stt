@@ -20,9 +20,20 @@ export interface CrewTableProps {
   crew: CrewMember[];
   collections: Collection[];
   showCollectionsNames: boolean;
+  uniquelyRetrievableArchetypeIds?: Set<number> | null;
 }
 
-function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) {
+function uniquelyRetrievableLabel(archetypeId: number, ids: Set<number> | null): string {
+  if (ids === null) return 'Unavailable';
+  return ids.has(archetypeId) ? 'Yes' : 'No';
+}
+
+function CrewTable({
+  crew,
+  collections,
+  showCollectionsNames,
+  uniquelyRetrievableArchetypeIds,
+}: CrewTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(crew);
 
   return (
@@ -38,6 +49,7 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
             <TableCell align="right">Items to equip</TableCell>
             <TableCell align="right">{showCollectionsNames ? 'Total collections' : 'Collections'}</TableCell>
             {showCollectionsNames && <TableCell>Collections names</TableCell>}
+            {uniquelyRetrievableArchetypeIds !== undefined && <TableCell>Uniquely Retrievable</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -59,6 +71,9 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
                 {showCollectionsNames && (
                   <TableCell>{crewCollections.map((col) => col.name).join(', ')}</TableCell>
                 )}
+                {uniquelyRetrievableArchetypeIds !== undefined && (
+                  <TableCell>{uniquelyRetrievableLabel(c.archetype_id, uniquelyRetrievableArchetypeIds)}</TableCell>
+                )}
               </TableRow>
             );
           })}
@@ -70,7 +85,7 @@ function CrewTable({ crew, collections, showCollectionsNames }: CrewTableProps) 
           pageSize={pageSize}
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
-          colSpan={showCollectionsNames ? 8 : 7}
+          colSpan={(showCollectionsNames ? 8 : 7) + (uniquelyRetrievableArchetypeIds !== undefined ? 1 : 0)}
         />
       </Table>
     </TableContainer>
