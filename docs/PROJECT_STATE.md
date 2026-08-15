@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-15 (Unified Duplicates page). This
+Last updated: 2026-08-15 (Overview page split tables). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -235,10 +235,12 @@ client/src/
                                  constant/meaningless; see "Two new crew pages" below), paginated
                                  (see "Table pagination" below)
   pages/
-    OverviewPage.tsx            Player identity (Player ID, DBID) plus "5/4 Stars unique crew"
-                                 (owned/total/pct%, see "Crew catalog and Overview unique-crew
-                                 counts") plus two Missing 4 Stars tables (see "Missing 4 Stars
-                                 tables") — the very first page
+    OverviewPage.tsx            "Player Info" table (Player ID, DBID) + "Missing Crew recap"
+                                 table ("5/4 Stars unique crew", owned/total/pct% plus an
+                                 owned-vs-total (±N) label suffix — see "Crew catalog and
+                                 Overview unique-crew counts", "Overview page split tables")
+                                 plus two Missing 4 Stars tables (see "Missing 4 Stars tables")
+                                 — the very first page
     FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
                                  item in the Crew nav group (see "Two new crew pages" below)
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -2599,8 +2601,31 @@ through in spirit, as a pointer for anyone who remembers this entry from
 before — the fix is real, not just noted.) The catalog cache originally
 had no TTL; it now auto-refetches after 24h.
 
+**As of 2026-08-15 (see "Overview page split tables" in the feature
+history below), these two rows no longer share a table with Player ID/
+DBID** — the Overview page's original single, headerless table is now
+two separate tables, "Player Info" (Player ID, DBID, unchanged) and
+"Missing Crew recap" (these two rows). Each new table's blue header bar
+holds the table's own title (`Typography variant="h5"` inside a
+`colSpan={2}` `TableCell` — a different convention on this same page from
+"Base Skill Bonus"/"Proficiency Bonus" below it, which still use a
+separate heading *above* the table; this was the user's own explicit,
+deliberate choice, not an oversight). The two rows' labels also gained an
+owned-vs-total `(±N)` suffix, e.g. `"4 Stars unique crew (-21)"` — gated
+on the same `catalog`/`catalogLoading`/`catalogError` state the value
+cell already used (`getUniqueCrewStats` in `OverviewPage.tsx`, shared by
+both `uniqueCrewCell` and the new `uniqueCrewLabel`) — **specifically
+including `catalogLoading`/`catalogError`, not just `!catalog`**, since
+`CrewCatalogContext` never clears `data` back to `null` on a refresh
+start or failure, so a naive `!catalog`-only guard would show a stale
+suffix during a real "Refresh Catalog" action. This was caught and fixed
+during that feature's own task review — see feature history below.
+
 **Spec/plan:** `docs/superpowers/specs/2026-08-08-crew-catalog-unique-counts-design.md`,
 `docs/superpowers/plans/2026-08-08-crew-catalog-unique-counts-plan.md`.
+**Spec/plan (2026-08-15 table split):**
+`docs/superpowers/specs/2026-08-15-overview-split-tables-design.md`,
+`docs/superpowers/plans/2026-08-15-overview-split-tables-plan.md`.
 
 ## Crew catalog TTL and Overview percentage format
 
@@ -4691,6 +4716,72 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     inaccuracy (called `tsx` a "root" devDependency; it's actually in
     `server/package.json`, hoisted to root `node_modules/.bin` — `npx
     tsx` from root still works) is doc-only, no code impact.
+
+48. **Overview page split tables** (`2026-08-15-overview-split-tables`) —
+    the Overview page's original single, headerless table (Player ID,
+    DBID, "5/4 Stars unique crew") split into two blue-headed tables,
+    "Player Info" and "Missing Crew recap". Full mechanics in "Crew
+    catalog and Overview unique-crew counts" above. **The user explicitly
+    rejected a generic "Field"/"Value" column-header row** during
+    brainstorming in favor of a different mechanic: each table's blue
+    header bar holds the table's own *name* (`Typography variant="h5"`
+    inside a `colSpan={2}` cell) — a different convention from "Base
+    Skill Bonus"/"Proficiency Bonus" further down the same page, which
+    still use a separate heading above the table. Also added: an
+    owned-vs-total `(±N)` suffix on the two unique-crew row labels, e.g.
+    `"4 Stars unique crew (-21)"` — real-data verified against the
+    user's own worked example throughout (design time, task
+    implementation, and the final review all independently reproduced
+    5★ `-642` / 4★ `-21` from the live `server/data/player-cache.json` +
+    `crew-catalog-cache.json`).
+
+    Single-task plan. **Task review caught a real, plan-mandated bug the
+    plan's own sample code had introduced**: the plan's literal Step 1
+    code guarded the new label's stats on `!catalog` alone, which
+    contradicted the same plan's own Global Constraints prose ("no
+    suffix during `catalogLoading`/`catalogError`") — `CrewCatalogContext`
+    never clears `data` back to `null` on a refresh start or failure, so
+    a real "Refresh Catalog" click (the app's own existing control) could
+    leave a stale `(±N)` suffix rendered next to the adjacent value
+    cell's correct spinner/`"Unavailable"` fallback. Fixed by widening
+    the shared `getUniqueCrewStats` guard to `!catalog || catalogLoading
+    || catalogError`; re-verified in the browser by genuinely triggering
+    real loading and error windows (a delayed real request, then a
+    mocked 500), not just a fresh page load — one fix round, scoped
+    re-review clean. **Process lesson for future plan-writing:
+    self-review a plan's literal code blocks against its own Global
+    Constraints section, not just against the spec** — this plan's Step 1
+    sample and its own constraints disagreed, and nothing caught it until
+    task review.
+
+    Final review: zero Critical/Important — independently re-derived
+    every real number from scratch against the live cache files (exact
+    match), traced `CrewCatalogContext`'s never-clears-`data` behavior
+    from source to confirm the widened guard closes every stale-suffix
+    path (checked 4 specific race scenarios by hand, none reachable), and
+    confirmed the `uniqueCrewCell` refactor is genuinely
+    behavior-preserving. 4 Minor deferred, none load-bearing: the new
+    guard's loading/error clause has no inline comment explaining why
+    (recommended, matches this codebase's comment-density convention);
+    MUI auto-applies `scope="col"` to the new title cell (misassociates
+    it with the body's `scope="row"` cells for assistive tech) and
+    `Typography component="span"` drops the title from the page's heading
+    outline, unlike the other `h5` titles on this page — both a11y-only,
+    no visual regression since the old table had no title at all; the
+    `!loading && !error && identity` gate is now duplicated across 2
+    sibling blocks instead of one shared wrapper (very low stakes);
+    `getOwnedArchetypeIds` runs 5×/render instead of 3×, negligible,
+    consistent with this page's existing non-memoized style. **Controller
+    process error, caught and corrected mid-session, not shipped as a
+    defect**: the plan's SDD workspace (including the implementer's full
+    per-cell browser-evidence report) was prematurely deleted before the
+    final whole-branch review ran, then partially reconstructed from the
+    ledger/agent-message summaries so the review could proceed — the
+    final reviewer flagged the missing report file but judged the
+    available evidence (its own independent re-derivation of the numbers
+    and the gating logic from source) sufficient. Standing lesson: never
+    delete a plan's SDD workspace until the final review has actually
+    completed, even for single-task plans.
 
 ## Current routes / nav (in order)
 
