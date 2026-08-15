@@ -1,4 +1,5 @@
 import type { PlayerData } from '../types/player';
+import { SKILL_LABELS } from '../crew/skillLabels';
 
 export interface SkillBonus {
   skill: string;
@@ -15,15 +16,6 @@ interface Buff {
   stat: string;
   value: number;
 }
-
-const SKILL_LABELS: Record<string, string> = {
-  science: 'Science',
-  engineering: 'Engineering',
-  diplomacy: 'Diplomacy',
-  command: 'Command',
-  security: 'Security',
-  medicine: 'Medicine',
-};
 
 const CORE_SKILL_STAT = /^(\w+)_skill_core$/;
 const PROFICIENCY_STAT = /^(\w+)_skill_range_(min|max)$/;

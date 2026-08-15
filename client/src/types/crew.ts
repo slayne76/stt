@@ -1,5 +1,11 @@
 import type { DatacoreAsset } from './asset';
 
+export interface SkillValue {
+  core: number;
+  range_min: number;
+  range_max: number;
+}
+
 export interface CrewMember {
   id: number;
   symbol: string;
@@ -16,4 +22,5 @@ export interface CrewMember {
   portrait?: DatacoreAsset;
   q_bits: number;
   in_buy_back_state: boolean;
+  skills: Record<string, SkillValue>;
 }

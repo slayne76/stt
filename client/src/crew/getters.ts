@@ -2,6 +2,7 @@ import type { PlayerData } from '../types/player';
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
 import type { StoredImmortal } from '../types/storedImmortal';
+import { SKILL_ABBREVIATIONS } from './skillLabels';
 
 export function getCrewList(data: PlayerData): CrewMember[] {
   const player = data.player as Record<string, unknown> | undefined;
@@ -124,4 +125,24 @@ export function getOwnedArchetypeIds(
     if (catalogMaxRarityById.get(archetypeId) === maxRarity) owned.add(archetypeId);
   }
   return owned;
+}
+
+export function getTopSkillAbbreviations(crew: CrewMember): string {
+  const entries = Object.entries(crew.skills)
+    .map(([key, value]) => ({
+      skillKey: key.replace(/_skill$/, ''),
+      core: value.core,
+    }))
+    .filter((entry) => entry.skillKey in SKILL_ABBREVIATIONS);
+
+  entries.sort(
+    (a, b) =>
+      b.core - a.core ||
+      SKILL_ABBREVIATIONS[a.skillKey].localeCompare(SKILL_ABBREVIATIONS[b.skillKey])
+  );
+
+  return entries
+    .slice(0, 2)
+    .map((entry) => SKILL_ABBREVIATIONS[entry.skillKey])
+    .join('/');
 }
