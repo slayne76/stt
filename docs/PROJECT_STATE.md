@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-12 (Stronger, reusable table striping). This
+Last updated: 2026-08-15 (QPs page top-2-skills column). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -173,9 +173,13 @@ client/src/
                                  required `showCollectionsNames` prop; see "Collections columns"
                                  below), paginated (see "Table pagination" below)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
-    QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds left;
-                                  see "QPs page" and "StatusChip component and QPs Ready chip"),
-                                  paginated (see "Table pagination" below)
+    QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds
+                                  left/Skills; see "QPs page", "StatusChip component and QPs Ready
+                                  chip", and "QPs page top-2-skills column" below), paginated (see
+                                  "Table pagination" below)
+    skillLabels.ts               Shared skill full-name/abbreviation maps (`SKILL_LABELS`,
+                                  `SKILL_ABBREVIATIONS`), keyed by bare skill name — see "QPs page
+                                  top-2-skills column" below
   collections/                  Crew↔collection logic + the Collections page's own components
     getters.ts                 getCollectionsList, crewBelongsToCollection, getCrewCollections,
                                 getCollectionCount, getCollectionCrew (reverse direction);
@@ -291,6 +295,8 @@ interface CrewMember {
   traits_hidden: string[];
   portrait?: DatacoreAsset;                       // added for the crew/ship image column
   q_bits: number;                                 // Q Bit points, added for the QPs page — see "QPs page" below
+  in_buy_back_state: boolean;                     // trashed-but-recoverable, added for feature 45 (this doc entry itself was stale until now)
+  skills: Record<string, SkillValue>;             // keyed like "diplomacy_skill"; SkillValue = { core, range_min, range_max }; added for "QPs page top-2-skills column" below
 }
 ```
 
@@ -3236,7 +3242,8 @@ decision internally** — this section describes the current, extracted
 form. `colSpan` matches each table's real column count: `CrewTable` 7 or 8
 (conditional on `showCollectionsNames`, same condition that already
 governed its header), `MissingCrewTable` 6, `FrozenCrewTable` 4, `QPsTable`
-8, `ShipsTable` 5, `CollectionsTable` 6.
+9 (was 8 before the "QPs page top-2-skills column" feature below added a
+"Skills" column), `ShipsTable` 5, `CollectionsTable` 6.
 
 **`CollectionsTable` is the one structural exception, planned from the
 start, not discovered mid-implementation.** Every other table maps one
@@ -4539,6 +4546,61 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     handling as before: resumed the same agent via `SendMessage` rather
     than redoing the whole review from scratch, since the interruption
     was a platform event with no bearing on work quality already done.
+
+46. **QPs page top-2-skills column** (`2026-08-15-qps-skills-column`) —
+    a new last "Skills" column on `QPsTable`, showing each crew member's
+    top 2 skills (by `core` stat value) as abbreviations, e.g. `SEC/DIP`,
+    or just `ENG` with no trailing slash for a 1-skill crew. Also
+    establishes a reusable, cross-feature skill-abbreviation convention
+    the user explicitly asked for: `science: 'SCI'`, `engineering: 'ENG'`,
+    `diplomacy: 'DIP'`, `command: 'CMD'`, `security: 'SEC'`,
+    `medicine: 'MED'`, in new `client/src/crew/skillLabels.ts`. Ties on
+    `core` value break alphabetically by abbreviation (the user's explicit
+    choice over inventing a fixed in-game skill priority order).
+
+    **Data source, confirmed live against `example-data.json`/
+    `server/data/player-cache.json`:** every crew member's raw JSON
+    already carries a `skills` object (only the 1-3 skills that crew
+    member actually possesses appear as keys, e.g. `diplomacy_skill: {
+    core, range_min, range_max }`) — `CrewMember` just didn't declare it
+    yet. A pre-existing abbreviation field was searched for first (per
+    the user's own suggestion it might already be in the data) and does
+    not exist; the map is new, defined by this feature.
+
+    Two tasks: (1) `skillLabels.ts`, `CrewMember.skills`/`SkillValue`,
+    and `getTopSkillAbbreviations` (`crew/getters.ts`) — plus a dedup
+    refactor of `lib/skillBuffs.ts` (built for the Base Skill Bonus/
+    Proficiency Bonus tables feature) to import the shared `SKILL_LABELS`
+    instead of keeping its own private copy; (2) wiring the getter into
+    `QPsTable.tsx` as the new last column, `colSpan` 8→9. Both task
+    reviews clean, zero Critical/Important.
+
+    **Final whole-branch review independently re-verified everything
+    from scratch rather than trusting either task's report:** ran the
+    pre- and post-refactor `skillBuffs.ts` against real data and got
+    byte-identical output; wrote an independent reimplementation of
+    `getTopSkillAbbreviations` (different algorithm/comparison) and diffed
+    it against the shipped getter across **all 1,233 real crew** in both
+    `example-data.json` and `player-cache.json` — zero mismatches; and
+    caught that neither task's verification evidence had actually
+    exercised the tie-break rule (every crew member checked had strictly
+    distinct `core` values) — found 6 real tied crew in the live data and
+    confirmed all 6 resolve correctly. Zero Critical/Important. Five
+    Minor, all parked (none load-bearing, no fix loop needed): `lib/` now
+    has its first import from a feature folder (`skillLabels.ts` living in
+    `crew/` rather than `lib/`) — a deliberate, defensible placement, not
+    worth churn; `SKILL_ABBREVIATIONS`/`SKILL_LABELS` typed
+    `Record<string, string>` rather than a skill-name union (weaker
+    compile-time safety, deferred until a second consumer exists);
+    `getTopSkillAbbreviations`'s `Object.entries(crew.skills)` is
+    unguarded (matches this file's existing convention, unreachable on
+    all 1,233 real crew checked); the design spec said the cell should
+    render as `Typography variant="body2"` but the shipped code uses a
+    bare `TableCell` (MUI already applies `body2` styling to `TableCell`
+    by default — visually identical, spec/plan text drift only); and a
+    `localeCompare` tie-break vs. a plain `<` (cosmetic/perf-irrelevant at
+    this row count). This doc entry itself was one of the recommended
+    follow-ups, closed by this same update per the established convention.
 
 ## Current routes / nav (in order)
 
