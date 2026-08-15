@@ -146,3 +146,30 @@ export function getTopSkillAbbreviations(crew: CrewMember): string {
     .map((entry) => SKILL_ABBREVIATIONS[entry.skillKey])
     .join('/');
 }
+
+export interface DuplicateCrewGroup {
+  crew: CrewMember;
+  totalOwned: number;
+}
+
+function duplicateGroupKey(crew: CrewMember): string {
+  return `${crew.archetype_id}|${crew.rarity}|${crew.level}|${getEquipmentSlotsRemaining(crew)}`;
+}
+
+export function getDuplicateCrewGroups(
+  crew: CrewMember[],
+  frozenArchetypeIds: Set<number>
+): DuplicateCrewGroup[] {
+  const candidates = crew.filter((c) => frozenArchetypeIds.has(c.archetype_id) && !c.in_buy_back_state);
+  const groups = new Map<string, DuplicateCrewGroup>();
+  for (const c of candidates) {
+    const key = duplicateGroupKey(c);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.totalOwned += 1;
+    } else {
+      groups.set(key, { crew: c, totalOwned: 1 });
+    }
+  }
+  return [...groups.values()];
+}
