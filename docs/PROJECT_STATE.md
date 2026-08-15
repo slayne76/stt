@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-15 (Collections rewards priority + abbreviation). This
+Last updated: 2026-08-16 (3/5 Stars Crew page + Uniquely Retrievable column). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -174,7 +174,11 @@ client/src/
     CrewTable.tsx               Shared table renderer (#/Image/Stars/Name/Level/Items-to-equip/
                                  Total-collections/Collections-names — the last two conditional on a
                                  required `showCollectionsNames` prop; see "Collections columns"
-                                 below), paginated (see "Table pagination" below)
+                                 below), paginated (see "Table pagination" below); optional last
+                                 "Uniquely Retrievable" column via `uniquelyRetrievableArchetypeIds?:
+                                 Set<number> | null` — undefined hides it (every page but "3/5 Stars
+                                 Crew" today), null shows "Unavailable", a Set shows Yes/No (see
+                                 "3/5 Stars Crew page" below)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds
                                   left/Skills; see "QPs page", "StatusChip component and QPs Ready
@@ -271,7 +275,13 @@ server/src/
   catalogCache.ts, catalogClient.ts, routes/catalog.ts   Crew catalog cache/proxy, mirrors
                                                           cache.ts/sttClient.ts/routes/player.ts's
                                                           whole-resource shape (see "Crew catalog and
-                                                          Overview unique-crew counts")
+                                                          Overview unique-crew counts"); CatalogEntry
+                                                          also carries `uniquely_retrievable: boolean`
+                                                          (see "3/5 Stars Crew page" below) —
+                                                          `catalogCache.ts`'s shape-guard MUST be
+                                                          extended every time `CatalogEntry` widens
+                                                          again, or a stale-but-TTL-fresh cache
+                                                          silently serves old-shape data
 ```
 
 ## The crew data model (as understood from the real game payload)
@@ -4852,12 +4862,89 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     two). Same established handling: resumed the same agent via
     `SendMessage` rather than redoing the review from scratch.
 
+50. **3/5 Stars Crew page + Uniquely Retrievable column**
+    (`2026-08-16-three-five-stars-crew-page`) — new Crew nav page
+    (rarity=3, max_rarity=5), positioned directly under "5 Stars Crew",
+    same filter/sort family as "3/4 Stars crew"/"4/5 Stars crew"
+    (`filterByRarity` + `defaultCrewComparator` — not "5 Stars Crew"'s
+    own rarity-tiebreak comparator, since rarity is constant on this new
+    page). Also introduces a new, reusable, **opt-in** "Uniquely
+    Retrievable" column on the shared `CrewTable` — shown only on this
+    page today, but any of the other 5 `CrewTable`-consuming pages could
+    adopt it later with a one-line prop addition (see `CrewTable.tsx`'s
+    repo-map entry above).
+
+    **"Uniquely Retrievable" was reverse-engineered from
+    `stt-datacore/website` in a prior-investigation step, before any
+    code was written** — a shallow clone plus reading
+    `printPortalStatus()` (`src/utils/crewutils.ts`) revealed the exact
+    formula: `in_portal && (unique_polestar_combos?.length ?? 0) > 0`.
+    Verified against 4 real named crew members directly against the live
+    upstream data (Countess Regina Bartholomew, Lt. Commander Spock,
+    Determined Worf, Beach Day Spock) before the design was proposed, and
+    **both fields already live in the same `https://datacore.app/structured/crew.json`
+    this app's server already fetches in full for the existing crew
+    catalog** — no new upstream call, just widening what
+    `server/src/catalogClient.ts` extracts. Coverage measured at
+    1302/1302 (100%) of the user's owned+frozen archetype IDs at
+    investigation time.
+
+    `CatalogEntry` gained a **precomputed** `uniquely_retrievable: boolean`
+    (not the raw `unique_polestar_combos` array — keeps the cache lean,
+    matches this project's "type only what's used" discipline already
+    applied to `data_score`). New `CrewTable` prop:
+    `uniquelyRetrievableArchetypeIds?: Set<number> | null` — `undefined`
+    (every existing caller, unchanged) hides the column; `null` shows it
+    with `"Unavailable"` (catalog fetch failed); a real `Set` shows
+    `"Yes"`/`"No"` via archetype-id membership. The new page uses
+    `usePageData(catalogLoading)` (same mechanism `FrozenCrewPage`
+    already established) so the whole page waits for both player data
+    and catalog before rendering rows — catalog *loading* blocks, catalog
+    *error* does not (only that one column degrades).
+
+    Two tasks (data layer, then UI), both task reviews clean, zero
+    Critical/Important. Task 1's verification made a **real live network
+    call** to the actual `datacore.app` endpoint (not a mock/fixture) and
+    got 5/5 MATCH against the plan's precomputed expected values for the
+    user's 5 real owned crew at rarity=3/max_rarity=5 (Holo-Engineer
+    Zimmerman, Lt. Commander Spock, Minooki Freeman, Countess Regina
+    Bartholomew, Determined Worf — 3 true, 2 false).
+
+    **Final whole-branch review caught one real, confirmed Important bug
+    outside either task's own diff**: `server/src/catalogCache.ts`'s
+    `readCatalogCache()` shape-guard (added for exactly this failure mode
+    when `CatalogEntry` previously widened to add `data_score`) was never
+    extended for the new `uniquely_retrievable` field — so a pre-branch,
+    still-TTL-fresh cache file would silently pass the guard and serve
+    old-shape data, making the new column read "No" for every row (not
+    an error — a plausible-looking wrong answer) until the 24h TTL
+    expired or the user manually refreshed. **Confirmed not
+    hypothetical**: the reviewer checked the user's actual main-checkout
+    cache file mid-review and found it genuinely had this exact stale
+    shape. Fixed in one round (extended the guard to also check
+    `uniquely_retrievable`'s type, mirroring the existing `data_score`
+    precedent exactly), re-verified against both a real stale cache
+    (correctly rejected) and a real fresh cache (still correctly
+    accepted), scoped re-review clean. Zero Critical; 4 Minor parked, all
+    explicitly argued as non-load-bearing: a fallback branch in the new
+    page's catalog-state logic that's unreachable today but would fail
+    toward a wrong-not-honest answer if the page-loading gate ever
+    changed (`catalog ? ... : null` would be strictly safer); the 3-state
+    prop contract (`undefined`/`null`/`Set`) is documented in the
+    plan/spec but not in the code itself — worth a comment given it's
+    explicitly designed for future adopters; "No" conflates "not
+    uniquely retrievable" with "not yet in the catalog at all" for a
+    hypothetical future page with wider crew coverage (not reachable
+    today at 1302/1302); an unmemoized Set rebuild on every render,
+    consistent with this page's existing non-memoized style.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
 |---|---|---|
 | Overview | `/` | player identity, not crew |
 | Crew → 5 Stars Crew | `/5-stars-crew` | max_rarity=5, not immortalized (rarity<5 OR level<100 OR unequipped slot) |
+| Crew → 3/5 Stars Crew | `/3-5-stars-crew` | rarity=3, max_rarity=5; adds the "Uniquely Retrievable" column |
 | Crew → 3/4 Stars crew | `/3-4-stars-crew` | rarity=3, max_rarity=4 |
 | Crew → 4/5 Stars crew | `/4-5-stars-crew` | rarity=4, max_rarity=5 |
 | Crew → 4/4 Stars crew (ready) | `/4-4-stars-crew-ready` | rarity=4, max_rarity=4, ready to immortalize |
