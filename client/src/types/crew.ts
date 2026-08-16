@@ -23,4 +23,5 @@ export interface CrewMember {
   q_bits: number;
   in_buy_back_state: boolean;
   skills: Record<string, SkillValue>;
+  favorite: boolean;
 }

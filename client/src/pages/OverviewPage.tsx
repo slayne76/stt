@@ -17,10 +17,13 @@ import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
+import { filterMissingFavorite } from '../crew/filters';
+import { defaultCrewComparator, sortCrew } from '../crew/sorters';
 import { getArchetypeMaxRarityMap, getCatalogCount, getMissingCrew } from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
+import CrewTable from '../crew/CrewTable';
 import MissingCrewTable from '../catalog/MissingCrewTable';
 import TableSearchBar from '../components/TableSearchBar';
 import type { PlayerIdentity } from '../types/player';
@@ -42,6 +45,10 @@ function OverviewPage() {
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const catalogMaxRarityById = catalog ? getArchetypeMaxRarityMap(catalog) : new Map<number, number>();
   const collectionsList = data ? getCollectionsList(data) : [];
+  const missingFavoriteCrew = data
+    ? sortCrew(filterMissingFavorite(crewList), defaultCrewComparator(collectionsList))
+    : [];
+  const missingFavoriteSearch = useSearch(missingFavoriteCrew, (c) => [c.name]);
   const baseSkillBonuses = data ? getBaseSkillBonuses(data) : [];
   const proficiencyBonuses = data ? getProficiencyBonuses(data) : [];
 
@@ -151,6 +158,27 @@ function OverviewPage() {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {!loading && !error && identity && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+            <Typography variant="h5">
+              Missing Favorite Flag ({missingFavoriteSearch.filteredItems.length} of {missingFavoriteCrew.length})
+            </Typography>
+            <TableSearchBar
+              value={missingFavoriteSearch.query}
+              onChange={missingFavoriteSearch.setQuery}
+              ariaLabel="Search Missing Favorite Flag by name"
+            />
+          </Stack>
+          {missingFavoriteSearch.active && missingFavoriteSearch.filteredItems.length === 0 ? (
+            <Typography color="text.secondary">No results found for your search.</Typography>
+          ) : (
+            <CrewTable crew={missingFavoriteSearch.filteredItems} collections={collectionsList} showCollectionsNames={true} />
+          )}
+        </>
       )}
 
       {showMissingTables && (

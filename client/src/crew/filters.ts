@@ -24,3 +24,7 @@ export function filterQPEligible(crew: CrewMember[]): CrewMember[] {
 export function filterUnmaxed(crew: CrewMember[], maxRarity: number): CrewMember[] {
   return crew.filter((c) => c.max_rarity === maxRarity && !isImmortalized(c));
 }
+
+export function filterMissingFavorite(crew: CrewMember[]): CrewMember[] {
+  return crew.filter((c) => !c.favorite && !c.in_buy_back_state);
+}
