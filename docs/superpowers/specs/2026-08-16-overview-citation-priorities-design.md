@@ -131,9 +131,14 @@ dataset, same 24h TTL, same "cache absent/old-shape → refetch live" guard):
   `CatalogEntry`/`catalogCache.ts` rather than widening that shared type —
   `CatalogEntry` is consumed by 8 other `CrewTable`-driven pages/sections
   that have no use for this much extra weight per entry.
-- `itemsClient.ts` / `itemsCache.ts` — fetches and caches `items.json`.
 - `collectionsClient.ts` / `collectionsCache.ts` — fetches and caches
   `collections.json`.
+- **No `items.json` client/cache.** This design originally called for one
+  (to feed Beta Tachyon Pulse's `coreItems`), but the port established that
+  upstream's quipment block — the only consumer — is dead code at the pinned
+  commit (see `betaTachyonPulse.ts` adaptation note 5). Rather than keep a
+  32MB fetch/cache/parse pipeline alive for a provably unread argument, the
+  parameter and both modules were dropped in the final-review fix round.
 - `citation/originalAlgorithm.ts` — faithful port of `optimizer.js`.
 - `citation/betaTachyonPulse.ts` — faithful port of `betatachyon.ts`, always
   invoked with datacore's own `DefaultBetaTachyonSettings` (no
@@ -141,8 +146,10 @@ dataset, same 24h TTL, same "cache absent/old-shape → refetch live" guard):
 - `citation/buffConfig.ts` — port of `calculateBuffConfig()`, reading the
   three buff arrays straight off the already-loaded player data.
 - `citation/computeCitationPriorities.ts` — orchestrator: reads
-  `player-cache.json` fresh (not cached — see below), reads the three new
-  caches above, excludes buyback-state crew, runs both ported algorithms,
+  `player-cache.json` (only when its memoized response is stale — see
+  below), reads the two new caches above, folds frozen crew
+  (`stored_immortals`, plus `c_stored_immortals` when upstream supplies it)
+  into the roster, excludes buyback-state crew, runs both ported algorithms,
   and returns both ranked `crewToCite` lists as **owned-crew instance
   `id`s** (not full crew objects — the client already has full player crew
   data loaded; sending only `id`s avoids a duplicate, larger payload and
@@ -162,18 +169,20 @@ dataset, same 24h TTL, same "cache absent/old-shape → refetch live" guard):
   cutoff — the real cutoff (§2) runs client-side against whichever prefix
   it needs, which in practice will be far smaller than 100.
 
-**Result freshness:** the three supporting datasets (`crew.json` subset,
-`items.json`, `collections.json`) are cached with the same 24h TTL as the
-existing catalog cache — they change roughly as often as datacore
-regenerates its own data. The final ranked lists are **recomputed on every
-request** from those cached datasets plus a fresh read of
-`player-cache.json` (never cached), so results always reflect whichever
-player data is currently loaded, even if it was just re-synced. Both
-algorithms run entirely in-process against already-parsed JSON with no
-network calls, so this is expected to be fast in Node (no browser
-main-thread/rendering overhead) — if it ever proves otherwise, memoizing
-by `player-cache.json`'s mtime is a cheap follow-up, deliberately deferred
-(YAGNI) rather than designed in now.
+**Result freshness:** the two supporting datasets (`crew.json` subset,
+`collections.json`) are cached with the same 24h TTL as the existing catalog
+cache — they change roughly as often as datacore regenerates its own data.
+This design originally called for recomputing the ranked lists on **every
+request**, treating in-process computation as cheap and deferring
+memoization as YAGNI. Measurement disproved that: the two algorithms take
+~12-13s combined on the real roster. The shipped implementation therefore
+memoizes the response on disk, keyed on the mtimes of **all three** files it
+derives from — `player-cache.json`, `citation-crew-cache.json` and
+`collections-cache.json`. A cached response is served only when all three
+still match, so a result computed from superseded player data *or* from a
+since-refreshed catalog/collections dataset is never served, while repeated
+requests against unchanged inputs are near-instant. See §4's caveat for the
+event-loop consequences of that 13s figure.
 
 ### 4. Client wiring
 
@@ -223,10 +232,12 @@ row's position in that engine's own ranking):
 )}
 ```
 
-These two sections gate on **their own** `citationPriorities` readiness,
-independent of `showCatalogData` — the rest of the Overview page (Player
-Info, Gauntlet table, Missing Crew recap) renders immediately even on a
-cold citation-priorities cache. While `citationLoading` is true, each
+These two sections gate on player-data readiness (`!loading && !error &&
+identity`, the same condition every other section on the page uses) **plus
+their own** `citationPriorities` readiness — but not on `showCatalogData`,
+so the rest of the Overview page (Player Info, Gauntlet table, Missing Crew
+recap) still renders independently of a cold citation-priorities cache.
+While `citationLoading` is true, each
 section shows a short "Loading priorities…" placeholder rather than
 staying invisible — this endpoint can take noticeably longer than the
 catalog fetch on a cold cache (real algorithm computation, not just a
@@ -234,6 +245,22 @@ network fetch), so silently not rendering would read as broken rather than
 loading. On `citationError`, the sections render an inline error message
 (same visual treatment as the page's existing `catalogError`/`error`
 alerts) rather than disappearing.
+
+**Caveat on "renders independently" (added after the final whole-branch
+review).** That independence is a *client-side* property only. The two
+citation algorithms are synchronous and CPU-bound (~12-13s combined on the real
+roster), so while one runs it blocks the server's single event loop and every
+other request — `/api/player`, `/api/catalog` — queues behind it. Two
+mitigations narrow, but do not eliminate, this: the computation is kicked off
+in the background immediately after a player-data sync (`routes/player.ts`,
+fire-and-forget after `writePlayerCache`), so the cost lands while the user is
+already waiting on a sync rather than on the next Overview load; and a
+single-flight guard in `computeCitationPriorities()` ensures concurrent
+callers share one run instead of stacking two. The honest guarantee is
+therefore: the rest of the page loads independently of citation-priorities
+**except** in the window right after a player-data sync, when the background
+precompute may still be occupying the event loop. Moving the computation to a
+`worker_thread` is the real fix and remains a non-goal for this branch.
 
 ## Non-goals
 

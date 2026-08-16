@@ -2,22 +2,25 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'no
 import { dirname } from 'node:path';
 import type { CitationCrewEntry } from './citation/types';
 
-const CACHE_PATH = 'data/citation-crew-cache.json';
+// Exported so computeCitationPriorities.ts can fold this file's mtime into its
+// own response-cache key — its rankings depend on this dataset, which refreshes
+// independently on the 24h TTL below.
+export const CITATION_CREW_CACHE_PATH = 'data/citation-crew-cache.json';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — matches catalogCache.ts
 
 export function isCitationCrewCacheFresh(): boolean {
-  if (!existsSync(CACHE_PATH)) return false;
+  if (!existsSync(CITATION_CREW_CACHE_PATH)) return false;
   try {
-    return Date.now() - statSync(CACHE_PATH).mtimeMs < CACHE_TTL_MS;
+    return Date.now() - statSync(CITATION_CREW_CACHE_PATH).mtimeMs < CACHE_TTL_MS;
   } catch {
     return false;
   }
 }
 
 export function readCitationCrewCache(): CitationCrewEntry[] | null {
-  if (!existsSync(CACHE_PATH)) return null;
+  if (!existsSync(CITATION_CREW_CACHE_PATH)) return null;
   try {
-    const raw = readFileSync(CACHE_PATH, 'utf-8');
+    const raw = readFileSync(CITATION_CREW_CACHE_PATH, 'utf-8');
     const parsed = JSON.parse(raw) as CitationCrewEntry[];
     if (parsed.length === 0 || typeof parsed[0].symbol !== 'string' || !Array.isArray(parsed[0].skill_order)) {
       return null;
@@ -45,6 +48,6 @@ export function readCitationCrewCache(): CitationCrewEntry[] | null {
 }
 
 export function writeCitationCrewCache(data: CitationCrewEntry[]): void {
-  mkdirSync(dirname(CACHE_PATH), { recursive: true });
-  writeFileSync(CACHE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  mkdirSync(dirname(CITATION_CREW_CACHE_PATH), { recursive: true });
+  writeFileSync(CITATION_CREW_CACHE_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }

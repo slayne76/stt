@@ -5,6 +5,7 @@ import { loginAndGetSessionCookie } from '../authClient';
 import { readPlayerCache, writePlayerCache } from '../cache';
 import { readSessionCookie, writeSessionCookie } from '../sessionCache';
 import { UpstreamAuthError, UpstreamError } from '../errors';
+import { computeCitationPriorities } from '../citation/computeCitationPriorities';
 
 export function createPlayerRouter(config: AppConfig): Router {
   const router = Router();
@@ -64,6 +65,17 @@ async function refreshAndRespond(config: AppConfig, res: Response): Promise<void
     const data = await getPlayerDataWithAutoLogin(config);
     writePlayerCache(data);
     res.json(data);
+    // Fire-and-forget: writing a new player cache invalidates the citation
+    // priorities, and recomputing them is a ~12-13s synchronous, event-loop-blocking
+    // job. Kicking it off here moves that cost to just after a sync — where the
+    // user is already waiting on a refresh — instead of deferring it to whoever
+    // opens the Overview page next. Deliberately not awaited (the player
+    // response is already sent) and deliberately swallowed on failure: a
+    // citation-priorities error must never affect the player-data request, and
+    // GET /api/citation-priorities will surface it properly on its own. The
+    // single-flight guard inside computeCitationPriorities() means a concurrent
+    // request joins this run rather than starting a second one.
+    void computeCitationPriorities().catch(() => {});
   } catch (err) {
     if (err instanceof UpstreamAuthError) {
       res.status(502).json({ error: err.message, code: 'UPSTREAM_AUTH_FAILED' });

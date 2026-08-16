@@ -2,40 +2,10 @@
 //
 // Small, self-contained utilities ported from stt-datacore/website
 // (commit b310dd5bf018df5bfb7e322d7833f449a0311620), MIT licensed, adapted
-// to this project's CitationCrew/ItemEntry types. Sources cited per section
-// below.
+// to this project's CitationCrew type. Sources cited per section below.
 import type { CitationCrew } from './types';
-import type { ItemEntry } from '../itemsClient';
 
 export const SKILLS = ['command', 'diplomacy', 'engineering', 'medicine', 'science', 'security'];
-
-// Local shape for a skill-bearing object (core/range_min/range_max, plus an
-// optional owning-skill tag). `skill` is optional here (unlike the pinned
-// commit's own `Skill` interface in src/model/crew.ts, where it is
-// required) because this type also stands in for
-// `RawPlayerCrewInstance.base_skills` entries (server/src/citation/types.ts),
-// which carry `skill?: string`. A required object is always assignable to
-// an optional field, so this stays compatible with both call shapes.
-interface Skill {
-  core: number;
-  range_min: number;
-  range_max: number;
-  skill?: string;
-}
-
-// Ported from crewutils.ts:skillSum (line 1821)
-export function skillSum(skills: Skill | Skill[], mode?: 'all' | 'core' | 'proficiency', avg = true): number {
-  const mul = avg ? 0.5 : 1;
-  if (Array.isArray(skills)) {
-    return skills.reduce((p, n) => p + skillSum(n, mode), 0);
-  }
-  return (mode !== 'proficiency' ? skills.core : 0) + (mode !== 'core' ? (skills.range_max + skills.range_min) * mul : 0);
-}
-
-// Ported from crewutils.ts:crewCopy (line 768)
-export function crewCopy<T>(crew: T[]): T[] {
-  return structuredClone(crew);
-}
 
 // Ported from crewutils.ts:shortToSkill (line 881). The pinned commit looks
 // this up in CONFIG.SKILLS_SHORT / CONFIG.SKILLS_SHORT_ENGLISH (a localized
@@ -241,105 +211,9 @@ export function lookupAMSeatsByTrait(trait: string): string[] {
   return [];
 }
 
-export interface IDemand {
-  crewSymbols: string[];
-  count: number;
-  symbol: string;
-  equipment: ItemEntry;
-  factionOnly?: boolean;
-  have: number;
-}
-
-// Ported from equipment.ts:haveCount (line 327)
-export function haveCount(symbol: string, playerItems: { symbol: string; quantity?: number }[]): number {
-  return playerItems.find((f) => f.symbol === symbol)?.quantity ?? 0;
-}
-
-// Ported from equipment.ts:calcItemDemands (line 331). The pinned source
-// also mutates `item.demands = demands` as a side effect; ItemEntry has no
-// `demands` field (it's not needed by any consumer here), so that
-// assignment is intentionally dropped — this port only returns the array.
-export function calcItemDemands(
-  item: ItemEntry,
-  coreItems: ItemEntry[],
-  playerItems?: { symbol: string; quantity?: number }[]
-): IDemand[] {
-  const demands: IDemand[] = [];
-  if (item.recipe) {
-    for (const iter of item.recipe.list) {
-      const recipeEquipment = coreItems.find((i) => i.symbol === iter.symbol);
-      if (recipeEquipment) {
-        demands.push({
-          crewSymbols: [],
-          count: iter.count,
-          symbol: iter.symbol,
-          equipment: recipeEquipment,
-          factionOnly: iter.factionOnly,
-          have: playerItems ? haveCount(iter.symbol, playerItems) : 0,
-        });
-      }
-    }
-  }
-  return demands;
-}
-
-// Copied verbatim from src/components/CONFIG.ts's `STATS_CONFIG` static
-// field (pinned commit b310dd5bf018df5bfb7e322d7833f449a0311620) — the
-// minimal id -> {skill, stat, symbol} lookup getItemBonuses needs, restructured
-// from a class-static into a plain Record (values unchanged).
-const STATS_CONFIG: Record<number, { skill: string; stat: string; symbol: string }> = {
-  2: { symbol: 'engineering_skill_core', skill: 'engineering_skill', stat: 'core' },
-  3: { symbol: 'engineering_skill_range_min', skill: 'engineering_skill', stat: 'range_min' },
-  4: { symbol: 'engineering_skill_range_max', skill: 'engineering_skill', stat: 'range_max' },
-  6: { symbol: 'command_skill_core', skill: 'command_skill', stat: 'core' },
-  7: { symbol: 'command_skill_range_min', skill: 'command_skill', stat: 'range_min' },
-  8: { symbol: 'command_skill_range_max', skill: 'command_skill', stat: 'range_max' },
-  14: { symbol: 'science_skill_core', skill: 'science_skill', stat: 'core' },
-  15: { symbol: 'science_skill_range_min', skill: 'science_skill', stat: 'range_min' },
-  16: { symbol: 'science_skill_range_max', skill: 'science_skill', stat: 'range_max' },
-  18: { symbol: 'diplomacy_skill_core', skill: 'diplomacy_skill', stat: 'core' },
-  19: { symbol: 'diplomacy_skill_range_min', skill: 'diplomacy_skill', stat: 'range_min' },
-  20: { symbol: 'diplomacy_skill_range_max', skill: 'diplomacy_skill', stat: 'range_max' },
-  22: { symbol: 'security_skill_core', skill: 'security_skill', stat: 'core' },
-  23: { symbol: 'security_skill_range_min', skill: 'security_skill', stat: 'range_min' },
-  24: { symbol: 'security_skill_range_max', skill: 'security_skill', stat: 'range_max' },
-  26: { symbol: 'medicine_skill_core', skill: 'medicine_skill', stat: 'core' },
-  27: { symbol: 'medicine_skill_range_min', skill: 'medicine_skill', stat: 'range_min' },
-  28: { symbol: 'medicine_skill_range_max', skill: 'medicine_skill', stat: 'range_max' },
-};
-
-export interface ItemBonusInfo {
-  bonusText: string[];
-  bonuses: Record<string, Skill & { disabled?: boolean }>;
-}
-
-export interface ItemWithBonus {
-  item: ItemEntry;
-  bonusInfo: ItemBonusInfo;
-}
-
-// Ported from itemutils.ts:getItemBonuses (line 207). The pinned source
-// also sets `bonuses[bonus.skill].skill = bonus.skill` after populating the
-// stat value — included below for fidelity (Task 4 may key off `.skill`
-// when matching item bonuses to a crew's skills).
-export function getItemBonuses(item: ItemEntry): ItemBonusInfo {
-  const bonusText: string[] = [];
-  const bonuses: Record<string, Skill & { disabled?: boolean }> = {};
-  if (item.bonuses) {
-    for (const [key, value] of Object.entries(item.bonuses)) {
-      const bonus = STATS_CONFIG[Number.parseInt(key)];
-      if (bonus) {
-        bonuses[bonus.skill] ??= { core: 0, range_min: 0, range_max: 0 };
-        bonuses[bonus.skill][bonus.stat as 'core' | 'range_min' | 'range_max'] = value;
-        bonuses[bonus.skill].skill = bonus.skill;
-        bonusText.push(`+${value} ${bonus.symbol}`);
-      }
-    }
-  }
-  return { bonusText, bonuses };
-}
-
-// Ported from itemutils.ts:getItemWithBonus (line 444)
-export function getItemWithBonus(item: ItemEntry): ItemWithBonus {
-  return { item, bonusInfo: getItemBonuses(item) };
-}
+// NOTE: this module deliberately carries NO item/quipment helpers (upstream's
+// `haveCount`, `calcItemDemands`, `getItemBonuses`, `getItemWithBonus` and the
+// `STATS_CONFIG` table). Their only possible consumer here would have been
+// Beta Tachyon Pulse's quipment block, which is dead code at the pinned commit
+// (see betaTachyonPulse.ts adaptation note 5) — porting them kept a 32MB
+// items fetch/cache/parse pipeline alive to feed code that never ran.

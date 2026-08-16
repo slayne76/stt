@@ -22,7 +22,7 @@
 // ---------------------------------------------------------------------------
 // 1. Module shape. Upstream is a bare script exporting a single global
 //    `Optimizer` object literal that mutates its own properties across the
-//    10-call sequence. Here that object is built fresh per invocation by
+//    11-call sequence. Here that object is built fresh per invocation by
 //    `createOptimizer()`, so concurrent/repeated server-side calls cannot leak
 //    state into each other. Every `Optimizer.x` reference became `self.x`;
 //    nothing else changed.
@@ -55,7 +55,7 @@
 // 5. `console.log` calls dropped (upstream dumps the entire ~1300-entry roster
 //    twice per run). No `console.log` upstream sits on a value-producing path.
 //
-// 6. Members not reachable from the 10-call citation sequence are not ported:
+// 6. Members not reachable from the 11-call citation sequence are not ported:
 //    `findBestRankings`, `findCrewSeating`, `populateSortingArray`,
 //    `assessPoolVacancies`, `bestPossibleCrew`, `saveFile`, `skills`,
 //    `topCrewToTrain`-adjacent display state. (`findCrewSeating` is in fact
@@ -944,11 +944,11 @@ function createOptimizer() {
 }
 
 /**
- * Runs the exact 10-call sequence datacore's unified worker uses for the
+ * Runs the exact 11-call sequence datacore's unified worker uses for the
  * "Original Algorithm" and returns the untouched `rankedCrewToCite` records,
  * best-first, with no cutoff applied.
  */
-export function citeOriginalAlgorithmDetailed(
+function citeOriginalAlgorithmDetailed(
   ownedCrew: CitationCrew[],
   catalog: CitationCrewEntry[]
 ): RankedCrewToCite[] {

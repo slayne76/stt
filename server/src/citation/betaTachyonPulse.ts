@@ -82,8 +82,11 @@
 //    unreachable under our signature: it needs `playerData.player.character.items`,
 //    the player's item inventory, which `citeBetaTachyon` is not given. Omitting
 //    it is provably output-neutral and saves a ~23k x ~2k linear scan per run.
-//    `items` stays on the signature so Task 5's call site does not have to
-//    change if this ever becomes live upstream.
+//    Consequently this function takes no `items`/`coreItems` argument at all:
+//    an unused parameter would have kept an entire 32MB fetch/cache/parse
+//    pipeline alive upstream of a call that never reads it. If the quipment
+//    block ever becomes live upstream, the parameter (and that pipeline) can
+//    be reintroduced then.
 //
 // 6. `ac.date_added = new Date(ac.date_added)` (line 348) is not ported:
 //    written once, never read anywhere in the file.
@@ -98,7 +101,6 @@
 //    cannot diverge from a run that produces a ranking.
 
 import type { CitationCrew, CitationCrewEntry, CitationRanks, PlayerCryoCollection } from './types';
-import type { ItemEntry } from '../itemsClient';
 import type { CollectionDefinition } from '../collectionsClient';
 import type { BuffStatTable } from './buffConfig';
 import {
@@ -514,8 +516,6 @@ function toCatalogCrew(e: CitationCrewEntry, buffs: BuffStatTable): BTCrew {
  *                   in for `playerData.player.character.crew` after datacore's
  *                   own `prepareProfileData` pass.
  * @param catalog    The full crew catalog; stands in for `inputCrew`.
- * @param items      Stands in for `coreItems`. Read by the quipment block only,
- *                   which is provably dead upstream — see adaptation 5.
  * @param collections    Stands in for `collections` (needs `milestones`).
  * @param buffs          Output of `calculateBuffConfig()`.
  * @param cryoCollections The player's `character.cryo_collections`. Upstream
@@ -527,13 +527,10 @@ function toCatalogCrew(e: CitationCrewEntry, buffs: BuffStatTable): BTCrew {
 export function citeBetaTachyon(
   ownedCrew: CitationCrew[],
   catalog: CitationCrewEntry[],
-  items: ItemEntry[],
   collections: CollectionDefinition[],
   buffs: BuffStatTable,
   cryoCollections: PlayerCryoCollection[]
 ): CitationCrew[] {
-  void items; // see adaptation 5
-
   const settings = DefaultBetaTachyonSettings;
   const magic = settings.magic;
 

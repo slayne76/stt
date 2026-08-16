@@ -100,9 +100,13 @@ function OverviewPage() {
   const inPortalSearch = useSearch(missingInPortal, getCatalogEntryName);
   const notInPortalSearch = useSearch(missingNotInPortal, getCatalogEntryName);
 
-  const showCatalogData = Boolean(
-    !loading && !error && identity && !catalogLoading && !catalogError && catalog
-  );
+  // Player data being loaded and non-errored gates every section on this page:
+  // without it there is no roster to describe, and rendering a section early
+  // would flash an empty table if a faster fetch (catalog, citation priorities)
+  // resolves first.
+  const playerReady = Boolean(!loading && !error && identity);
+
+  const showCatalogData = Boolean(playerReady && !catalogLoading && !catalogError && catalog);
 
   return (
     <Stack spacing={2}>
@@ -150,20 +154,28 @@ function OverviewPage() {
         </>
       )}
 
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="h5">Priorities (Original Algorithm)</Typography>
-      {citationLoading && <Typography>Loading priorities…</Typography>}
-      {citationError && <Alert severity="error">{citationError}</Alert>}
-      {citationPriorities && (
-        <CrewTable crew={originalAlgorithmCrew} collections={collectionsList} showCollectionsNames={true} />
+      {playerReady && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Priorities (Original Algorithm)</Typography>
+          {citationLoading && <Typography>Loading priorities…</Typography>}
+          {citationError && <Alert severity="error">{citationError}</Alert>}
+          {citationPriorities && (
+            <CrewTable crew={originalAlgorithmCrew} collections={collectionsList} showCollectionsNames={true} />
+          )}
+        </>
       )}
 
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="h5">Priorities (Beta Tachyon)</Typography>
-      {citationLoading && <Typography>Loading priorities…</Typography>}
-      {citationError && <Alert severity="error">{citationError}</Alert>}
-      {citationPriorities && (
-        <CrewTable crew={betaTachyonCrew} collections={collectionsList} showCollectionsNames={true} />
+      {playerReady && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Priorities (Beta Tachyon)</Typography>
+          {citationLoading && <Typography>Loading priorities…</Typography>}
+          {citationError && <Alert severity="error">{citationError}</Alert>}
+          {citationPriorities && (
+            <CrewTable crew={betaTachyonCrew} collections={collectionsList} showCollectionsNames={true} />
+          )}
+        </>
       )}
 
       {!loading && !error && identity && (

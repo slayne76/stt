@@ -14,9 +14,16 @@ export interface CitationRanks {
   // per-skill-pair voyage ranks, e.g. V_CMD_SCI. Both feed `voyagesImproved`,
   // which drives two weighted terms of the final score (`improved` = 1 and
   // `groupSparsity` = 2 out of a ~14-term sum), so they are load-bearing, not
-  // decoration. Verified 2026-08-16 against the real
-  // https://datacore.app/structured/crew.json: every entry carries voyTriplet
-  // plus 13 V_* keys.
+  // decoration.
+  //
+  // Both parts of this shape VARY per entry — measured 2026-08-16 across all
+  // 1966 entries of the real https://datacore.app/structured/crew.json:
+  //   - `voyTriplet` is absent on 341 of 1966 entries (present on 1625), hence
+  //     optional/nullable here. Read with optional chaining, never assumed.
+  //   - the V_* key count is 5, 9 or 12 depending on how many skills the crew
+  //     has (distribution: 5 keys x23, 9 keys x318, 12 keys x1625) — never a
+  //     fixed count, hence the dynamic `startsWith("V_")` filter rather than a
+  //     hardcoded key list.
   voyTriplet?: { name: string; rank: number } | null;
   scores: {
     am_seating: number;
