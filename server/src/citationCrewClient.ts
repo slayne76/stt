@@ -13,20 +13,38 @@ interface RawCitationCrewEntry {
   skill_order?: string[];
   skill_data?: CitationCrewEntry['skill_data'];
   base_skills?: CitationCrewEntry['base_skills'];
+  traits?: string[];
+  obtained?: string;
   collections?: string[];
   collection_ids?: string[];
   unique_polestar_combos?: string[][];
   ranks?: {
     gauntletRank?: number;
     voyRank?: number;
+    voyTriplet?: { name: string; rank: number } | null;
     scores?: {
       am_seating?: number;
       quipment?: number;
       skill_rarity?: number;
       voyage?: number;
     };
+    // V_<A>_<B> voyage-pair ranks live alongside the named members.
+    [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+// Beta Tachyon Pulse enumerates `Object.keys(crew.ranks).filter(k => k.startsWith('V_'))`
+// to work out which voyage skill-pairs a crew would improve, so the projection
+// has to carry those keys through rather than pick a fixed list. Only numeric
+// V_* members are copied (defensive: the upstream ranks object mixes types).
+function pickVoyagePairRanks(ranks: Record<string, unknown> | undefined): Record<string, number> {
+  const picked: Record<string, number> = {};
+  if (!ranks) return picked;
+  for (const [key, value] of Object.entries(ranks)) {
+    if (key.startsWith('V_') && typeof value === 'number') picked[key] = value;
+  }
+  return picked;
 }
 
 export async function fetchCitationCrewData(): Promise<CitationCrewEntry[]> {
@@ -52,10 +70,18 @@ export async function fetchCitationCrewData(): Promise<CitationCrewEntry[]> {
     skill_order: e.skill_order ?? [],
     skill_data: e.skill_data ?? [],
     base_skills: e.base_skills ?? {},
+    traits: e.traits ?? [],
+    // Upstream's own default for a missing value (prepareOne, crewutils.ts:474).
+    obtained: e.obtained ?? 'Unknown',
     collections: e.collections ?? [],
     collection_ids: e.collection_ids ?? [],
     unique_polestar_combos: e.unique_polestar_combos ?? [],
     ranks: {
+      ...pickVoyagePairRanks(e.ranks),
+      // Nullable rather than defaulted: getVoyageImprovements guards it with
+      // `uc.ranks.voyTriplet?.name` / `trip?.length === 3`, so absence is a
+      // meaningful state upstream handles, not something to paper over.
+      voyTriplet: e.ranks?.voyTriplet ?? null,
       // These four values feed into a SUM of "more/less gives weight"
       // contributions inside Beta Tachyon Pulse's scoring formula (Task 4),
       // which sorts DESCENDING (higher total score = higher priority) — a

@@ -8,12 +8,33 @@ export interface CitationSkillData {
 export interface CitationRanks {
   gauntletRank: number;
   voyRank: number;
+  // Beta Tachyon Pulse's getVoyageImprovements (betatachyon.ts:66-100) reads
+  // `crew.ranks.voyTriplet` AND enumerates every key on this object matching
+  // /^V_/ (`Object.keys(uc.ranks).filter(f => f.startsWith("V_"))`) — the
+  // per-skill-pair voyage ranks, e.g. V_CMD_SCI. Both feed `voyagesImproved`,
+  // which drives two weighted terms of the final score (`improved` = 1 and
+  // `groupSparsity` = 2 out of a ~14-term sum), so they are load-bearing, not
+  // decoration. Verified 2026-08-16 against the real
+  // https://datacore.app/structured/crew.json: every entry carries voyTriplet
+  // plus 13 V_* keys.
+  voyTriplet?: { name: string; rank: number } | null;
   scores: {
     am_seating: number;
     quipment: number;
     skill_rarity: number;
     voyage: number;
   };
+  // The V_* voyage-pair ranks above are carried verbatim as extra members.
+  [key: string]: unknown;
+}
+
+// A single entry of `player.character.cryo_collections` in STT Tracker's own
+// player-cache.json (verified 2026-08-16: 88 entries, both fields present).
+// Beta Tachyon Pulse reads exactly these two fields when computing each
+// crew's `collectionsIncreased` (betatachyon.ts:475-496).
+export interface PlayerCryoCollection {
+  type_id: number;
+  claimable_milestone_index?: number;
 }
 
 export interface CitationCrewEntry {
@@ -32,6 +53,24 @@ export interface CitationCrewEntry {
   // once fully cited" half reads it (upstream optimizer.js:181/209), so it
   // cannot be dropped from the catalog projection.
   base_skills: Record<string, { core: number; range_min: number; range_max: number; skill: string }>;
+  // Catalog-level (archetype) traits. Needed by Beta Tachyon Pulse in TWO
+  // distinct places, so this is not redundant with RawPlayerCrewInstance.traits:
+  //   1. findPolestars(crew, allCrew) is passed the whole CATALOG as its
+  //      roster and reads `rc.traits` on every entry (btpUtils.ts:142) —
+  //      unowned crew are never in the player roster, so this is the only
+  //      source. It drives the `retrieval` term (weight 3).
+  //   2. Upstream's roster entries are built from the catalog template, so
+  //      their `traits` are the archetype's, not the instance's.
+  // Verified 2026-08-16: all 1966 crew.json entries carry `traits`.
+  traits: string[];
+  // How the crew can be acquired ("Voyage", "Gauntlet", "Pack/Giveaway", ...).
+  // Beta Tachyon Pulse's isNever() (betatachyon.ts:103-106) reads it to decide
+  // whether a crew is permanently unobtainable-by-portal, worth the single
+  // largest tier weight in the formula (`never` = 3). Upstream defaults a
+  // missing value to the literal string "Unknown" (prepareOne, crewutils.ts:474)
+  // — reproduced in the projection, including the fact that "Unknown" then
+  // fails every lowercase substring test in isNever().
+  obtained: string;
   collections: string[];
   collection_ids: string[];
   unique_polestar_combos: string[][];
@@ -61,6 +100,17 @@ export interface RawPlayerCrewInstance {
   traits: string[];
   traits_hidden: string[];
   base_skills: Record<string, { core: number; range_min: number; range_max: number; skill?: string }>;
+  // The game's OWN buffed stat block for this instance (present on every entry
+  // in a real player file; absent on crew synthesized from stored_immortals,
+  // which have no player instance). Not redundant with base_skills: it is the
+  // authoritative buffed value, and it is the only place quipment bonuses
+  // appear. datacore's prepareOne (crewutils.ts:628-643) prefers it over
+  // recomputing buffs, falling back to applyCrewBuffs only when it is missing —
+  // which is exactly the frozen-crew case. Recomputing instead is not
+  // equivalent: measured on the real player file (2026-08-16), 362 of 1727
+  // owned skill entries differ, 356 by a 1-point rounding edge on sub-level-100
+  // crew and 6 by hundreds of points on quipped crew.
+  skills?: Record<string, { core: number; range_min: number; range_max: number; skill?: string }>;
 }
 
 // The working type both algorithm ports (Tasks 3-4) operate on: an owned
@@ -68,6 +118,7 @@ export interface RawPlayerCrewInstance {
 // carry itself.
 export interface CitationCrew extends RawPlayerCrewInstance {
   in_portal: boolean;
+  obtained: string;
   skill_order: string[];
   skill_data: CitationSkillData[];
   collections: string[];
@@ -90,7 +141,17 @@ export function mergeCrewWithCatalog(
     if (!entry) continue;
     merged.push({
       ...c,
+      // Upstream builds each roster entry from the CATALOG template and then
+      // overwrites only a fixed list of player-instance fields; `traits` is
+      // not on that list (prepareOne, crewutils.ts:457-660), so upstream
+      // roster crew carry the archetype's traits. Mirrored here. For active
+      // crew this is a no-op (verified 2026-08-16: all 599 owned instances'
+      // `traits` are set-equal to their catalog entry's). For crew synthesized
+      // from `stored_immortals`, which have no player instance and therefore
+      // no traits of their own, it is the only source.
+      traits: entry.traits,
       in_portal: entry.in_portal,
+      obtained: entry.obtained,
       skill_order: entry.skill_order,
       skill_data: entry.skill_data,
       collections: entry.collections,

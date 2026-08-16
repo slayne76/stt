@@ -28,6 +28,16 @@ export function readCitationCrewCache(): CitationCrewEntry[] | null {
     if (!parsed[0].base_skills) {
       return null;
     }
+    // Likewise for traits / obtained / the V_* + voyTriplet voyage ranks,
+    // added to the projection for the Beta Tachyon Pulse port. A cache written
+    // before that change would silently zero out that engine's `retrieval`,
+    // `never`, `improved` and `groupSparsity` terms.
+    if (!Array.isArray(parsed[0].traits) || typeof parsed[0].obtained !== 'string') {
+      return null;
+    }
+    if (parsed[0].ranks?.voyTriplet === undefined) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;
