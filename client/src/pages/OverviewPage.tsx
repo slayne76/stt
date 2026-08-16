@@ -14,11 +14,13 @@ import {
 } from '@mui/material';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
+import { useCitationPriorities } from '../hooks/useCitationPriorities';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
 import { filterGauntletPriority, filterMissingFavorite } from '../crew/filters';
 import { byGauntletRankAsc, defaultCrewComparator, sortCrew } from '../crew/sorters';
+import { applyPriorityCutoff } from '../crew/priorityCutoff';
 import { getArchetypeMaxRarityMap, getCatalogCount, getGauntletRankMap, getMissingCrew } from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
 import { getCollectionsList } from '../collections/getters';
@@ -28,6 +30,7 @@ import MissingCrewTable from '../catalog/MissingCrewTable';
 import TableSearchBar from '../components/TableSearchBar';
 import type { PlayerIdentity } from '../types/player';
 import type { CatalogEntry } from '../types/catalogEntry';
+import type { CrewMember } from '../types/crew';
 
 const getCatalogEntryName = (c: CatalogEntry) => [c.name];
 
@@ -53,6 +56,17 @@ function OverviewPage() {
         GAUNTLET_PRIORITY_LIMIT
       )
     : [];
+  const { data: citationPriorities, loading: citationLoading, error: citationError } = useCitationPriorities();
+
+  const crewById = new Map(crewList.map((c) => [c.id, c]));
+
+  function resolveCitationCrew(ids: number[]): CrewMember[] {
+    return ids.map((id) => crewById.get(id)).filter((c): c is CrewMember => c !== undefined);
+  }
+
+  const originalAlgorithmCrew = citationPriorities ? applyPriorityCutoff(resolveCitationCrew(citationPriorities.originalAlgorithm)) : [];
+  const betaTachyonCrew = citationPriorities ? applyPriorityCutoff(resolveCitationCrew(citationPriorities.betaTachyon)) : [];
+
   const collectionsList = data ? getCollectionsList(data) : [];
   const missingFavoriteCrew = data
     ? sortCrew(filterMissingFavorite(crewList), defaultCrewComparator(collectionsList))
@@ -134,6 +148,22 @@ function OverviewPage() {
             gauntletRankByArchetypeId={gauntletRankMap}
           />
         </>
+      )}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="h5">Priorities (Original Algorithm)</Typography>
+      {citationLoading && <Typography>Loading priorities…</Typography>}
+      {citationError && <Alert severity="error">{citationError}</Alert>}
+      {citationPriorities && (
+        <CrewTable crew={originalAlgorithmCrew} collections={collectionsList} showCollectionsNames={true} />
+      )}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="h5">Priorities (Beta Tachyon)</Typography>
+      {citationLoading && <Typography>Loading priorities…</Typography>}
+      {citationError && <Alert severity="error">{citationError}</Alert>}
+      {citationPriorities && (
+        <CrewTable crew={betaTachyonCrew} collections={collectionsList} showCollectionsNames={true} />
       )}
 
       {!loading && !error && identity && (
