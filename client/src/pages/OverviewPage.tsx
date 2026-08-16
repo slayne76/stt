@@ -17,9 +17,9 @@ import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
-import { filterMissingFavorite } from '../crew/filters';
-import { defaultCrewComparator, sortCrew } from '../crew/sorters';
-import { getArchetypeMaxRarityMap, getCatalogCount, getMissingCrew } from '../catalog/getters';
+import { filterGauntletPriority, filterMissingFavorite } from '../crew/filters';
+import { byGauntletRankAsc, defaultCrewComparator, sortCrew } from '../crew/sorters';
+import { getArchetypeMaxRarityMap, getCatalogCount, getGauntletRankMap, getMissingCrew } from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
@@ -30,6 +30,8 @@ import type { PlayerIdentity } from '../types/player';
 import type { CatalogEntry } from '../types/catalogEntry';
 
 const getCatalogEntryName = (c: CatalogEntry) => [c.name];
+
+const GAUNTLET_PRIORITY_LIMIT = 5;
 
 const FIELD_LABELS: Record<keyof PlayerIdentity, string> = {
   playerId: 'Player ID',
@@ -44,6 +46,13 @@ function OverviewPage() {
   const crewList = data ? getCrewList(data) : [];
   const frozenArchetypeIds = data ? getFrozenCrewArchetypeIds(data) : new Set<number>();
   const catalogMaxRarityById = catalog ? getArchetypeMaxRarityMap(catalog) : new Map<number, number>();
+  const gauntletRankMap = catalog ? getGauntletRankMap(catalog) : new Map<number, number>();
+  const gauntletPriorityCrew = catalog
+    ? sortCrew(filterGauntletPriority(crewList, gauntletRankMap), byGauntletRankAsc(gauntletRankMap)).slice(
+        0,
+        GAUNTLET_PRIORITY_LIMIT
+      )
+    : [];
   const collectionsList = data ? getCollectionsList(data) : [];
   const missingFavoriteCrew = data
     ? sortCrew(filterMissingFavorite(crewList), defaultCrewComparator(collectionsList))
@@ -77,7 +86,7 @@ function OverviewPage() {
   const inPortalSearch = useSearch(missingInPortal, getCatalogEntryName);
   const notInPortalSearch = useSearch(missingNotInPortal, getCatalogEntryName);
 
-  const showMissingTables = Boolean(
+  const showCatalogData = Boolean(
     !loading && !error && identity && !catalogLoading && !catalogError && catalog
   );
 
@@ -112,6 +121,19 @@ function OverviewPage() {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {showCatalogData && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Priorities (Gauntlet)</Typography>
+          <CrewTable
+            crew={gauntletPriorityCrew}
+            collections={collectionsList}
+            showCollectionsNames={true}
+            gauntletRankByArchetypeId={gauntletRankMap}
+          />
+        </>
       )}
 
       {!loading && !error && identity && (
@@ -181,7 +203,7 @@ function OverviewPage() {
         </>
       )}
 
-      {showMissingTables && (
+      {showCatalogData && (
         <>
           <Divider sx={{ my: 2 }} />
           <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
