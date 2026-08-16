@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-16 (Overview Missing Favorite Flag table). This
+Last updated: 2026-08-16 (Overview "Priorities (Gauntlet)" table). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -178,7 +178,12 @@ client/src/
                                  "Uniquely Retrievable" column via `uniquelyRetrievableArchetypeIds?:
                                  Set<number> | null` — undefined hides it (every page but "3/5 Stars
                                  Crew" today), null shows "Unavailable", a Set shows Yes/No (see
-                                 "3/5 Stars Crew page" below)
+                                 "3/5 Stars Crew page" below); optional "Rank" column inserted
+                                 **between Name and Level** (not appended like Uniquely Retrievable)
+                                 via `gauntletRankByArchetypeId?: Map<number, number>` — undefined
+                                 hides it (every page but Overview's "Priorities (Gauntlet)" section
+                                 today), a Map renders `#<rank>` (see "Priorities (Gauntlet) table"
+                                 below)
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds
                                   left/Skills; see "QPs page", "StatusChip component and QPs Ready
@@ -242,14 +247,21 @@ client/src/
                                  constant/meaningless; see "Two new crew pages" below), paginated
                                  (see "Table pagination" below)
   pages/
-    OverviewPage.tsx            "Player Info" table (Player ID, DBID) + "Missing Crew recap"
-                                 table ("5/4 Stars unique crew", owned/total/pct% plus an
-                                 owned-vs-total (±N) label suffix — see "Crew catalog and
-                                 Overview unique-crew counts", "Overview page split tables")
-                                 + "Missing Favorite Flag" (reuses CrewTable directly, no
-                                 catalog dependency — see "Missing Favorite Flag table" below)
-                                 plus two Missing 4 Stars tables (see "Missing 4 Stars tables")
-                                 — the very first page
+    OverviewPage.tsx            "Player Info" table (Player ID, DBID) + "Priorities (Gauntlet)"
+                                 (top 5 owned 5-star-max crew needing work, ranked by catalog
+                                 Gauntlet rank — see "Priorities (Gauntlet) table" below) +
+                                 "Missing Crew recap" table ("5/4 Stars unique crew",
+                                 owned/total/pct% plus an owned-vs-total (±N) label suffix —
+                                 see "Crew catalog and Overview unique-crew counts", "Overview
+                                 page split tables") + "Missing Favorite Flag" (reuses
+                                 CrewTable directly, no catalog dependency — see "Missing
+                                 Favorite Flag table" below) plus two Missing 4 Stars tables
+                                 (see "Missing 4 Stars tables") — the very first page. The
+                                 catalog-gated sections ("Priorities (Gauntlet)" + the two
+                                 Missing 4 Stars tables + Base/Proficiency Bonus) now share one
+                                 boolean, `showCatalogData` (renamed from `showMissingTables`
+                                 when a second catalog-dependent section arrived — see
+                                 "Priorities (Gauntlet) table" below)
     FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
                                  item in the Crew nav group (see "Two new crew pages" below)
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -279,11 +291,19 @@ server/src/
                                                           whole-resource shape (see "Crew catalog and
                                                           Overview unique-crew counts"); CatalogEntry
                                                           also carries `uniquely_retrievable: boolean`
-                                                          (see "3/5 Stars Crew page" below) —
+                                                          (see "3/5 Stars Crew page" below) and
+                                                          `gauntlet_rank: number` (raw upstream
+                                                          `ranks.gauntletRank`, see "Priorities
+                                                          (Gauntlet) table" below) —
                                                           `catalogCache.ts`'s shape-guard MUST be
                                                           extended every time `CatalogEntry` widens
                                                           again, or a stale-but-TTL-fresh cache
-                                                          silently serves old-shape data
+                                                          silently serves old-shape data (this guard
+                                                          was itself missed once, for
+                                                          `uniquely_retrievable` — a same-session
+                                                          follow-up commit fixed it; the
+                                                          `gauntlet_rank` field landed with its guard
+                                                          update from the start)
 ```
 
 ## The crew data model (as understood from the real game payload)
@@ -4988,6 +5008,70 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     identity` gate alongside one named `showMissingTables` — worth
     extracting a second named constant before a 4th player-data-only
     section risks being pasted into the wrong gate by copy-paste.
+
+52. **Overview "Priorities (Gauntlet)" table**
+    (`2026-08-16-overview-gauntlet-priorities`) — new Overview section
+    listing the top 5 owned crew to prioritize leveling/equipping next,
+    ranked by their Gauntlet strength on datacore.app (best rank first).
+    Candidate crew: owned, `max_rarity === 5`, not in buyback state, and
+    either under level 100 or missing equipment items (current rarity is
+    irrelevant). Investigated by cloning the upstream catalog feed
+    directly (`https://datacore.app/structured/crew.json`) and confirming
+    the field: `ranks.gauntletRank`, present and **unique 1–1966** across
+    every catalog entry (no ties, so no sort tiebreaker is needed) —
+    cross-checked byte-for-byte against the user's own reported top 5
+    (Eli Hollander #5, Kurn #8, Korath #13, Primarch Ruhn #15, Marooned
+    Gorn #17) before any code was written.
+
+    `CatalogEntry` gained `gauntlet_rank: number` (both
+    `server/src/catalogClient.ts` and `client/src/types/catalogEntry.ts`,
+    extracted as `e.ranks?.gauntletRank ?? Number.MAX_SAFE_INTEGER` — see
+    below for why the fallback isn't `?? 0`). Three new pure helpers do
+    the join: `getGauntletRankMap` (catalog/getters.ts),
+    `filterGauntletPriority` (crew/filters.ts), `byGauntletRankAsc`
+    (crew/sorters.ts) — `OverviewPage.tsx` chains them and takes
+    `.slice(0, 5)`.
+
+    **`CrewTable` gained its second optional column** (see "Uniquely
+    Retrievable column" entry in the CrewTable repo-map row above) — a
+    "Rank" column via `gauntletRankByArchetypeId?: Map<number, number>`,
+    positioned **between Name and Level** rather than appended at the end
+    like the first optional column, since the two need different visual
+    positions. Confirmed inert for the other 7 `CrewTable` consumers
+    (final review read all of them).
+
+    New section placed immediately after "Player Info", before "Missing
+    Crew recap" — title exactly "Priorities (Gauntlet)", no search bar
+    (fixed 5-row cap). It's the first Overview section gated on the crew
+    catalog rather than player data alone, which prompted renaming the
+    page's `showMissingTables` boolean to the more general
+    `showCatalogData` and reusing it for both this section and the
+    existing Missing-4-Stars/Base-Skill-Bonus/Proficiency-Bonus block —
+    same condition, same behavior, just shared instead of duplicated
+    (this was a Minor, non-blocking recommendation parked during feature
+    51's final review; addressed here rather than deferred again).
+
+    Two-task plan (data layer, then UI) — both task reviews came back
+    with **zero findings at any severity**. The final whole-branch review
+    independently re-derived the candidate filter and top-5 output from
+    scratch against the real, live-refreshed `player-cache.json` plus a
+    fresh live catalog fetch (221 real candidates, exact top-5 match by
+    crew id) and confirmed all 7 other `CrewTable` consumers unaffected
+    by the new optional prop. It found 0 Critical/0 Important and 4
+    Minor: (1) the original `?? 0` fallback for `gauntlet_rank` was
+    fail-*unsafe* — `data_score`'s identical-looking `?? 0` is safe only
+    because it's sorted descending, while `gauntlet_rank` sorts ascending,
+    so a missing/malformed upstream rank would have rendered as `#0` and
+    looked like the single best crew in the game; unreachable today (all
+    1966 real entries have the field) but fixed via one dispatched fix
+    round to `?? Number.MAX_SAFE_INTEGER` with an explanatory comment,
+    re-reviewed clean; (2) the Rank column is left-aligned like Name
+    rather than right-aligned like the other numeric columns — matches
+    the spec exactly, not a deviation, left as-is; (3) the empty state (no
+    qualifying crew) renders a bare headerless table with no message —
+    consistent with the Missing Favorite Flag precedent, effectively
+    unreachable for this user, left as-is; (4) this doc update was still
+    pending at final-review time — closed by this entry.
 
 ## Current routes / nav (in order)
 
