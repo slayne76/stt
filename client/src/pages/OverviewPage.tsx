@@ -19,8 +19,12 @@ import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
 import { filterDataScorePriority, filterGauntletPriority, filterMissingFavorite } from '../crew/filters';
-import { byGauntletRankAsc, defaultCrewComparator, sortCrew } from '../crew/sorters';
-import { byDataScoreDesc as byCrewDataScoreDesc } from '../crew/sorters';
+import {
+  byDataScoreDesc as byCrewDataScoreDesc,
+  byGauntletRankAsc,
+  defaultCrewComparator,
+  sortCrew,
+} from '../crew/sorters';
 import { applyPriorityCutoff } from '../crew/priorityCutoff';
 import {
   getArchetypeMaxRarityMap,
@@ -177,8 +181,8 @@ function OverviewPage() {
               crew={originalAlgorithmCrew}
               collections={collectionsList}
               showCollectionsNames={true}
-              dataScoreByArchetypeId={dataScoreMap}
-              gauntletRankByArchetypeId={gauntletRankMap}
+              dataScoreByArchetypeId={showCatalogData ? dataScoreMap : undefined}
+              gauntletRankByArchetypeId={showCatalogData ? gauntletRankMap : undefined}
             />
           )}
         </>
@@ -195,8 +199,8 @@ function OverviewPage() {
               crew={betaTachyonCrew}
               collections={collectionsList}
               showCollectionsNames={true}
-              dataScoreByArchetypeId={dataScoreMap}
-              gauntletRankByArchetypeId={gauntletRankMap}
+              dataScoreByArchetypeId={showCatalogData ? dataScoreMap : undefined}
+              gauntletRankByArchetypeId={showCatalogData ? gauntletRankMap : undefined}
             />
           )}
         </>
