@@ -25,6 +25,13 @@ export interface CitationCrewEntry {
   in_portal: boolean;
   skill_order: string[];
   skill_data: CitationSkillData[];
+  // The fully-fused, level-100 stat block. NOT redundant with skill_data:
+  // verified across all 1966 catalog entries (2026-08-16) that skill_data only
+  // ever covers rarities 1..max_rarity-1, so this is the sole source of
+  // max-rarity stats. The Original Algorithm's entire "what is this crew worth
+  // once fully cited" half reads it (upstream optimizer.js:181/209), so it
+  // cannot be dropped from the catalog projection.
+  base_skills: Record<string, { core: number; range_min: number; range_max: number; skill: string }>;
   collections: string[];
   collection_ids: string[];
   unique_polestar_combos: string[][];

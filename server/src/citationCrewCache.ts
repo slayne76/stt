@@ -22,6 +22,12 @@ export function readCitationCrewCache(): CitationCrewEntry[] | null {
     if (parsed.length === 0 || typeof parsed[0].symbol !== 'string' || !Array.isArray(parsed[0].skill_order)) {
       return null;
     }
+    // base_skills was added to the projection after the first caches were
+    // written; treat a cache without it as stale rather than handing the
+    // citation algorithms a catalog with no max-rarity stats.
+    if (!parsed[0].base_skills) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;

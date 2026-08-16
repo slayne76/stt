@@ -12,6 +12,7 @@ interface RawCitationCrewEntry {
   in_portal: boolean;
   skill_order?: string[];
   skill_data?: CitationCrewEntry['skill_data'];
+  base_skills?: CitationCrewEntry['base_skills'];
   collections?: string[];
   collection_ids?: string[];
   unique_polestar_combos?: string[][];
@@ -50,6 +51,7 @@ export async function fetchCitationCrewData(): Promise<CitationCrewEntry[]> {
     in_portal: Boolean(e.in_portal),
     skill_order: e.skill_order ?? [],
     skill_data: e.skill_data ?? [],
+    base_skills: e.base_skills ?? {},
     collections: e.collections ?? [],
     collection_ids: e.collection_ids ?? [],
     unique_polestar_combos: e.unique_polestar_combos ?? [],
