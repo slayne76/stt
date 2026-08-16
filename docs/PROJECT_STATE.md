@@ -1,6 +1,6 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-16 (3/5 Stars Crew page + Uniquely Retrievable column). This
+Last updated: 2026-08-16 (Overview Missing Favorite Flag table). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -246,6 +246,8 @@ client/src/
                                  table ("5/4 Stars unique crew", owned/total/pct% plus an
                                  owned-vs-total (±N) label suffix — see "Crew catalog and
                                  Overview unique-crew counts", "Overview page split tables")
+                                 + "Missing Favorite Flag" (reuses CrewTable directly, no
+                                 catalog dependency — see "Missing Favorite Flag table" below)
                                  plus two Missing 4 Stars tables (see "Missing 4 Stars tables")
                                  — the very first page
     FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
@@ -4937,6 +4939,55 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     hypothetical future page with wider crew coverage (not reachable
     today at 1302/1302); an unmemoized Set rebuild on every render,
     consistent with this page's existing non-memoized style.
+
+51. **Overview "Missing Favorite Flag" table**
+    (`2026-08-16-overview-missing-favorite-flag`) — new Overview section
+    listing owned, non-buyback crew whose in-game "favorite" heart flag
+    is off. The user flags nearly every crew they intend to level/
+    immortalize, so the exceptions are the actionable review list (and
+    the flag also blocks accidental delete/freeze in-game). `CrewMember`
+    gained `favorite: boolean` (raw data already had it, undeclared —
+    same safe-addition precedent as `in_buy_back_state`/`skills`); new
+    `filterMissingFavorite` excludes buyback-state crew (matching the
+    Duplicates/QPs precedent). **The section reuses `CrewTable` directly
+    — no new table component** — and is gated on `!loading && !error &&
+    identity` only (a plain sibling of "Player Info"/"Missing Crew
+    recap"), deliberately **not** nested inside the catalog-gated
+    `showMissingTables` block, since it has zero dependency on the crew
+    catalog and would otherwise wait unnecessarily on a slower, separate
+    fetch.
+
+    **Real-data verified against the user's own report, which they'd
+    already independently confirmed in-game before asking for this
+    feature**: exactly 7 rows — Beach Day Uhura (the user's own example
+    of a crew they deliberately unflagged) plus the 3× duplicate groups
+    already known from feature 47 (Mirror 'Smiley' O'Brien, Commander
+    Scott). A further 9 unflagged crew exist but are in buyback state
+    (already trashed in-game) — named to the user during brainstorming,
+    who confirmed excluding them.
+
+    Single-task plan, task review clean with **zero findings at any
+    severity** — the reviewer specifically traced the JSX gating
+    conditional (the single highest placement risk, since the insertion
+    point sits directly between two differently-gated existing blocks)
+    and confirmed it independently. Final review also clean, zero
+    Critical/Important: independently re-derived the full 7-row list
+    from scratch against the real `player-cache.json` (byte-for-byte
+    match) and confirmed all 9 buyback-state crew correctly excluded;
+    confirmed `favorite` is a real boolean on all 599 owned crew (no
+    `undefined`/non-boolean values `!c.favorite` could misread); confirmed
+    the 3 Overview search boxes are structurally independent (`useSearch`
+    owns private state per call). 3 Minor parked, none load-bearing: the
+    empty state (0 unflagged crew — this feature's actual steady-state
+    goal, unlike other Overview sections where empty is the exception)
+    renders a bare headerless table instead of a "no unflagged crew"
+    message; a redundant-but-harmless `data ?` ternary kept for visual
+    consistency with 4 sibling lines; the doc-staleness Minor closed by
+    this update. **Non-blocking recommendation for a future session**: the
+    page now has 3 inline copies of the unnamed `!loading && !error &&
+    identity` gate alongside one named `showMissingTables` — worth
+    extracting a second named constant before a 4th player-data-only
+    section risks being pasted into the wrong gate by copy-paste.
 
 ## Current routes / nav (in order)
 
