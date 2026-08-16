@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-16 (Overview "Priorities (Original Algorithm)" and
-"Priorities (Beta Tachyon)" tables). This
+Last updated: 2026-08-16 (Overview "Priorities (DataScore)" table +
+DataScore/Gauntlet Rank columns on all four Priorities tables). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -179,12 +179,17 @@ client/src/
                                  "Uniquely Retrievable" column via `uniquelyRetrievableArchetypeIds?:
                                  Set<number> | null` — undefined hides it (every page but "3/5 Stars
                                  Crew" today), null shows "Unavailable", a Set shows Yes/No (see
-                                 "3/5 Stars Crew page" below); optional "Rank" column inserted
-                                 **between Name and Level** (not appended like Uniquely Retrievable)
-                                 via `gauntletRankByArchetypeId?: Map<number, number>` — undefined
-                                 hides it (every page but Overview's "Priorities (Gauntlet)" section
-                                 today), a Map renders `#<rank>` (see "Priorities (Gauntlet) table"
-                                 below)
+                                 "3/5 Stars Crew page" below); two more optional columns inserted
+                                 **between Name and Level**, in this order: "DataScore"
+                                 (`dataScoreByArchetypeId?: Map<number, number>`, right-aligned,
+                                 `.toFixed(2)`, matching `MissingCrewTable.tsx`'s own DataScore
+                                 formatting) and "Gauntlet Rank" (`gauntletRankByArchetypeId?:
+                                 Map<number, number>`, renders `#<rank>` — column header renamed
+                                 from "Rank" when a second real-value column, DataScore, arrived
+                                 alongside it, see "Overview Priorities (DataScore) table" below).
+                                 Both undefined-hides-it; today only the four Overview Priorities
+                                 sections (DataScore/Original Algorithm/Beta Tachyon/Gauntlet) pass
+                                 either — no other `CrewTable` consumer does.
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds
                                   left/Skills; see "QPs page", "StatusChip component and QPs Ready
@@ -248,30 +253,50 @@ client/src/
                                  constant/meaningless; see "Two new crew pages" below), paginated
                                  (see "Table pagination" below)
   pages/
-    OverviewPage.tsx            "Player Info" table (Player ID, DBID) + "Priorities (Gauntlet)"
-                                 (top 5 owned 5-star-max crew needing work, ranked by catalog
-                                 Gauntlet rank — see "Priorities (Gauntlet) table" below) +
-                                 "Priorities (Original Algorithm)" + "Priorities (Beta Tachyon)"
-                                 (top citation-priority crew per two datacore.app engines ported
-                                 server-side, each capped by a "keep but don't count" stopping
-                                 rule — see "Overview Citation Priorities tables" below) +
-                                 "Missing Crew recap" table ("5/4 Stars unique crew",
-                                 owned/total/pct% plus an owned-vs-total (±N) label suffix —
-                                 see "Crew catalog and Overview unique-crew counts", "Overview
-                                 page split tables") + "Missing Favorite Flag" (reuses
-                                 CrewTable directly, no catalog dependency — see "Missing
-                                 Favorite Flag table" below) plus two Missing 4 Stars tables
-                                 (see "Missing 4 Stars tables") — the very first page. The
-                                 catalog-gated sections ("Priorities (Gauntlet)" + the two
-                                 Missing 4 Stars tables + Base/Proficiency Bonus) share one
-                                 boolean, `showCatalogData` (renamed from `showMissingTables`
-                                 when a second catalog-dependent section arrived — see
-                                 "Priorities (Gauntlet) table" below). The two Citation
-                                 Priorities sections gate independently, on their own
+    OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
+                                 in page order **DataScore → Original Algorithm → Beta Tachyon →
+                                 Gauntlet** (see "Overview Priorities (DataScore) table" below for
+                                 the 2026-08-16 reorder — Gauntlet used to be first) + "Missing
+                                 Crew recap" table ("5/4 Stars unique crew", owned/total/pct% plus
+                                 an owned-vs-total (±N) label suffix — see "Crew catalog and
+                                 Overview unique-crew counts", "Overview page split tables") +
+                                 "Missing Favorite Flag" (reuses CrewTable directly, no catalog
+                                 dependency — see "Missing Favorite Flag table" below) plus two
+                                 Missing 4 Stars tables (see "Missing 4 Stars tables") — the very
+                                 first page. All four Priorities tables pass both
+                                 `dataScoreByArchetypeId` and `gauntletRankByArchetypeId` to
+                                 `CrewTable` (see the `CrewTable.tsx` row above). Priorities
+                                 (DataScore) ranks owned, non-immortalized crew by catalog
+                                 DataScore (`filterDataScorePriority`/`byDataScoreDesc` in
+                                 `crew/filters.ts`/`crew/sorters.ts` — the latter deliberately
+                                 same-named as, but distinct from, `catalog/sorters.ts`'s own
+                                 `byDataScoreDesc` used by the Missing 4 Stars tables; aliased on
+                                 import in this file to avoid collision), reusing
+                                 `applyPriorityCutoff()` unchanged. Priorities (Gauntlet) ranks
+                                 top 5 owned 5-star-max crew needing work by catalog Gauntlet rank
+                                 (see "Priorities (Gauntlet) table" below). Priorities (Original
+                                 Algorithm)/(Beta Tachyon) show top citation-priority crew per two
+                                 datacore.app engines ported server-side, each capped by the same
+                                 "keep but don't count" stopping rule (see "Overview Citation
+                                 Priorities tables" below). The catalog-gated sections (Priorities
+                                 DataScore/Gauntlet + the two Missing 4 Stars tables +
+                                 Base/Proficiency Bonus) share one boolean, `showCatalogData`
+                                 (renamed from `showMissingTables` when a second catalog-dependent
+                                 section arrived — see "Priorities (Gauntlet) table" below). The
+                                 two Citation Priorities sections gate independently, on their own
                                  `useCitationPriorities()` loading/error state plus player-data
                                  readiness (`!loading && !error && identity`) — NOT on
-                                 `showCatalogData`, since that endpoint's data source and
-                                 latency profile (see below) are unrelated to the crew catalog.
+                                 `showCatalogData`, since that endpoint's data source and latency
+                                 profile are unrelated to the crew catalog; **but** their
+                                 `dataScoreByArchetypeId`/`gauntletRankByArchetypeId` props are
+                                 still separately guarded on `showCatalogData` (a final-review
+                                 fix, 2026-08-16 — those two maps genuinely do come from the
+                                 catalog, so a catalog outage must still hide those two columns on
+                                 the citation tables even though the tables themselves stay
+                                 gated on player/citation readiness; the maps default to empty,
+                                 not `undefined`, when the catalog is unavailable, which without
+                                 this guard silently rendered two dead `—`-only columns instead of
+                                 degrading cleanly).
     FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
                                  item in the Crew nav group (see "Two new crew pages" below)
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -5232,6 +5257,70 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     crew objects) — the client resolves them against the player crew
     list it already has loaded via `usePlayerData()`, joined the same way
     `getGauntletRankMap` already joins the catalog.
+54. **Overview Priorities (DataScore) table + DataScore/Gauntlet Rank
+    columns on all four Priorities tables** (`2026-08-16-overview-datascore-priorities`)
+    — a fourth Overview Priorities table, ranking owned crew by catalog
+    DataScore (already cached, no new upstream data), plus two new real
+    value columns on all four Priorities tables and a page reorder. Small
+    and purely client-side (2 tasks) compared to feature 53 immediately
+    before it. Same "keep but don't count" cutoff rule as the two
+    Citation Priorities tables — verified it's *literally* the same rule,
+    so this table reuses the existing `applyPriorityCutoff()` with zero
+    changes, rather than writing a second cutoff function.
+
+    Candidates: owned, not buyback, **not fully immortalized**
+    (`!isImmortalized(c)` — a materially different eligibility rule from
+    `filterGauntletPriority`'s `(level < 100 || equipRemaining < 0)`, and
+    the two must not be confused: Gauntlet's rule also happens to exclude
+    non-immortalized-but-level-100-fully-equipped crew, which this table
+    deliberately keeps-but-doesn't-count, matching the real Citation
+    Priorities tables' behavior for the analogous case). No `max_rarity`
+    restriction. Verified against real, live data before writing any
+    code: joined the live catalog's `data_score` to the real
+    `player-cache.json` roster and reproduced the user's own 9-row worked
+    example exactly, including which of two "Chances Taken Kirk" copies
+    is excluded (the fully-immortalized one) vs. kept-but-not-counted
+    (the other, level 100 but below max rarity).
+
+    `CrewTable` gained a third optional column, "DataScore"
+    (`dataScoreByArchetypeId?: Map<number, number>`, `.toFixed(2)`,
+    matching `MissingCrewTable.tsx`'s existing DataScore formatting),
+    positioned between Name and the existing rank column — which itself
+    got renamed from "Rank" to "**Gauntlet Rank**" now that a second real
+    value column sits beside it (prop name and helper function
+    unchanged, only the header string). `crew/sorters.ts` gained a new
+    `byDataScoreDesc` — deliberately same-named as the pre-existing,
+    unrelated `catalog/sorters.ts` `byDataScoreDesc` (operates on
+    `CatalogEntry[]`, used by the Missing 4 Stars tables) — requiring an
+    aliased import (`byDataScoreDesc as byCrewDataScoreDesc`) in
+    `OverviewPage.tsx` where both are needed; unlike `byGauntletRankAsc`
+    (safe to use `!` since its filter guarantees a map hit), this one
+    uses `?? 0` since DataScore sorts descending (0 sinks safely — the
+    mirror image of the gauntlet_rank lesson from feature 52), plus a
+    `byNameAsc` tiebreak for determinism DataScore's plausible ties don't
+    otherwise get. Both task reviews came back with zero findings.
+
+    **The final whole-branch review independently re-derived the 9-row
+    real-data result from scratch** (own implementation, live catalog
+    fetch, not the shipped code — exact match) and found the one real
+    defect: the two Citation Priorities tables gate on player/citation
+    readiness, not `showCatalogData`, but unconditionally received the
+    new DataScore/Gauntlet Rank maps — when the catalog is unavailable,
+    `getDataScoreMap`/`getGauntletRankMap` return **empty Maps, not
+    `undefined`**, so `CrewTable`'s undefined-hides-it check still
+    passed and both columns silently rendered every cell as `—` instead
+    of degrading cleanly, the way the rest of the page handles a catalog
+    outage (e.g. Missing Crew recap's "Unavailable" label) — reproduced
+    live by stubbing the catalog endpoint to a 500. Adjudicated and fixed
+    directly (one line each: `showCatalogData ? map : undefined`) rather
+    than another subagent round, per the pattern established at the end
+    of feature 53. 4 Minor parked, all informational/inert (DataScore
+    table's row count is much less bounded than the citation tables' —
+    83 non-counting candidates exist today, table happens to land at 9
+    rows; no archetype dedup, 2 qualifying duplicates today but both far
+    below any real cutoff; a pre-existing, unrelated-to-this-feature
+    column-alignment inconsistency between DataScore right-align and
+    Gauntlet Rank's inherited left-align).
 
 ## Current routes / nav (in order)
 
