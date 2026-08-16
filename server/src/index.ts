@@ -3,6 +3,7 @@ import { loadConfig } from './config';
 import { createPlayerRouter } from './routes/player';
 import { createAssetsRouter } from './routes/assets';
 import { createCatalogRouter } from './routes/catalog';
+import { createCitationPrioritiesRouter } from './routes/citationPriorities';
 
 const PORT = 3001;
 
@@ -16,6 +17,7 @@ app.get('/health', (_req, res) => {
 app.use('/api', createPlayerRouter(config));
 app.use('/api', createAssetsRouter());
 app.use('/api', createCatalogRouter());
+app.use('/api', createCitationPrioritiesRouter());
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`STT tracker server listening on http://127.0.0.1:${PORT}`);
