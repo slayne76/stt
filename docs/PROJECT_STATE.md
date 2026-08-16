@@ -1,6 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-16 (Overview "Priorities (Gauntlet)" table). This
+Last updated: 2026-08-16 (Overview "Priorities (Original Algorithm)" and
+"Priorities (Beta Tachyon)" tables). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -250,6 +251,10 @@ client/src/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + "Priorities (Gauntlet)"
                                  (top 5 owned 5-star-max crew needing work, ranked by catalog
                                  Gauntlet rank — see "Priorities (Gauntlet) table" below) +
+                                 "Priorities (Original Algorithm)" + "Priorities (Beta Tachyon)"
+                                 (top citation-priority crew per two datacore.app engines ported
+                                 server-side, each capped by a "keep but don't count" stopping
+                                 rule — see "Overview Citation Priorities tables" below) +
                                  "Missing Crew recap" table ("5/4 Stars unique crew",
                                  owned/total/pct% plus an owned-vs-total (±N) label suffix —
                                  see "Crew catalog and Overview unique-crew counts", "Overview
@@ -258,10 +263,15 @@ client/src/
                                  Favorite Flag table" below) plus two Missing 4 Stars tables
                                  (see "Missing 4 Stars tables") — the very first page. The
                                  catalog-gated sections ("Priorities (Gauntlet)" + the two
-                                 Missing 4 Stars tables + Base/Proficiency Bonus) now share one
+                                 Missing 4 Stars tables + Base/Proficiency Bonus) share one
                                  boolean, `showCatalogData` (renamed from `showMissingTables`
                                  when a second catalog-dependent section arrived — see
-                                 "Priorities (Gauntlet) table" below)
+                                 "Priorities (Gauntlet) table" below). The two Citation
+                                 Priorities sections gate independently, on their own
+                                 `useCitationPriorities()` loading/error state plus player-data
+                                 readiness (`!loading && !error && identity`) — NOT on
+                                 `showCatalogData`, since that endpoint's data source and
+                                 latency profile (see below) are unrelated to the crew catalog.
     FiveStarsCrewPage.tsx       max_rarity=5, not immortalized regardless of current rarity — first
                                  item in the Crew nav group (see "Two new crew pages" below)
     ThreeFourStarsCrewPage.tsx  rarity=3, max_rarity=4
@@ -304,6 +314,55 @@ server/src/
                                                           follow-up commit fixed it; the
                                                           `gauntlet_rank` field landed with its guard
                                                           update from the start)
+  citationCrewCache.ts, citationCrewClient.ts   A SECOND, independent fetch/cache of
+                                                  `crew.json`, deliberately separate from
+                                                  `catalogCache.ts`/`CatalogEntry` — carries the much
+                                                  richer per-crew fields (`base_skills`, `skill_data`,
+                                                  `ranks`, `traits`, `obtained`, `skill_order`,
+                                                  `collections`/`collection_ids`,
+                                                  `unique_polestar_combos`) the citation-priority
+                                                  algorithms need but the other 8 `CrewTable`
+                                                  consumers don't (see "Overview Citation Priorities
+                                                  tables" below for why this wasn't just added to
+                                                  `CatalogEntry`).
+  collectionsCache.ts, collectionsClient.ts   Fetches/caches `collections.json` (collection
+                                                definitions, distinct from the player's own
+                                                collection-progress data already used elsewhere) —
+                                                also citation-priority-only.
+  citation/types.ts   `CitationCrew` (owned crew instance + catalog fields merged),
+                       `RawPlayerCrewInstance`, `CitationCrewEntry`, `PlayerCryoCollection`,
+                       `mergeCrewWithCatalog()` — the shared join/type layer both algorithm ports
+                       consume. See "Overview Citation Priorities tables" below.
+  citation/buffConfig.ts, citation/btpUtils.ts   Small, faithfully-ported utility functions Beta
+                                                   Tachyon Pulse needs (`calculateBuffConfig`,
+                                                   `findPolestars`, `getSkillOrderStats`, etc.).
+  citation/originalAlgorithm.ts, citation/betaTachyonPulse.ts   Faithful, line-level ports of
+                                                                  datacore.app's two citation-priority
+                                                                  engines (MIT licensed,
+                                                                  `stt-datacore/website` @ pinned
+                                                                  commit `b310dd5b`) — see "Overview
+                                                                  Citation Priorities tables" below,
+                                                                  this is the single largest and
+                                                                  highest-scrutiny piece of ported
+                                                                  code in the app.
+  citation/computeCitationPriorities.ts, routes/citationPriorities.ts   Orchestrator +
+                                                                          `GET /api/citation-priorities`.
+                                                                          Owns buyback exclusion,
+                                                                          frozen-crew synthesis, and a
+                                                                          response cache keyed on 3
+                                                                          input files' mtimes (player
+                                                                          data + the 2 caches above) —
+                                                                          all three concerns live here
+                                                                          ONLY, neither algorithm port
+                                                                          duplicates them. Also
+                                                                          triggered fire-and-forget
+                                                                          from `routes/player.ts`
+                                                                          right after every successful
+                                                                          sync, so the ~12-13s compute
+                                                                          usually happens while the
+                                                                          user is already watching a
+                                                                          sync spinner rather than on
+                                                                          the next Overview load.
 ```
 
 ## The crew data model (as understood from the real game payload)
@@ -5072,6 +5131,107 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     consistent with the Missing Favorite Flag precedent, effectively
     unreachable for this user, left as-is; (4) this doc update was still
     pending at final-review time — closed by this entry.
+53. **Overview Citation Priorities tables** (`2026-08-16-overview-citation-priorities`)
+    — two new Overview sections, "Priorities (Original Algorithm)" and
+    "Priorities (Beta Tachyon)", each a faithful server-side port of one of
+    datacore.app's two `/cite-opt/` citation-priority engines (MIT licensed,
+    `stt-datacore/website` @ pinned commit `b310dd5b`), showing the top
+    crew to cite next per that engine. By far the largest feature to date
+    (6 tasks vs. the usual 2-3; ~4800 lines changed) and the first to
+    involve porting real third-party algorithmic code rather than reading
+    a data field.
+
+    **Investigation, before any code:** confirmed both engines are pure
+    client-side computation (a Web Worker in the browser, not a hidden
+    backend endpoint) — `optimizer.js` (~914 lines, zero external
+    imports, fully self-contained) and `betatachyon.ts` (~645 lines, an
+    intricate ~13-term weighted scoring formula pulling in several more
+    upstream utility files). Every input either engine needs is a public
+    static JSON file at the same `datacore.app/structured/<name>.json`
+    pattern the crew catalog already uses, so both were portable to Node
+    without simulating a browser.
+
+    **Stopping rule, exactly as specified by the user:** walk each
+    engine's own ranked output in order, keeping every row; a row
+    *counts* toward a limit of 5 unless it's already level 100 with 0
+    equipment slots missing; stop immediately after the 5th counted row
+    (inclusive); everything after is dropped, not merely hidden. Lives in
+    `client/src/crew/priorityCutoff.ts`'s `applyPriorityCutoff()`,
+    verified against the user's own 14-row worked example.
+
+    **Two real, load-bearing findings surfaced mid-implementation** (not
+    anticipated by the design spec, both fixed via mid-plan amendments
+    with the plan itself edited to document the reasoning — see
+    `docs/superpowers/plans/2026-08-16-overview-citation-priorities-plan.md`
+    for the full "Plan amendment" callouts):
+    - Both algorithms depend on `player.character.stored_immortals`
+      (frozen/vaulted crew — 722 real entries, more than the 599 active
+      crew). Omitting them doesn't error, it silently produces a
+      plausible-*looking* ranking that's actually wrong from rank 9
+      onward (17 of the real top 25 names wrong) — frozen crew occupy
+      voyage seats and roster-completeness math that affects *other*
+      crew's scores, even though (being always `rarity === max_rarity`)
+      they can never themselves appear in the output. `synthesizeFrozenCrew()`
+      in `computeCitationPriorities.ts` fabricates one instance per
+      archetype (frozen-first in the roster, mirroring upstream's
+      precedence for duplicate archetypes) with synthetic negative `id`s
+      that structurally can never leak into the response.
+    - Both algorithms combined take ~12-13s on the real roster — too slow
+      to recompute on every request (the design's original plan, before
+      this was measured). `computeCitationPriorities.ts` now memoizes the
+      response on disk, keyed on the mtimes of all three files it derives
+      from (player data + the two new citation-specific caches), so a
+      result is only ever recomputed when something it actually depends
+      on has changed. Also triggered fire-and-forget right after every
+      player-data sync (`routes/player.ts`), plus a single-flight
+      in-flight-promise guard — so in practice the ~12-13s cost usually
+      lands while the user is already watching a sync spinner, not on
+      the next Overview page load.
+
+    **Review process reflects the scale:** all 6 tasks (data-cache
+    plumbing; `buffConfig`/Beta-Tachyon-utility port; Original Algorithm
+    port; Beta Tachyon Pulse port; orchestrator+route; client wiring)
+    passed their task reviews clean. The two algorithm-port task reviews
+    (opus) went well beyond reading the diff — independently re-cloned
+    the pinned upstream commit, re-derived disputed numeric claims from
+    scratch (e.g. re-measuring that preferring the game's own buffed
+    `skills` block over recomputing changed Beta Tachyon's result from
+    211 to the correct 203 crew), and reproduced the live-site comparison
+    themselves with a cleared browser session and a fresh upload of the
+    real player file, rather than trusting the implementer's report — on
+    both engines, an exact row-for-row match (25/25 Original Algorithm,
+    203/203 Beta Tachyon) against real datacore.app output, verified
+    twice independently.
+
+    The **final whole-branch review** (opus) — whose specific value was
+    catching cross-task composition issues no single task's reviewer
+    could see — found 0 Critical, 2 Important, 7 Minor + 1 optional nit:
+    a ~12-13s synchronous compute starving Node's single event loop
+    (worse because the citation-priorities React provider was mounted
+    innermost, so its fetch fired first on every route, queuing
+    `/api/player`/`/api/catalog` behind it); and a 32MB `items.json`
+    fetch/cache/parse pipeline kept alive on every cold compute to feed a
+    parameter Beta Tachyon Pulse's own port had already proven dead
+    (upstream's quipment-scoring block is dead code at the pinned
+    commit) — a pure cross-task artifact: each task's local decision was
+    correct, nobody was positioned to see the whole chain. One fix round
+    addressed all 9+1 findings (precompute-on-write, single-flight guard,
+    deleted the entire dead items pipeline — `itemsClient.ts`/
+    `itemsCache.ts` plus ~130 lines of unused `btpUtils.ts` helpers — plus
+    7 smaller hygiene fixes). A scoped re-review of that fix commit then
+    found 3 *new* issues (independently re-verifying every claimed fix
+    against real data/source first) — most notably a subtle race: the
+    response cache's end-of-run re-stat reused a *fresh* mtime for
+    `player-cache.json` too, not just the two catalog files that
+    legitimately needed it, so a sync landing mid-computation could key
+    stale (pre-sync) rankings under the new mtime and serve them
+    indefinitely with no self-healing. All 3 were small enough to
+    adjudicate and fix directly rather than spin another subagent round.
+
+    Response payload carries only owned-crew instance `id`s (never full
+    crew objects) — the client resolves them against the player crew
+    list it already has loaded via `usePlayerData()`, joined the same way
+    `getGauntletRankMap` already joins the catalog.
 
 ## Current routes / nav (in order)
 
