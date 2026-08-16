@@ -21,6 +21,7 @@ export interface CrewTableProps {
   collections: Collection[];
   showCollectionsNames: boolean;
   uniquelyRetrievableArchetypeIds?: Set<number> | null;
+  dataScoreByArchetypeId?: Map<number, number>;
   gauntletRankByArchetypeId?: Map<number, number>;
 }
 
@@ -34,11 +35,17 @@ function gauntletRankLabel(archetypeId: number, ranks: Map<number, number>): str
   return rank !== undefined ? `#${rank}` : '—';
 }
 
+function dataScoreLabel(archetypeId: number, scores: Map<number, number>): string {
+  const score = scores.get(archetypeId);
+  return score !== undefined ? score.toFixed(2) : '—';
+}
+
 function CrewTable({
   crew,
   collections,
   showCollectionsNames,
   uniquelyRetrievableArchetypeIds,
+  dataScoreByArchetypeId,
   gauntletRankByArchetypeId,
 }: CrewTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(crew);
@@ -52,7 +59,8 @@ function CrewTable({
             <TableCell>Image</TableCell>
             <TableCell>Stars</TableCell>
             <TableCell>Name</TableCell>
-            {gauntletRankByArchetypeId !== undefined && <TableCell>Rank</TableCell>}
+            {dataScoreByArchetypeId !== undefined && <TableCell align="right">DataScore</TableCell>}
+            {gauntletRankByArchetypeId !== undefined && <TableCell>Gauntlet Rank</TableCell>}
             <TableCell align="right">Level</TableCell>
             <TableCell align="right">Items to equip</TableCell>
             <TableCell align="right">{showCollectionsNames ? 'Total collections' : 'Collections'}</TableCell>
@@ -73,6 +81,9 @@ function CrewTable({
                   <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
                 </TableCell>
                 <TableCell>{c.name}</TableCell>
+                {dataScoreByArchetypeId !== undefined && (
+                  <TableCell align="right">{dataScoreLabel(c.archetype_id, dataScoreByArchetypeId)}</TableCell>
+                )}
                 {gauntletRankByArchetypeId !== undefined && (
                   <TableCell>{gauntletRankLabel(c.archetype_id, gauntletRankByArchetypeId)}</TableCell>
                 )}
@@ -99,6 +110,7 @@ function CrewTable({
           colSpan={
             (showCollectionsNames ? 8 : 7) +
             (uniquelyRetrievableArchetypeIds !== undefined ? 1 : 0) +
+            (dataScoreByArchetypeId !== undefined ? 1 : 0) +
             (gauntletRankByArchetypeId !== undefined ? 1 : 0)
           }
         />

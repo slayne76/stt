@@ -18,10 +18,17 @@ import { useCitationPriorities } from '../hooks/useCitationPriorities';
 import { extractPlayerIdentity } from '../lib/extractPlayerIdentity';
 import { getBaseSkillBonuses, getProficiencyBonuses } from '../lib/skillBuffs';
 import { getCrewList, getFrozenCrewArchetypeIds, getOwnedArchetypeIds } from '../crew/getters';
-import { filterGauntletPriority, filterMissingFavorite } from '../crew/filters';
+import { filterDataScorePriority, filterGauntletPriority, filterMissingFavorite } from '../crew/filters';
 import { byGauntletRankAsc, defaultCrewComparator, sortCrew } from '../crew/sorters';
+import { byDataScoreDesc as byCrewDataScoreDesc } from '../crew/sorters';
 import { applyPriorityCutoff } from '../crew/priorityCutoff';
-import { getArchetypeMaxRarityMap, getCatalogCount, getGauntletRankMap, getMissingCrew } from '../catalog/getters';
+import {
+  getArchetypeMaxRarityMap,
+  getCatalogCount,
+  getDataScoreMap,
+  getGauntletRankMap,
+  getMissingCrew,
+} from '../catalog/getters';
 import { byDataScoreDesc } from '../catalog/sorters';
 import { getCollectionsList } from '../collections/getters';
 import { useSearch } from '../lib/useSearch';
@@ -55,6 +62,10 @@ function OverviewPage() {
         0,
         GAUNTLET_PRIORITY_LIMIT
       )
+    : [];
+  const dataScoreMap = catalog ? getDataScoreMap(catalog) : new Map<number, number>();
+  const dataScorePriorityCrew = catalog
+    ? applyPriorityCutoff(sortCrew(filterDataScorePriority(crewList, dataScoreMap), byCrewDataScoreDesc(dataScoreMap)))
     : [];
   const { data: citationPriorities, loading: citationLoading, error: citationError } = useCitationPriorities();
 
@@ -144,11 +155,12 @@ function OverviewPage() {
       {showCatalogData && (
         <>
           <Divider sx={{ my: 2 }} />
-          <Typography variant="h5">Priorities (Gauntlet)</Typography>
+          <Typography variant="h5">Priorities (DataScore)</Typography>
           <CrewTable
-            crew={gauntletPriorityCrew}
+            crew={dataScorePriorityCrew}
             collections={collectionsList}
             showCollectionsNames={true}
+            dataScoreByArchetypeId={dataScoreMap}
             gauntletRankByArchetypeId={gauntletRankMap}
           />
         </>
@@ -161,7 +173,13 @@ function OverviewPage() {
           {citationLoading && <Typography>Loading priorities…</Typography>}
           {citationError && <Alert severity="error">{citationError}</Alert>}
           {citationPriorities && (
-            <CrewTable crew={originalAlgorithmCrew} collections={collectionsList} showCollectionsNames={true} />
+            <CrewTable
+              crew={originalAlgorithmCrew}
+              collections={collectionsList}
+              showCollectionsNames={true}
+              dataScoreByArchetypeId={dataScoreMap}
+              gauntletRankByArchetypeId={gauntletRankMap}
+            />
           )}
         </>
       )}
@@ -173,8 +191,28 @@ function OverviewPage() {
           {citationLoading && <Typography>Loading priorities…</Typography>}
           {citationError && <Alert severity="error">{citationError}</Alert>}
           {citationPriorities && (
-            <CrewTable crew={betaTachyonCrew} collections={collectionsList} showCollectionsNames={true} />
+            <CrewTable
+              crew={betaTachyonCrew}
+              collections={collectionsList}
+              showCollectionsNames={true}
+              dataScoreByArchetypeId={dataScoreMap}
+              gauntletRankByArchetypeId={gauntletRankMap}
+            />
           )}
+        </>
+      )}
+
+      {showCatalogData && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h5">Priorities (Gauntlet)</Typography>
+          <CrewTable
+            crew={gauntletPriorityCrew}
+            collections={collectionsList}
+            showCollectionsNames={true}
+            dataScoreByArchetypeId={dataScoreMap}
+            gauntletRankByArchetypeId={gauntletRankMap}
+          />
         </>
       )}
 
