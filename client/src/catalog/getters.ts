@@ -35,3 +35,8 @@ export function getUniquelyRetrievableArchetypeIds(catalog: CatalogEntry[]): Set
   if (!Array.isArray(catalog)) return new Set();
   return new Set(catalog.filter((c) => c.uniquely_retrievable).map((c) => c.archetype_id));
 }
+
+export function getGauntletRankMap(catalog: CatalogEntry[]): Map<number, number> {
+  if (!Array.isArray(catalog)) return new Map();
+  return new Map(catalog.map((c) => [c.archetype_id, c.gauntlet_rank]));
+}

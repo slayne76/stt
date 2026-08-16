@@ -24,7 +24,8 @@ export function readCatalogCache(): CatalogEntry[] | null {
     if (
       parsed.length === 0 ||
       typeof parsed[0].data_score !== 'number' ||
-      typeof parsed[0].uniquely_retrievable !== 'boolean'
+      typeof parsed[0].uniquely_retrievable !== 'boolean' ||
+      typeof parsed[0].gauntlet_rank !== 'number'
     ) {
       // Empty, or old-shape cache (pre-widening of CatalogEntry) — treat as absent so callers refetch live.
       return null;

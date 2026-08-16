@@ -8,4 +8,5 @@ export interface CatalogEntry {
   traits: string[];
   traits_hidden: string[];
   uniquely_retrievable: boolean;
+  gauntlet_rank: number;
 }

@@ -1,6 +1,6 @@
 import type { CrewMember } from '../types/crew';
 import type { OwnedItem } from '../types/item';
-import { getQPLevel, isImmortalized, isReadyToImmortalize, QP_MAX_LEVEL } from './getters';
+import { getEquipmentSlotsRemaining, getQPLevel, isImmortalized, isReadyToImmortalize, QP_MAX_LEVEL } from './getters';
 
 export function filterByRarity(
   crew: CrewMember[],
@@ -27,4 +27,17 @@ export function filterUnmaxed(crew: CrewMember[], maxRarity: number): CrewMember
 
 export function filterMissingFavorite(crew: CrewMember[]): CrewMember[] {
   return crew.filter((c) => !c.favorite && !c.in_buy_back_state);
+}
+
+export function filterGauntletPriority(
+  crew: CrewMember[],
+  gauntletRankMap: Map<number, number>
+): CrewMember[] {
+  return crew.filter(
+    (c) =>
+      c.max_rarity === 5 &&
+      !c.in_buy_back_state &&
+      (c.level < 100 || getEquipmentSlotsRemaining(c) < 0) &&
+      gauntletRankMap.has(c.archetype_id)
+  );
 }

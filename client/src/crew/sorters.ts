@@ -61,3 +61,10 @@ export function byQPLevelDesc(a: CrewMember, b: CrewMember): number {
 export function byQPBitsDesc(a: CrewMember, b: CrewMember): number {
   return b.q_bits - a.q_bits;
 }
+
+// Safe to use `!` here because this comparator is only ever called on crew
+// already filtered by filterGauntletPriority, which guarantees every crew
+// passed in has a gauntletRankMap entry.
+export function byGauntletRankAsc(gauntletRankMap: Map<number, number>): Comparator<CrewMember> {
+  return (a, b) => gauntletRankMap.get(a.archetype_id)! - gauntletRankMap.get(b.archetype_id)!;
+}
