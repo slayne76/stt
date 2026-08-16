@@ -22,6 +22,7 @@
 - The three new supporting-dataset caches (`citationCrewCache.ts`, `itemsCache.ts`, `collectionsCache.ts`) are new, separate files — do **not** widen the existing `CatalogEntry`/`catalogCache.ts`, which 8 other pages/sections depend on and have no use for this feature's extra fields.
 - 24h TTL for the three new caches, matching `catalogCache.ts`'s existing `CACHE_TTL_MS` constant and its exact "cache missing/old-shape → refetch live, write cache" control flow — copy that file's structure precisely, don't reinvent it.
 - No settings UI, no configurable cutoff limit (fixed at `5` via `applyPriorityCutoff`'s default parameter, per the user's exact request).
+- **(Added mid-plan, after Task 3.)** Both algorithms' candidate roster is `player.character.crew` (active, buyback-excluded) **plus** `player.character.stored_immortals` (frozen/vaulted crew, synthesized as level-100/max-rarity/fully-equipped instances, frozen-first) — Task 5's orchestrator owns this assembly for both engines; neither algorithm port does its own frozen-crew handling. Omitting frozen crew is not a minor gap: measured directly on the real 722-frozen/599-active roster, it silently produces a plausible-looking but 17-of-25-wrong ranking. See Task 3's report and the amendments in Tasks 4-5 below for the full finding.
 
 ---
 
@@ -846,6 +847,8 @@ git commit -m "Port Original Algorithm citation engine"
 
 This is the highest-risk task in the plan (per the design spec's "Open risk" section and the mid-brainstorm dependency-depth finding) — budget real time for the verification step, and treat any surprising transitive dependency the same way it was handled during planning: stop and report rather than silently approximating.
 
+**Plan amendment (added after Task 3 was implemented and reviewed — read this before Step 1):** Task 3's implementer discovered that `optimizer.js` reads `player.character.stored_immortals` (722 frozen/vaulted immortalized crew in the real data, more than the 599 active crew) as part of the roster — leaving them out silently produced a list that looked plausible but got 17 of the top 25 names wrong. `betatachyon.ts` receives the same full `playerData` object upstream (confirmed during design brainstorming: `BetaTachyonRunnerConfig` includes `playerData`, not just `inputCrew`), so **it may have the same dependency — investigate this explicitly as part of your read-through, don't assume Task 3's finding transfers automatically or that it doesn't.** Task 5's orchestrator (updated after this finding) now assembles `ownedCrew: CitationCrew[]` as frozen-crew-first-then-active, using a `synthesizeFrozenCrew()` helper that sets frozen entries to level 100 / max rarity / 4 filled equipment slots / empty `traits`/`traits_hidden` (Task 1's `CitationCrewEntry` does not carry catalog-level `traits` — only `base_skills` was added back, per Task 3's fix). If your read of `betatachyon.ts` shows it needs frozen crew's `traits` for anything (e.g. `findPolestars`, antimatter-seating lookups), **stop and report it** rather than silently working around a `[]` — that's exactly the class of gap Task 3 caught, and `CitationCrewEntry`/`synthesizeFrozenCrew` may need a follow-up fix in `citation/types.ts` and Task 5's orchestrator, the same way Task 3 fixed `base_skills`.
+
 - [ ] **Step 1: Read and port `BetaTachyon.scanCrew` in full**
 
 Clone the pinned commit, read `src/workers/betatachyon.ts`'s **entire** `BetaTachyon.scanCrew` function (the whole file is ~645 lines; `scanCrew` is effectively the whole exported surface) and port it faithfully into `server/src/citation/betaTachyonPulse.ts`, using Task 2's `btpUtils.ts` for `skillSum`, `shortToSkill` *(not actually needed by `scanCrew` directly per the original import list — check on read; if unused, don't port a dead import)*, `crewCopy`, `getSkillOrderStats`, `getSkillOrderScore`, `calcItemDemands`, `getItemWithBonus`, `findPolestars`, `lookupAMSeatsByTrait`, and Task 2's `calculateBuffConfig`.
@@ -885,6 +888,8 @@ git commit -m "Port Beta Tachyon Pulse citation engine"
 
 - [ ] **Step 1: `computeCitationPriorities.ts`**
 
+**Plan amendment (added after Task 3 was implemented and reviewed — read this before writing this file):** Task 3's implementer discovered that datacore's real algorithms read `player.character.stored_immortals` (frozen/vaulted immortalized crew — **722 entries in the real player-cache.json, more than the 599 active crew**) as part of the roster, not just `player.character.crew`. Leaving them out is not a rounding-level gap: measured directly, an active-only roster diverges from the live site starting at rank 9, getting 17 of the top 25 names wrong, while still *looking* like a plausible, correctly-sorted list — exactly the kind of silent wrongness this plan's verification steps exist to catch. Frozen crew occupy voyage seats and count toward roster-completeness math that affects *other* crew's scores, even though frozen crew themselves are never citeable (`rarity === max_rarity` always, for both algorithms) and so can never appear in the final output list — this is why they're safe to synthesize with fabricated instance `id`s below. This orchestrator is the single place both algorithms' inputs are assembled, so it owns folding frozen crew in — neither algorithm port should do this itself.
+
 ```ts
 // server/src/citation/computeCitationPriorities.ts
 import { readPlayerCache } from '../cache';
@@ -894,7 +899,7 @@ import { fetchItems } from '../itemsClient';
 import { readItemsCache, writeItemsCache, isItemsCacheFresh } from '../itemsCache';
 import { fetchCollections } from '../collectionsClient';
 import { readCollectionsCache, writeCollectionsCache, isCollectionsCacheFresh } from '../collectionsCache';
-import { mergeCrewWithCatalog, type RawPlayerCrewInstance } from './types';
+import { mergeCrewWithCatalog, type RawPlayerCrewInstance, type CitationCrewEntry } from './types';
 import { calculateBuffConfig } from './buffConfig';
 import { citeOriginalAlgorithm } from './originalAlgorithm';
 import { citeBetaTachyon } from './betaTachyonPulse';
@@ -905,6 +910,49 @@ export interface CitationPrioritiesResponse {
 }
 
 const RESPONSE_CAP = 100;
+
+interface StoredImmortal {
+  id: number; // this IS the archetype_id, not a player-crew instance id — confirmed against real player-cache.json
+  quantity: number;
+  qbits: number;
+}
+
+// Synthesizes a RawPlayerCrewInstance for every frozen/vaulted copy of every
+// archetype in stored_immortals, at level 100 / max rarity / 4 filled
+// equipment slots — the exact state upstream's dedicated frozen-crew branch
+// assumes. Uses negative, offset-by-archetype synthetic ids that can never
+// collide with a real active crew's `id` — safe because frozen crew are
+// always `rarity === max_rarity`, so both citeOriginalAlgorithm's and
+// citeBetaTachyon's own `rarity !== max_rarity` output filters guarantee
+// these synthetic ids never reach `CitationPrioritiesResponse`.
+function synthesizeFrozenCrew(stored: StoredImmortal[], catalog: CitationCrewEntry[]): RawPlayerCrewInstance[] {
+  const catalogByArchetype = new Map(catalog.map((c) => [c.archetype_id, c]));
+  const synthesized: RawPlayerCrewInstance[] = [];
+  for (const frozen of stored) {
+    const entry = catalogByArchetype.get(frozen.id);
+    if (!entry) continue; // no catalog match — defensively skip, same convention as mergeCrewWithCatalog
+    for (let copy = 0; copy < frozen.quantity; copy++) {
+      synthesized.push({
+        id: -1 * (frozen.id * 1000 + copy + 1),
+        symbol: entry.symbol,
+        name: entry.name,
+        short_name: entry.short_name,
+        archetype_id: entry.archetype_id,
+        favorite: false,
+        level: 100,
+        in_buy_back_state: false,
+        rarity: entry.max_rarity,
+        max_rarity: entry.max_rarity,
+        equipment_slots: [0, 1, 2, 3].map((level) => ({ level, archetype: 0 })),
+        equipment: [0, 1, 2, 3].map((i): [number, number] => [i, 0]),
+        traits: [],
+        traits_hidden: [],
+        base_skills: entry.base_skills,
+      });
+    }
+  }
+  return synthesized;
+}
 
 async function getFreshCitationCrewData() {
   const cached = readCitationCrewCache();
@@ -931,7 +979,9 @@ async function getFreshCollections() {
 }
 
 export async function computeCitationPriorities(): Promise<CitationPrioritiesResponse> {
-  const playerData = readPlayerCache() as { player: { character: { crew: RawPlayerCrewInstance[] } } } | null;
+  const playerData = readPlayerCache() as {
+    player: { character: { crew: RawPlayerCrewInstance[]; stored_immortals: StoredImmortal[] } };
+  } | null;
   if (!playerData) {
     return { originalAlgorithm: [], betaTachyon: [] };
   }
@@ -942,7 +992,12 @@ export async function computeCitationPriorities(): Promise<CitationPrioritiesRes
     getFreshCollections(),
   ]);
 
-  const ownedCrew = playerData.player.character.crew.filter((c) => !c.in_buy_back_state);
+  const activeOwnedCrew = playerData.player.character.crew.filter((c) => !c.in_buy_back_state);
+  const frozenCrew = synthesizeFrozenCrew(playerData.player.character.stored_immortals, catalog);
+  // Frozen crew first — mirrors upstream's frozen-branch precedence, per
+  // Task 3's investigation (assessCrewRoster keeps the first instance it
+  // sees per archetype).
+  const ownedCrew = [...frozenCrew, ...activeOwnedCrew];
   const merged = mergeCrewWithCatalog(ownedCrew, catalog);
   const buffs = calculateBuffConfig(playerData.player as Parameters<typeof calculateBuffConfig>[0]);
 
@@ -957,6 +1012,8 @@ export async function computeCitationPriorities(): Promise<CitationPrioritiesRes
 ```
 
 (Adjust the `readPlayerCache()` cast and `calculateBuffConfig` call-site to whatever `PlayerBuffSource` shape Task 2 actually settled on after verifying real data — the two must agree.)
+
+Before trusting this Step 1 as written: confirm Task 4's Beta Tachyon Pulse port (implemented after this plan amendment was written) actually consumes the same frozen-inclusive `merged` roster correctly — its own task brief has been updated to require investigating whether datacore's real `betatachyon.ts` has the same frozen-crew dependency as `optimizer.js` turned out to have, since both receive the full `playerData` upstream. If Task 4's investigation concludes Beta Tachyon Pulse needs something different (e.g. a `frozen: boolean` field this plan didn't anticipate), reconcile it here rather than silently diverging.
 
 - [ ] **Step 2: `routes/citationPriorities.ts`**
 
