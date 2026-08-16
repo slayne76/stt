@@ -51,6 +51,10 @@ export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
     traits: e.traits ?? [],
     traits_hidden: e.traits_hidden ?? [],
     uniquely_retrievable: Boolean(e.in_portal) && (e.unique_polestar_combos?.length ?? 0) > 0,
-    gauntlet_rank: e.ranks?.gauntletRank ?? 0,
+    // Unlike data_score (sorted descending, so 0 safely sinks a missing
+    // value to the bottom), gauntlet_rank is sorted ASCENDING (lowest =
+    // best) — a 0 fallback would make a missing/malformed rank look better
+    // than #1. Fail safe: sink it to the bottom instead.
+    gauntlet_rank: e.ranks?.gauntletRank ?? Number.MAX_SAFE_INTEGER,
   }));
 }
