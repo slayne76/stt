@@ -253,10 +253,23 @@ async function computeUncached(): Promise<CitationPrioritiesResponse> {
     originalAlgorithm: originalAlgorithm.slice(0, RESPONSE_CAP).map((c) => c.id),
     betaTachyon: betaTachyon.slice(0, RESPONSE_CAP).map((c) => c.id),
   };
-  // Re-stat rather than reusing the mtimes read at entry: getFreshCitationCrewData()
-  // / getFreshCollections() above may have just rewritten those cache files on
-  // their TTL, and keying the response on the pre-refresh mtimes would make
-  // every subsequent request miss and recompute.
-  writeResponseCache(readInputMtimes(), response);
+  // Mixed strategy, deliberately: re-stat the two catalog files (getFreshCitationCrewData()
+  // / getFreshCollections() above may have just rewritten them on their TTL, and keying on
+  // their pre-refresh mtimes would make every subsequent request miss and recompute), but
+  // reuse playerCacheMtimeMs from `mtimes` (captured at entry, before readPlayerCache()
+  // above). Re-statting player-cache.json here too would be wrong: if a concurrent sync
+  // overwrites it while this ~13s computation is in flight, `response` was computed from
+  // the data read at entry, not from whatever is on disk now — keying on a fresher mtime
+  // would make a later request believe this stale-relative-to-that-sync response is current
+  // and serve it indefinitely, until the next sync happens to change the mtime again.
+  const catalogMtimes = readInputMtimes();
+  writeResponseCache(
+    {
+      playerCacheMtimeMs: mtimes.playerCacheMtimeMs,
+      citationCrewCacheMtimeMs: catalogMtimes.citationCrewCacheMtimeMs,
+      collectionsCacheMtimeMs: catalogMtimes.collectionsCacheMtimeMs,
+    },
+    response
+  );
   return response;
 }

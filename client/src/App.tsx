@@ -7,9 +7,17 @@ import { ROUTES } from './routes';
 
 function App() {
   return (
-    <PlayerDataProvider>
-      <CrewCatalogProvider>
-        <CitationPrioritiesProvider>
+    // CitationPrioritiesProvider is deliberately OUTERMOST, not nested with
+    // the others. React fires child providers' mount effects before parent
+    // providers' (child-before-parent), so whichever provider is innermost
+    // issues its fetch first. Citation priorities' first fetch can occupy the
+    // single-threaded server for ~12-13s (see computeCitationPriorities.ts) —
+    // nesting it innermost would make /api/player and /api/catalog queue
+    // behind that on every cold load, stalling the whole page instead of just
+    // the two citation sections. Outermost means its fetch fires last.
+    <CitationPrioritiesProvider>
+      <PlayerDataProvider>
+        <CrewCatalogProvider>
           <BrowserRouter>
             <Routes>
               <Route element={<AppLayout />}>
@@ -19,9 +27,9 @@ function App() {
               </Route>
             </Routes>
           </BrowserRouter>
-        </CitationPrioritiesProvider>
-      </CrewCatalogProvider>
-    </PlayerDataProvider>
+        </CrewCatalogProvider>
+      </PlayerDataProvider>
+    </CitationPrioritiesProvider>
   );
 }
 

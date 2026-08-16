@@ -269,8 +269,11 @@ precompute may still be occupying the event loop. Moving the computation to a
 - No configurable cutoff limit — 5 is a fixed constant in
   `applyPriorityCutoff`, matching the user's exact request (same as
   `GAUNTLET_PRIORITY_LIMIT`).
-- No memoization of the computed result by player-data mtime — deferred
-  per §3 until proven necessary.
+- ~~No memoization of the computed result by player-data mtime — deferred
+  per §3 until proven necessary.~~ **Superseded — see §3.** Real runtime
+  (~12-13s combined) proved this necessary; the shipped implementation
+  memoizes the response on disk, keyed on the mtimes of all three files it
+  derives from.
 - No change to the existing lean `CatalogEntry`/`catalogCache.ts` — the
   richer per-crew data this feature needs lives in its own, separate cache.
 - No de-duplication logic beyond what "owned crew instance `id`" naturally
