@@ -40,3 +40,8 @@ export function getGauntletRankMap(catalog: CatalogEntry[]): Map<number, number>
   if (!Array.isArray(catalog)) return new Map();
   return new Map(catalog.map((c) => [c.archetype_id, c.gauntlet_rank]));
 }
+
+export function getDataScoreMap(catalog: CatalogEntry[]): Map<number, number> {
+  if (!Array.isArray(catalog)) return new Map();
+  return new Map(catalog.map((c) => [c.archetype_id, c.data_score]));
+}

@@ -68,3 +68,21 @@ export function byQPBitsDesc(a: CrewMember, b: CrewMember): number {
 export function byGauntletRankAsc(gauntletRankMap: Map<number, number>): Comparator<CrewMember> {
   return (a, b) => gauntletRankMap.get(a.archetype_id)! - gauntletRankMap.get(b.archetype_id)!;
 }
+
+// Unlike byGauntletRankAsc (which safely uses `!` because
+// filterGauntletPriority guarantees a map hit for every crew passed in),
+// this uses `?? 0` defensively — data_score sorts descending, so a
+// missing value sinks to the bottom rather than looking best (the
+// opposite of the gauntlet_rank lesson, where `?? 0` on an ascending
+// sort would have looked best). In practice this fallback is never
+// exercised: filterDataScorePriority's dataScoreMap.has() guard already
+// filters out any crew without a map entry before this comparator ever
+// runs. A trailing byNameAsc tiebreak gives deterministic output when
+// two crew share a DataScore, which — unlike gauntlet_rank, confirmed
+// unique — is plausible for this field.
+export function byDataScoreDesc(dataScoreMap: Map<number, number>): Comparator<CrewMember> {
+  return combineComparators(
+    (a, b) => (dataScoreMap.get(b.archetype_id) ?? 0) - (dataScoreMap.get(a.archetype_id) ?? 0),
+    byNameAsc
+  );
+}

@@ -41,3 +41,12 @@ export function filterGauntletPriority(
       gauntletRankMap.has(c.archetype_id)
   );
 }
+
+export function filterDataScorePriority(
+  crew: CrewMember[],
+  dataScoreMap: Map<number, number>
+): CrewMember[] {
+  return crew.filter(
+    (c) => !c.in_buy_back_state && !isImmortalized(c) && dataScoreMap.has(c.archetype_id)
+  );
+}
