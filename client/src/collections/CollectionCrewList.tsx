@@ -39,14 +39,21 @@ function CollectionCrewList({ crew, items, allCollections, currentCollectionId }
             }}
           >
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
-            <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
+            <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {c.name}
+            </Typography>
             {isReady && <StatusChip label="Ready" color="success" />}
             {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
-            <Typography color="text.secondary">Level: {c.level}</Typography>
-            <Typography color="text.secondary" sx={{ minWidth: 80, textAlign: 'right' }}>
+            <Typography color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+              Level: {c.level}
+            </Typography>
+            <Typography
+              color="text.secondary"
+              sx={{ minWidth: 80, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
               Items: {getEquipmentSlotsRemaining(c)}
             </Typography>
-            <Typography color="text.secondary" sx={{ ml: 'auto' }}>
+            <Typography color="text.secondary" sx={{ ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
               Total Collections: {crewCollections.length}
             </Typography>
             <Typography color="text.secondary" sx={{ minWidth: 0 }}>
