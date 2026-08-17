@@ -6,10 +6,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Typography,
 } from '@mui/material';
 import type { CrewMember } from '../types/crew';
 import type { Collection } from '../types/collection';
 import { getEquipmentSlotsRemaining } from './getters';
+import { isPriorityCountEligible } from './priorityCutoff';
 import { getCrewCollections } from '../collections/getters';
 import { usePagination } from '../lib/usePagination';
 import StarRating from './StarRating';
@@ -23,6 +25,7 @@ export interface CrewTableProps {
   uniquelyRetrievableArchetypeIds?: Set<number> | null;
   dataScoreByArchetypeId?: Map<number, number>;
   gauntletRankByArchetypeId?: Map<number, number>;
+  boldEligibleNames?: boolean;
 }
 
 function uniquelyRetrievableLabel(archetypeId: number, ids: Set<number> | null): string {
@@ -47,6 +50,7 @@ function CrewTable({
   uniquelyRetrievableArchetypeIds,
   dataScoreByArchetypeId,
   gauntletRankByArchetypeId,
+  boldEligibleNames,
 }: CrewTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(crew);
 
@@ -80,7 +84,15 @@ function CrewTable({
                 <TableCell>
                   <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
                 </TableCell>
-                <TableCell>{c.name}</TableCell>
+                <TableCell>
+                  {boldEligibleNames && isPriorityCountEligible(c) ? (
+                    <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                      {c.name}
+                    </Typography>
+                  ) : (
+                    c.name
+                  )}
+                </TableCell>
                 {dataScoreByArchetypeId !== undefined && (
                   <TableCell align="right">{dataScoreLabel(c.archetype_id, dataScoreByArchetypeId)}</TableCell>
                 )}

@@ -166,6 +166,7 @@ function OverviewPage() {
             showCollectionsNames={true}
             dataScoreByArchetypeId={dataScoreMap}
             gauntletRankByArchetypeId={gauntletRankMap}
+            boldEligibleNames={true}
           />
         </>
       )}
@@ -183,6 +184,7 @@ function OverviewPage() {
               showCollectionsNames={true}
               dataScoreByArchetypeId={showCatalogData ? dataScoreMap : undefined}
               gauntletRankByArchetypeId={showCatalogData ? gauntletRankMap : undefined}
+              boldEligibleNames={true}
             />
           )}
         </>
@@ -201,6 +203,7 @@ function OverviewPage() {
               showCollectionsNames={true}
               dataScoreByArchetypeId={showCatalogData ? dataScoreMap : undefined}
               gauntletRankByArchetypeId={showCatalogData ? gauntletRankMap : undefined}
+              boldEligibleNames={true}
             />
           )}
         </>
@@ -216,6 +219,7 @@ function OverviewPage() {
             showCollectionsNames={true}
             dataScoreByArchetypeId={dataScoreMap}
             gauntletRankByArchetypeId={gauntletRankMap}
+            boldEligibleNames={true}
           />
         </>
       )}
