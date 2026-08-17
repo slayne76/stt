@@ -21,6 +21,9 @@ import CollectionCrewList from './CollectionCrewList';
 import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface CollectionsTableProps {
+  // `collections` is search-filtered and drives only the top-level pagination; `allCollections` is the
+  // full, unfiltered list needed for correct per-crew collection-membership counts (using the filtered
+  // list there would silently undercount when the current search hides one of a crew's other collections).
   collections: Collection[];
   allCollections: Collection[];
   items: OwnedItem[];

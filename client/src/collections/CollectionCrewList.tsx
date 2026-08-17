@@ -42,14 +42,14 @@ function CollectionCrewList({ crew, items, allCollections, currentCollectionId }
             <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
             {isReady && <StatusChip label="Ready" color="success" />}
             {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
-            <Typography color="text.secondary" sx={{ ml: 'auto' }}>
-              Level: {c.level}
-            </Typography>
+            <Typography color="text.secondary">Level: {c.level}</Typography>
             <Typography color="text.secondary" sx={{ minWidth: 80, textAlign: 'right' }}>
               Items: {getEquipmentSlotsRemaining(c)}
             </Typography>
-            <Typography color="text.secondary">Total Collections: {crewCollections.length}</Typography>
-            <Typography color="text.secondary">
+            <Typography color="text.secondary" sx={{ ml: 'auto' }}>
+              Total Collections: {crewCollections.length}
+            </Typography>
+            <Typography color="text.secondary" sx={{ minWidth: 0 }}>
               Other Collections: {otherCollections.map((col) => col.name).join(', ')}
             </Typography>
           </Box>
