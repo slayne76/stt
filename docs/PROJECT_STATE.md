@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-17 (Collections crew subrow grid layout + bold
-field labels). This
+Last updated: 2026-08-17 (Priorities tables: bold counter-eligible
+crew names). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -189,7 +189,16 @@ client/src/
                                  alongside it, see "Overview Priorities (DataScore) table" below).
                                  Both undefined-hides-it; today only the four Overview Priorities
                                  sections (DataScore/Original Algorithm/Beta Tachyon/Gauntlet) pass
-                                 either — no other `CrewTable` consumer does.
+                                 either — no other `CrewTable` consumer does. Optional
+                                 `boldEligibleNames?: boolean` (default falsy, unchanged rendering)
+                                 bolds just the Name cell's text — via `<Typography component="span"
+                                 variant="body2" sx={{ fontWeight: 'bold' }}>`, `variant="body2"`
+                                 required to match `TableCell`'s normally-inherited size, since a
+                                 bare `Typography` defaults to `body1`/16px and would otherwise grow
+                                 row height — for rows where `isPriorityCountEligible()` (see
+                                 `priorityCutoff.ts` below) is true; only the same four Overview
+                                 Priorities call sites pass `true` (see "Priorities tables: bold
+                                 counter-eligible crew names" below).
     StarRating.tsx              Gold star icons, driven by rarity/max_rarity props
     QPsTable.tsx                 QPs page's table (#/Image/Stars/Name/QL/QPs/Points left/Rounds
                                   left/Skills; see "QPs page", "StatusChip component and QPs Ready
@@ -274,7 +283,9 @@ client/src/
                                  Missing 4 Stars tables (see "Missing 4 Stars tables") — the very
                                  first page. All four Priorities tables pass both
                                  `dataScoreByArchetypeId` and `gauntletRankByArchetypeId` to
-                                 `CrewTable` (see the `CrewTable.tsx` row above). Priorities
+                                 `CrewTable` (see the `CrewTable.tsx` row above); all four also pass
+                                 `boldEligibleNames={true}` (see "Priorities tables: bold
+                                 counter-eligible crew names" below). Priorities
                                  (DataScore) ranks owned, non-immortalized crew by catalog
                                  DataScore (`filterDataScorePriority`/`byDataScoreDesc` in
                                  `crew/filters.ts`/`crew/sorters.ts` — the latter deliberately
@@ -5445,6 +5456,52 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     explicitly narrating 2 of the plan's 5 verification checklist items
     though both independently passed on the final reviewer's own
     re-check).
+
+57. **Priorities tables: bold counter-eligible crew names**
+    (`2026-08-17-priorities-table-bold-eligible-names`) — on the Overview
+    page's four Priorities tables, a crew member's name now renders bold
+    when that row is eligible to advance the pre-existing 5-row cutoff
+    counter (`level < 100 || getEquipmentSlotsRemaining(crew) < 0` —
+    e.g. a `100/0` row like "Critical Strike Picard" stays normal weight,
+    a `90/-4` row like "Jim Shimoda" goes bold), normal weight otherwise.
+    Priorities (Gauntlet) always renders every row bold, since its own
+    query (`filterGauntletPriority`) already excludes `100/0` crew before
+    the list is built — confirmed intentional/coherent with the rule.
+
+    The eligibility predicate already existed as a private, unexported
+    function in `crew/priorityCutoff.ts` (`countsTowardLimit`, used
+    internally by `applyPriorityCutoff()`) — exported under the clearer
+    public name `isPriorityCountEligible` rather than duplicated, so the
+    bolding rule and the cutoff-counter rule can never drift apart.
+    `CrewTable.tsx` (shared by ~10 other call sites across the app that
+    must NOT bold) gained one new optional prop, `boldEligibleNames?:
+    boolean`, default falsy/no-op; only the four Overview Priorities
+    `<CrewTable>` call sites pass `true` (see `CrewTable.tsx` and
+    Overview-page repo-map rows above).
+
+    **Final review (opus) caught a real regression the task review
+    missed:** the bold name's `<Typography component="span">` had no
+    `variant` set, so it defaulted to `body1` (16px/1.5 line-height)
+    instead of inheriting the `TableCell`'s normal `body2` (14px) — bold
+    names rendered visibly larger, not just bolder, and grew their row's
+    height, exceeding the plan's explicit weight-only scope. Root cause:
+    the plan's own code cited the wrong in-repo precedent
+    (`CollectionCrewList.tsx`'s bold-name `Typography`, which sits in a
+    CSS-grid cell and so never inherited `body2` in the first place) —
+    the actually-matching precedent was `QPsTable.tsx`, which already
+    bolds a name inside a `TableCell` with `variant="body2"` set
+    explicitly. One-line fix, one scoped re-review, clean. Also flagged
+    (non-blocking, process note): the first real-browser verification
+    attempt substituted re-reading the source for actually loading the
+    app — this worktree had no seeded `server/data/*.json`, so the app
+    had no real player data to render against; the controller seeded it
+    from the main checkout and resumed the implementer for a genuine
+    browser check before task review, which is what surfaced the
+    font-size issue in the final review's own repeat check. One Minor
+    parked both times: `priorityCutoff.ts`'s comment names its specific
+    consumer (`CrewTable`/`boldEligibleNames`) — harmless intra-module
+    coupling, would go stale if a second consumer appeared, not worth
+    changing for one caller.
 
 ## Current routes / nav (in order)
 
