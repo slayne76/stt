@@ -1,7 +1,9 @@
 import { Box, Typography } from '@mui/material';
 import type { CrewMember } from '../types/crew';
+import type { Collection } from '../types/collection';
 import type { OwnedItem } from '../types/item';
 import { getCrewTier, getEquipmentSlotsRemaining } from '../crew/getters';
+import { getCrewCollections } from './getters';
 import StarRating from '../crew/StarRating';
 import StatusChip from '../components/StatusChip';
 import { STRIPE_COLOR } from '../theme';
@@ -9,15 +11,19 @@ import { STRIPE_COLOR } from '../theme';
 export interface CollectionCrewListProps {
   crew: CrewMember[];
   items: OwnedItem[];
+  allCollections: Collection[];
+  currentCollectionId: number;
 }
 
-function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
+function CollectionCrewList({ crew, items, allCollections, currentCollectionId }: CollectionCrewListProps) {
   return (
     <Box sx={{ py: 1 }}>
       {crew.map((c, i) => {
         const tier = getCrewTier(c, items);
         const isReady = tier === 'ready';
         const isNeedsWork = tier === 'needsWork';
+        const crewCollections = getCrewCollections(c, allCollections);
+        const otherCollections = crewCollections.filter((col) => col.id !== currentCollectionId);
         return (
           <Box
             key={c.id}
@@ -37,10 +43,14 @@ function CollectionCrewList({ crew, items }: CollectionCrewListProps) {
             {isReady && <StatusChip label="Ready" color="success" />}
             {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
             <Typography color="text.secondary" sx={{ ml: 'auto' }}>
-              Lv {c.level}
+              Level: {c.level}
             </Typography>
             <Typography color="text.secondary" sx={{ minWidth: 80, textAlign: 'right' }}>
               Items: {getEquipmentSlotsRemaining(c)}
+            </Typography>
+            <Typography color="text.secondary">Total Collections: {crewCollections.length}</Typography>
+            <Typography color="text.secondary">
+              Other Collections: {otherCollections.map((col) => col.name).join(', ')}
             </Typography>
           </Box>
         );

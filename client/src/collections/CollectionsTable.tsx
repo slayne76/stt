@@ -22,12 +22,19 @@ import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface CollectionsTableProps {
   collections: Collection[];
+  allCollections: Collection[];
   items: OwnedItem[];
   qualifyingCrewByCollection: Map<number, CrewMember[]>;
   upgradableIds: Set<number>;
 }
 
-function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgradableIds }: CollectionsTableProps) {
+function CollectionsTable({
+  collections,
+  allCollections,
+  items,
+  qualifyingCrewByCollection,
+  upgradableIds,
+}: CollectionsTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } =
     usePagination(collections);
 
@@ -75,7 +82,12 @@ function CollectionsTable({ collections, items, qualifyingCrewByCollection, upgr
                         No crew match.
                       </Typography>
                     ) : (
-                      <CollectionCrewList crew={qualifyingCrew} items={items} />
+                      <CollectionCrewList
+                        crew={qualifyingCrew}
+                        items={items}
+                        allCollections={allCollections}
+                        currentCollectionId={collection.id}
+                      />
                     )}
                   </TableCell>
                 </TableRow>

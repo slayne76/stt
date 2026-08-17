@@ -48,6 +48,7 @@ function CollectionsPage() {
     >
       <CollectionsTable
         collections={filteredCollections}
+        allCollections={collections}
         items={items}
         qualifyingCrewByCollection={qualifyingCrewByCollection}
         upgradableIds={upgradableIds}
