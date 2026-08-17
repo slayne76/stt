@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-16 (Overview "Priorities (DataScore)" table +
-DataScore/Gauntlet Rank columns on all four Priorities tables). This
+Last updated: 2026-08-17 (Collections page: "Total Collections" /
+"Other Collections" on the per-collection crew subrow). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -218,10 +218,16 @@ client/src/
                                 isCollectionUpgradable, byUpgradableThenCompletionThenNameAsc,
                                 getQualifyingCrewByCollection, getUpgradableCollectionIds
     CollectionsTable.tsx        Main collections table (#/Collection/Rewards/Progress/Milestone/Crew),
-                                 paginated by collection, not row (see "Table pagination" below)
+                                 paginated by collection, not row (see "Table pagination" below);
+                                 takes both `collections` (search-filtered, pagination only) and
+                                 `allCollections` (full list, feeds crew subrow membership counts)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted; its "Ready"/
                                  needs-work chips now render via the shared `components/StatusChip.tsx`
-                                 — see "StatusChip component and QPs Ready chip")
+                                 — see "StatusChip component and QPs Ready chip"). Flex-row list, no
+                                 header; each row: Star, Name, chip, Level:, Items:, Total Collections:,
+                                 Other Collections: (current collection excluded) — Name/Level/Items/
+                                 Total Collections are `flexShrink: 0` + `nowrap`, Other Collections is
+                                 the only element that wraps
   ships/                         All ship-related pure logic + the Ships pages' table (see "Ships pages")
     getters.ts                 getShipList, isShipMaxed, getShipSchematicsOwned,
                                 getShipDisplayLevel, getShipSchematicsDisplay,
@@ -5321,6 +5327,57 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     below any real cutoff; a pre-existing, unrelated-to-this-feature
     column-alignment inconsistency between DataScore right-align and
     Gauntlet Rank's inherited left-align).
+55. **Collections page: "Total Collections" / "Other Collections" on the
+    per-collection crew subrow** (`2026-08-17-collections-crew-subrow-columns`)
+    — the Collections page's expanded per-collection crew list
+    (`CollectionCrewList.tsx`, a flex-row list, never a real `<table>`)
+    gains two new inline `Label: value` items after the existing `Items:
+    {n}`: `Total Collections: {n}` (the crew's real total collection
+    count) and `Other Collections: {names}` (the same list with the
+    *current* collection excluded, comma-separated) — reusing the
+    existing `getCrewCollections` getter, the same one `CrewTable`
+    already uses on the Crew pages for its analogous columns. `Lv {n}`
+    was renamed to `Level: {n}` for label consistency. Single task,
+    3 files, all touched together (prop threading only compiles as one
+    unit).
+
+    **The one real design subtlety:** `CollectionsTable`'s existing
+    `collections` prop is already search-filtered (only used to
+    paginate the top-level collection rows) — using it for the new
+    per-crew membership count would silently undercount whenever the
+    search box hid one of a crew's other collections. Fixed by adding a
+    second, distinctly-named `allCollections` prop, threaded from
+    `CollectionsPage.tsx`'s already-computed full, sorted,
+    pre-`useSearch` local — confirmed by the final reviewer live: with
+    the search box filtered to hide one of a crew's other collections,
+    that crew's `Total Collections:`/`Other Collections:` values on the
+    still-visible row didn't change.
+
+    **The final whole-branch review found one real, plan-mandated
+    Important defect that a screenshot-comparison task review missed
+    context for:** the plan's own code (verbatim from the design spec)
+    appended the two new, variable-width `Typography` elements after
+    the pre-existing `Level:` element's `sx={{ ml: 'auto' }}` — which
+    had been holding `Level:`/`Items:` in a stable right-aligned column.
+    Appending content after it collapsed the auto-margin, and with no
+    `flexShrink`/`whiteSpace` protection on any element, the flexbox's
+    default shrink behavior squeezed *every* element (crew name
+    included) below its natural single-line width whenever a row's
+    `Other Collections` text was long enough — most rows wrapped onto
+    2-3 messy lines instead of staying aligned. Confirmed live via
+    before/after screenshots and DOM bounding-rect measurement (48px
+    two-line height vs. 24px single-line). Being plan-mandated, this
+    went to the user rather than a silent fix — shown a screenshot, they
+    chose "fix it now." The first fix attempt (moving `ml: 'auto'` onto
+    `Total Collections` and giving `Other Collections`
+    `minWidth: 0`) was only a partial fix — a scoped re-review caught
+    that Name/Level/Total Collections were still shrink-wrapping since
+    they had no `flexShrink: 0` floor. That residual was small and
+    well-understood enough to adjudicate and fix directly (added
+    `flexShrink: 0` + `whiteSpace: 'nowrap'` to Name, Level, Items, and
+    Total Collections, leaving only `Other Collections` as the one
+    element that wraps) rather than spinning a second subagent fix
+    round — re-verified visually before merge.
 
 ## Current routes / nav (in order)
 
