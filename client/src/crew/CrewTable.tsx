@@ -86,7 +86,7 @@ function CrewTable({
                 </TableCell>
                 <TableCell>
                   {boldEligibleNames && isPriorityCountEligible(c) ? (
-                    <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                    <Typography component="span" variant="body2" sx={{ fontWeight: 'bold' }}>
                       {c.name}
                     </Typography>
                   ) : (
