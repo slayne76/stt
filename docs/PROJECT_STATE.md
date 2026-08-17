@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-17 (Collections page: "Total Collections" /
-"Other Collections" on the per-collection crew subrow). This
+Last updated: 2026-08-17 (Collections crew subrow grid layout + bold
+field labels). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -223,11 +223,14 @@ client/src/
                                  `allCollections` (full list, feeds crew subrow membership counts)
     CollectionCrewList.tsx      Per-collection qualifying-crew sub-list (tier-highlighted; its "Ready"/
                                  needs-work chips now render via the shared `components/StatusChip.tsx`
-                                 — see "StatusChip component and QPs Ready chip"). Flex-row list, no
-                                 header; each row: Star, Name, chip, Level:, Items:, Total Collections:,
-                                 Other Collections: (current collection excluded) — Name/Level/Items/
-                                 Total Collections are `flexShrink: 0` + `nowrap`, Other Collections is
-                                 the only element that wraps
+                                 — see "StatusChip component and QPs Ready chip"). Fixed-width CSS Grid
+                                 row (`display: grid`, `GRID_TEMPLATE_COLUMNS` — same px widths on every
+                                 independent per-row grid produce cross-row column alignment, no shared
+                                 grid container, no visible header): Star, Name, chip (own cell, empty if
+                                 neither renders), Level:, Items:, Total Collections:, Other Collections:
+                                 (current collection excluded). Field labels all bold via shared `Field`
+                                 helper; only Other Collections wraps (`wrap` prop), the rest stay
+                                 `whiteSpace: 'nowrap'` sized to fit their fixed column
   ships/                         All ship-related pure logic + the Ships pages' table (see "Ships pages")
     getters.ts                 getShipList, isShipMaxed, getShipSchematicsOwned,
                                 getShipDisplayLevel, getShipSchematicsDisplay,
@@ -5378,6 +5381,70 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     Total Collections, leaving only `Other Collections` as the one
     element that wraps) rather than spinning a second subagent fix
     round — re-verified visually before merge.
+56. **Collections crew subrow grid layout + bold field labels**
+    (`2026-08-17-collections-crew-subrow-grid-layout`) — same-day
+    follow-up to (55): the user found the flex-row layout confusing
+    (fields didn't line up across rows) and asked for column alignment
+    plus bold field labels, explicitly requesting a **screenshot preview
+    before finalizing development** — the first time this project has
+    used a preview-then-spec workflow rather than spec-first. Prototyped
+    directly against the live running app (`main` checkout, not a
+    worktree) across 2 rounds, each with real screenshots the user
+    reviewed; round 1's narrower columns wrapped `Level: 100` (3 digits)
+    inconsistently vs. `Level: 70` (2 digits) and wrapped `Total
+    Collections:` on every row; round 2 widened those two columns and
+    added `whiteSpace: 'nowrap'` to every field except `Other
+    Collections:` — approved as final. The approved prototype code
+    (reverted from the working tree, captured verbatim into the spec)
+    became the plan's exact single-task deliverable — genuinely a
+    transcription task this time, confirmed by the task reviewer finding
+    the shipped file byte-for-byte identical to the brief.
+
+    **Technique: `display: grid` with the *same fixed pixel*
+    `gridTemplateColumns` on every row** (not `fr`/`auto`), rather than
+    one shared grid container spanning all rows — each crew row is its
+    own independent grid, and using identical explicit widths on every
+    one is what produces cross-row column alignment. This is a
+    structurally different fix from (55)'s flex-shrink patch: a grid
+    track has a real reserved width regardless of sibling content, so
+    there's no flex-shrink-style failure mode where trailing content
+    squeezes earlier fields. The status chip (`Ready`/`N/N Stars`/
+    neither) got its own always-present grid cell so its presence or
+    absence never shifts later columns — the one structural difference
+    from a plain "same widths" copy of the old fields.
+
+    **Final review (opus) didn't just re-check the diff against the
+    plan (task review already did that, byte-for-byte) — it stress-tested
+    the "same fixed widths → alignment" claim against the full real
+    dataset the approved screenshots only sampled 2-3 rows of.**
+    Measured all 340 real crew rows across both pagination pages: exactly
+    one x-position per column, zero column-track overflows. Then went
+    further and measured every one of the 590 real crew names in the
+    actual rendered font to find the worst case the *current* roster
+    can't produce but a future one might — confirmed the widest
+    unbreakable name token (155px) comfortably fits the 220px Name
+    column and the longest full name simply wraps to 2 lines without
+    touching neighboring columns. Zero Critical; one Important, but a
+    **workspace-hygiene issue, not a code defect**: the controller's own
+    data-seeding command for this worktree ran from a stale `cd client`
+    leftover in the persistent shell, landing 11.8MB of real player data
+    at `client/server/data/player-cache.json` instead of the intended
+    `server/data/player-cache.json` — untracked and outside the
+    `.gitignore`'s root-anchored `server/data/` pattern, so it would have
+    been at risk of a stray `git add -A` committing personal game data.
+    Caught by the reviewer noticing an untracked directory outside the
+    diff; fixed directly (delete + re-seed at the correct path) rather
+    than looping a subagent, since it was pure workspace cleanup, not a
+    shipped-code change. 4 Minor parked, all informational (narrow-
+    viewport width growth, an explicit spec non-goal; fixed-px tracks not
+    robust to a browser font-size *accessibility* setting — distinct from
+    zoom, which scales evenly — acceptable for a single-user desktop
+    tool; `React.ReactNode` via the implicit global instead of an
+    explicit import, inherited verbatim from the already-approved
+    prototype code, not worth deviating from; the task report not
+    explicitly narrating 2 of the plan's 5 verification checklist items
+    though both independently passed on the final reviewer's own
+    re-check).
 
 ## Current routes / nav (in order)
 
