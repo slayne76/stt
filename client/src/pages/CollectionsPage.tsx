@@ -4,6 +4,7 @@ import { getCollectionsList } from '../collections/getters';
 import {
   byUpgradableThenCompletionThenNameAsc,
   getQualifyingCrewByCollection,
+  getReadyAloneCollectionIds,
   getUpgradableCollectionIds,
 } from '../collections/sorters';
 import { useSearch } from '../lib/useSearch';
@@ -22,6 +23,7 @@ function CollectionsPage() {
   // functions safely return an empty Map/Set when rawCollections is empty, so no guard is needed here.
   const qualifyingCrewByCollection = getQualifyingCrewByCollection(rawCollections, crew, items, frozenArchetypeIds);
   const upgradableIds = getUpgradableCollectionIds(rawCollections, qualifyingCrewByCollection, items);
+  const readyAloneIds = getReadyAloneCollectionIds(rawCollections, qualifyingCrewByCollection, items);
   const collections = data
     ? [...rawCollections].sort(byUpgradableThenCompletionThenNameAsc(upgradableIds))
     : [];
@@ -52,6 +54,7 @@ function CollectionsPage() {
         items={items}
         qualifyingCrewByCollection={qualifyingCrewByCollection}
         upgradableIds={upgradableIds}
+        readyAloneIds={readyAloneIds}
       />
     </PageShell>
   );

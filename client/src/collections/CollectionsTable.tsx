@@ -29,6 +29,9 @@ export interface CollectionsTableProps {
   items: OwnedItem[];
   qualifyingCrewByCollection: Map<number, CrewMember[]>;
   upgradableIds: Set<number>;
+  // A collection in this set is also in `upgradableIds` (Ready-alone coverage implies
+  // combined coverage) — drives the "Upgradable" chip's color (green), not its visibility.
+  readyAloneIds: Set<number>;
 }
 
 function CollectionsTable({
@@ -37,6 +40,7 @@ function CollectionsTable({
   items,
   qualifyingCrewByCollection,
   upgradableIds,
+  readyAloneIds,
 }: CollectionsTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } =
     usePagination(collections);
@@ -58,6 +62,7 @@ function CollectionsTable({
           {pageItems.map((collection, index) => {
             const qualifyingCrew = qualifyingCrewByCollection.get(collection.id) ?? [];
             const upgradable = upgradableIds.has(collection.id);
+            const readyAlone = readyAloneIds.has(collection.id);
             const rewards = getCuratedRewards(collection);
             const progressDisplay = isMaxedOut(collection)
               ? 'MAX'
@@ -68,7 +73,9 @@ function CollectionsTable({
                   <TableCell>{page * pageSize + index + 1}</TableCell>
                   <TableCell>
                     {collection.name}
-                    {upgradable && <Chip label="Upgradable" size="small" color="info" sx={{ ml: 1 }} />}
+                    {upgradable && (
+                      <Chip label="Upgradable" size="small" color={readyAlone ? 'success' : 'info'} sx={{ ml: 1 }} />
+                    )}
                   </TableCell>
                   <TableCell>{rewards.join(', ')}</TableCell>
                   <TableCell align="right">{progressDisplay}</TableCell>
