@@ -15,6 +15,22 @@ export interface CollectionCrewListProps {
   currentCollectionId: number;
 }
 
+// Fixed pixel widths (not fr/auto) so every row's independent grid resolves
+// to the same column positions, producing table-like vertical alignment
+// without a shared grid container or visible header row.
+const GRID_TEMPLATE_COLUMNS = '110px 220px 140px 120px 100px 200px 1fr';
+
+function Field({ label, value, wrap = false }: { label: string; value: React.ReactNode; wrap?: boolean }) {
+  return (
+    <Typography color="text.secondary" sx={wrap ? undefined : { whiteSpace: 'nowrap' }}>
+      <Box component="span" sx={{ fontWeight: 'bold' }}>
+        {label}
+      </Box>{' '}
+      {value}
+    </Typography>
+  );
+}
+
 function CollectionCrewList({ crew, items, allCollections, currentCollectionId }: CollectionCrewListProps) {
   return (
     <Box sx={{ py: 1 }}>
@@ -28,9 +44,10 @@ function CollectionCrewList({ crew, items, allCollections, currentCollectionId }
           <Box
             key={c.id}
             sx={{
-              display: 'flex',
+              display: 'grid',
+              gridTemplateColumns: GRID_TEMPLATE_COLUMNS,
               alignItems: 'center',
-              gap: 1,
+              columnGap: 1,
               py: 0.5,
               // Cancels parent TableCell's 16px padding so each stripe reaches the cell edges
               px: 2,
@@ -39,26 +56,19 @@ function CollectionCrewList({ crew, items, allCollections, currentCollectionId }
             }}
           >
             <StarRating rarity={c.rarity} maxRarity={c.max_rarity} />
-            <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              {c.name}
-            </Typography>
-            {isReady && <StatusChip label="Ready" color="success" />}
-            {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
-            <Typography color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-              Level: {c.level}
-            </Typography>
-            <Typography
-              color="text.secondary"
-              sx={{ minWidth: 80, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}
-            >
-              Items: {getEquipmentSlotsRemaining(c)}
-            </Typography>
-            <Typography color="text.secondary" sx={{ ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              Total Collections: {crewCollections.length}
-            </Typography>
-            <Typography color="text.secondary" sx={{ minWidth: 0 }}>
-              Other Collections: {otherCollections.map((col) => col.name).join(', ')}
-            </Typography>
+            <Typography sx={{ fontWeight: isReady ? 'bold' : 'normal' }}>{c.name}</Typography>
+            <Box>
+              {isReady && <StatusChip label="Ready" color="success" />}
+              {isNeedsWork && <StatusChip label={`${c.max_rarity}/${c.max_rarity} Stars`} color="warning" />}
+            </Box>
+            <Field label="Level:" value={c.level} />
+            <Field label="Items:" value={getEquipmentSlotsRemaining(c)} />
+            <Field label="Total Collections:" value={crewCollections.length} />
+            <Field
+              label="Other Collections:"
+              value={otherCollections.map((col) => col.name).join(', ')}
+              wrap
+            />
           </Box>
         );
       })}
