@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-17 (Priorities tables: bold counter-eligible
-crew names). This
+Last updated: 2026-08-17 (Collections page: green Upgradable chip when
+Ready crew alone cover the gap). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -1036,6 +1036,12 @@ extract with more effort.
 
 ## The "Upgradable" chip and upgradable-first sort
 
+**Chip color now varies (green/blue) as of 2026-08-17 — see "Upgradable
+chip green variant" below.** The description immediately below (blue,
+single-color) is the original 2026-08-04 feature and is still accurate for
+*visibility* (which collections get a chip at all, and the sort) — only
+the color logic changed.
+
 A follow-up to the needsWork tier label (above): a collection gets a blue
 "Upgradable" `Chip` next to its name when the crew still needed to reach
 its *next* milestone can already be fully covered by crew the player owns
@@ -1200,6 +1206,83 @@ dual-source-of-truth risk in one move.
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-04-collections-upgradable-chip-design.md`,
 `docs/superpowers/plans/2026-08-04-collections-upgradable-chip-plan.md`.
+
+### Upgradable chip green variant (2026-08-17)
+
+The blue-only chip above doesn't distinguish "reachable via a mix of Ready
+and 4/4-Stars crew" from the stronger case where `Ready`-tier crew **alone**
+already cover the gap — i.e. the collection is one immortalization away
+from advancing, no leveling/equipping work still pending on the crew that
+count. User-requested distinction, real-data worked examples: *Convergence
+Day* (32/33, remaining 1, 1 `Ready` crew — "Klingon Quark" — alone covers
+it) → green; *Heh Cho'mruak tah* (57/60, remaining 3, only 1 `Ready` crew)
+→ stays blue until enough of its `needsWork` crew reach `Ready`.
+
+**Chip visibility and sort order are unchanged — this is a pure color
+decision layered on top of the existing rule**, confirmed by explicit user
+answer during brainstorming (color-only, no reorder). `getUpgradableCollectionIds`
+and `byUpgradableThenCompletionThenNameAsc` (above) are untouched.
+
+**Implementation (`collections/sorters.ts`):** `isCollectionUpgradable`'s
+`remaining`/counting logic was extracted into a private
+`isRemainingCoveredByTiers(collection, qualifyingCrew, items, tiers: ReadonlySet<CrewTier>)`
+helper, so the green rule can't drift from the blue rule — both are one-line
+callers over the same shared shape:
+
+```ts
+export function isCollectionUpgradable(collection: Collection, qualifyingCrew: CrewMember[], items: OwnedItem[]): boolean {
+  return isRemainingCoveredByTiers(collection, qualifyingCrew, items, new Set(['ready', 'needsWork']));
+}
+
+export function isCollectionUpgradableByReadyAlone(collection: Collection, qualifyingCrew: CrewMember[], items: OwnedItem[]): boolean {
+  return isRemainingCoveredByTiers(collection, qualifyingCrew, items, new Set(['ready']));
+}
+```
+
+A sibling `getReadyAloneCollectionIds` (mirroring `getUpgradableCollectionIds`'s
+shape) is computed once in `CollectionsPage.tsx` from the same
+`qualifyingCrewByCollection`/`items` already used for `upgradableIds`, and
+threaded down as a new `readyAloneIds: Set<number>` prop on `CollectionsTable`.
+Because `{'ready'} ⊂ {'ready', 'needsWork'}` over identical `remaining` and
+identical `qualifyingCrew` inputs, `readyAloneIds` is structurally a subset
+of `upgradableIds` — a collection can never render a green chip without
+also being in the set that renders a chip at all. The chip itself:
+
+```tsx
+{upgradable && (
+  <Chip label="Upgradable" size="small" color={readyAlone ? 'success' : 'info'} sx={{ ml: 1 }} />
+)}
+```
+
+— label text unchanged in both colors, matching `success` to
+`CollectionCrewList.tsx`'s existing per-crew `StatusChip label="Ready"
+color="success"` so the green reads consistently at both levels of the page.
+
+**Real-data census (all 88 collections):** 6 total chips, 1 green
+(Convergence Day) and 5 blue (Heh Cho'mruak tah, Class A Dress, Delphic
+Expanse, Our Man Bashir, Perils in Paradise) — up from the 5 upgradable
+collections recorded above at original-feature time (player progress
+naturally shifts this count over time; it isn't a discrepancy). Verified
+independently by the final reviewer, re-deriving the algorithm directly
+from `server/data/player-cache.json` rather than trusting the implementer's
+rendered-DOM report — worth noting because the implementer's own
+browser-check report initially undercounted (3 chips found via an ad-hoc
+scan that only covered part of the first results page); the report was
+corrected post-review rather than left standing, though no shipped code
+needed to change.
+
+**Deferred (parked at final review, not fixed):** the two tier `Set`s in
+`isCollectionUpgradable`/`isCollectionUpgradableByReadyAlone` are
+reallocated on every call rather than hoisted to module constants (minor,
+readability/micro-perf only); `getReadyAloneCollectionIds` adds a second
+unmemoized `getCrewTier` pass over qualifying crew in `CollectionsPage.tsx`
+(consistent with this page's existing no-memoization style, not a
+regression); the chip has no tooltip explaining what green vs blue means
+(label text intentionally fixed by the spec, so a `Tooltip` would need to
+carry the explanation — not requested this round).
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-17-collections-upgradable-chip-green-design.md`,
+`docs/superpowers/plans/2026-08-17-collections-upgradable-chip-green-plan.md`.
 
 ## Frozen crew and duplicate exclusion
 
@@ -5502,6 +5585,44 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     consumer (`CrewTable`/`boldEligibleNames`) — harmless intra-module
     coupling, would go stale if a second consumer appeared, not worth
     changing for one caller.
+
+58. **Collections page: green Upgradable chip when Ready crew alone cover
+    the gap** (`2026-08-17-collections-upgradable-chip-green`) — the
+    existing blue "Upgradable" `Chip` (see "The 'Upgradable' chip and
+    upgradable-first sort" above) now renders green when qualifying crew
+    already at `Ready` tier alone cover the collection's remaining
+    progress, staying blue when it's reachable only via a mix of `Ready`
+    and `needsWork` ("4/4 Stars") crew. Chip visibility and sort order are
+    unchanged — pure color decision on top of the existing rule, confirmed
+    color-only during brainstorming. Real-data worked examples: Convergence
+    Day (remaining 1, 1 Ready crew covers it) → green; Heh Cho'mruak tah
+    (remaining 3, only 1 Ready crew) → stays blue.
+
+    `isCollectionUpgradable`'s `remaining`/counting logic was extracted
+    into a shared private `isRemainingCoveredByTiers` helper so the new
+    `isCollectionUpgradableByReadyAlone` predicate (and its
+    `getReadyAloneCollectionIds` set-builder, mirroring the existing
+    `getUpgradableCollectionIds`) can't drift from the original rule — both
+    are one-line callers over the same shape, parameterized only by which
+    `CrewTier`s count. `{'ready'} ⊂ {'ready', 'needsWork'}` over identical
+    inputs makes "green implies chip visible" a structural guarantee, not
+    just a convention — confirmed empirically by the final reviewer across
+    all 88 real collections (zero exceptions).
+
+    **Final review (opus) found no logic defects** — independently
+    re-derived the algorithm against `server/data/player-cache.json` and
+    reproduced both worked examples exactly, plus `tsc --noEmit` clean.
+    One Important, documentation-only finding: the implementer's own
+    real-browser verification report undercounted the chip census (3
+    found via a scan that only covered part of the first results page,
+    vs. the true 6 across all 88 collections — 1 green, 5 blue); corrected
+    via a follow-up fix-and-annotate pass rather than left standing, no
+    shipped code changed. A few Minors parked as deferred, not fixed: tier
+    `Set`s reallocated per-call rather than hoisted to module constants; a
+    second unmemoized `getCrewTier` pass added in `CollectionsPage.tsx`
+    (consistent with the page's existing no-memoization style); no tooltip
+    explaining the green/blue distinction to the user (label text
+    intentionally fixed by spec, not requested this round).
 
 ## Current routes / nav (in order)
 
