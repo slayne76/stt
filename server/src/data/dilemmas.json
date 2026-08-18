@@ -76,6 +76,36 @@
         { "letter": "A", "description": "Tell him to remain at Starfleet Academy.", "rewards": [{ "crewArchetypeId": 6959, "dropRatePercent": 100, "showName": true }] },
         { "letter": "B", "description": "Tell him to return home for the joining." }
       ]
+    },
+    {
+      "id": "champion-of-the-people-part-1",
+      "name": "Champion of the People, Part 1",
+      "chainName": "Champion of the People",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Reveal their leader's true identity.", "leadsToDilemmaId": "champion-of-the-people-part-2" },
+        { "letter": "B", "description": "Allow the colonists to continue following her." }
+      ]
+    },
+    {
+      "id": "champion-of-the-people-part-2",
+      "name": "Champion of the People, Part 2",
+      "chainName": "Champion of the People",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Arrest all of the mercenaries for attacking the crew." },
+        { "letter": "B", "description": "Give the Ventaxian a chance to flee.", "leadsToDilemmaId": "champion-of-the-people-part-3" }
+      ]
+    },
+    {
+      "id": "champion-of-the-people-part-3",
+      "name": "Champion of the People, Part 3",
+      "chainName": "Champion of the People",
+      "partNumber": 3,
+      "choices": [
+        { "letter": "A", "description": "Reinforce the Ventaxian colony.", "rewards": [{ "crewArchetypeId": 8697, "dropRatePercent": 100, "showName": true }] },
+        { "letter": "B", "description": "Encourage the former mercenary and the colonists to work together.", "rewards": [{ "crewArchetypeId": 6282, "dropRatePercent": 100, "showName": true }] }
+      ]
     }
   ]
 }
