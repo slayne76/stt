@@ -106,6 +106,27 @@
         { "letter": "A", "description": "Reinforce the Ventaxian colony.", "rewards": [{ "crewArchetypeId": 8697, "dropRatePercent": 100, "showName": true }] },
         { "letter": "B", "description": "Encourage the former mercenary and the colonists to work together.", "rewards": [{ "crewArchetypeId": 6282, "dropRatePercent": 100, "showName": true }] }
       ]
+    },
+    {
+      "id": "interference-part-1",
+      "name": "Interference, Part 1",
+      "chainName": "Interference",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Leave the substance on the planet where it was found." },
+        { "letter": "B", "description": "Take a sample back to the <ship name> for further study.", "leadsToDilemmaId": "interference-part-2" },
+        { "letter": "C", "description": "Destroy the potentially dangerous substance." }
+      ]
+    },
+    {
+      "id": "interference-part-2",
+      "name": "Interference, Part 2",
+      "chainName": "Interference",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Lure the substance out without harming it.", "rewards": [{ "crewArchetypeId": 6970, "dropRatePercent": 100, "showName": true }] },
+        { "letter": "B", "description": "Dissolve the substance before it reaches the impulse engines." }
+      ]
     }
   ]
 }
