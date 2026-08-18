@@ -631,6 +631,32 @@
         { "letter": "B", "description": "Take the officer back to the ship by force." },
         { "letter": "C", "description": "Turn the situation over to Starfleet higher-ups." }
       ]
+    },
+    {
+      "id": "mystery-haul",
+      "name": "Mystery Haul",
+      "chainName": "Mystery Haul",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Retrieve it.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        },
+        { "letter": "B", "description": "Leave it." }
+      ]
     }
   ]
 }
