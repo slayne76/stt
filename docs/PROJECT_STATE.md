@@ -1,7 +1,8 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-18 (new "Dilemmas" page — static, hand-maintained
-data). This
+Last updated: 2026-08-18 (Dilemmas: "(part x/y)" chain subtitle; also
+fixed a project-wide client `tsc` verification no-op — see "How this
+project is worked on"). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -287,9 +288,11 @@ client/src/
     getters.ts                  dilemmaHasRelation, getChoiceIcon ('check'/'x'/'circle' rule),
                                  sortedDilemmas (chainName asc, then partNumber asc — drives both
                                  alphabetical order and chain-adjacency for the divider),
-                                 buildCatalogEntryMap (archetype_id -> CatalogEntry lookup)
+                                 buildCatalogEntryMap (archetype_id -> CatalogEntry lookup),
+                                 getChainSizeByName (chainName -> member count, drives the
+                                 "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 11 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 13 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -3818,7 +3821,7 @@ when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
 outlined circle — the user specifically asked for solid). As of
 2026-08-18, `dilemmas.json` has grown from the original 4 seed dilemmas
-to 11 via several same-day, data-only additions (new chains/rewards
+to 13 via several same-day, data-only additions (new chains/rewards
 handed over as raw shorthand text, resolved against the crew catalog,
 and added directly — no code changes, no brainstorming/plan/subagent
 pipeline needed for a pure data change against an already-approved
@@ -3827,6 +3830,32 @@ the running list). None of them exercise the circle branch yet (every
 one has at least one positive choice) — first real test of that path
 arrives with the next dilemma added that has no chain/reward relation
 at all.
+
+**Chain subtitle** (`(part x/y)`, added 2026-08-18): a second-line
+caption under the dilemma's `name` in the Name cell, showing its
+position within its chain — `(part 1/2)`, `(part 2/2)`, etc. — shown
+only when `getChainSizeByName(dilemmas).get(dilemma.chainName)` is
+greater than 1; a standalone dilemma (chain of one) shows nothing extra.
+Motivated by "The Beginning of the End of the World" / "The Voice of
+the Prophets" — the first chain where the two dilemmas' `name` values
+share nothing at all, unlike every prior chain's `"..., Part N"`
+pattern, so only `chainName` (already the grouping/sort key) ties them
+together, and nothing in the UI signaled that relationship before this.
+`getChainSizeByName` is a pure, single-pass `chainName -> count` map —
+no schema change, derived entirely from fields the `Dilemma` type
+already had. Single-task plan, task review and final review (opus) both
+clean, no Critical/Important code findings. The final reviewer
+independently re-verified end-to-end against the real data file (all 13
+dilemmas: unique ids, no dangling `leadsToDilemmaId`, contiguous
+`partNumber`s per chain, exact expected chain sizes) and a live
+headless-Chromium pass (correct subtitles on all 12 chain-member rows,
+none on the one remaining standalone, correct icons/reward/divider on
+the two new rows) — confirmed every one of the 11 pre-existing rows'
+icons/rewards/dividers are unchanged, only their Name cell gained a
+subtitle where applicable. One genuinely significant finding surfaced
+here, but it was a **verification-convention** issue, not a code defect
+— see "How this project is worked on" above for the `npx tsc --noEmit
+-p client` no-op discovery this review caught.
 
 **Reward/Drop Rate columns** (`DilemmasTable.tsx`'s `RewardCell`/
 `DropRateCell`): one group per reward-bearing choice, laid out **side by
@@ -3905,7 +3934,10 @@ cosmetic nits (missing `variant="body2"` on the em-dash `Typography`;
 same crew twice — neither seed dilemma does).
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-18-dilemmas-page-design.md`,
-`docs/superpowers/plans/2026-08-18-dilemmas-page-plan.md`.
+`docs/superpowers/plans/2026-08-18-dilemmas-page-plan.md` (original page);
+`docs/superpowers/specs/2026-08-18-dilemmas-chain-subtitle-design.md`,
+`docs/superpowers/plans/2026-08-18-dilemmas-chain-subtitle-plan.md`
+(chain subtitle).
 
 ## Feature history (chronological)
 
@@ -5817,6 +5849,25 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     silently on this page rather than surfacing inline (mitigated by the
     existing app-wide catalog-error Snackbar); two cosmetic nits.
 
+60. **Dilemmas table: "(part x/y)" chain subtitle**
+    (`2026-08-18-dilemmas-chain-subtitle`) — a second-line caption under a
+    dilemma's name showing its position in its chain (`(part 1/2)`,
+    `(part 2/2)`, …), shown only when that chain has more than one
+    member; standalone dilemmas are unchanged. Motivated by a new chain,
+    "The Beginning of the End of the World" / "The Voice of the
+    Prophets", the first pair sharing a `chainName` with completely
+    unrelated `name`s (every prior chain used a `"..., Part N"` pattern
+    that visually implied the relationship on its own). New pure
+    `getChainSizeByName` getter (`chainName -> count`, no schema change)
+    plus a conditional render in the Name cell. Single-task plan, both
+    task and final review (opus) clean — see "Dilemmas page" above for
+    the full write-up. **Also surfaced this project's `npx tsc --noEmit
+    -p client` verification command has been a silent no-op for its
+    entire history** (see "How this project is worked on" above) — not a
+    defect in this feature's code (independently confirmed clean via the
+    correct command), but a real gap in how every prior client-side
+    task's "tsc clean" claim was actually verified.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
@@ -5858,6 +5909,19 @@ flat, directly-clickable drawer entries.
   substitute, since this project deliberately has no automated test
   framework yet, then fast-forward merge to `main`, then worktree/branch
   cleanup).
+- **`npx tsc --noEmit -p client` type-checks ZERO files — do not use it.**
+  `client/tsconfig.json` is a solution-style file (`"files": []` plus
+  `references` to `tsconfig.app.json`/`tsconfig.node.json`); plain `-p`
+  (non-build mode) does not follow project references, so that command
+  silently compiles nothing and exits 0 regardless of what's actually in
+  `client/src`. Confirmed via `--listFiles` (0 files under `client/src`)
+  during the Dilemmas chain-subtitle feature's final review, after this
+  exact command had been the recorded "clean" verification step for every
+  client-side task in this project's history up to that point (server-side
+  checks were unaffected — `server/tsconfig.json` is a normal, non-solution
+  config). Use **`npx tsc -b client`** instead (matches what `npm run
+  build -w client` itself runs) or `npx tsc --noEmit -p
+  client/tsconfig.app.json`.
 - **`EnterWorktree` branches from `origin/main`**, not local `main` — for
   every feature through the Collections one, no remote push had ever
   happened, so `origin/main` was permanently stale and the immediate next
