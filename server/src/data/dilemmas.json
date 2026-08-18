@@ -170,6 +170,48 @@
         { "letter": "B", "description": "Transport the agent to the brig.", "rewards": [{ "crewArchetypeId": 6965, "dropRatePercent": 100, "showName": true }] },
         { "letter": "C", "description": "Leave the agent to face the enemies she has made." }
       ]
+    },
+    {
+      "id": "the-buried-years",
+      "name": "The Buried Years",
+      "chainName": "The Buried Years",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Make the surface habitable for the Yalosians once again.",
+          "rewards": [
+            { "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        },
+        {
+          "letter": "B",
+          "description": "Leave the planet's life to develop without interfering.",
+          "rewards": [
+            { "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        }
+      ]
     }
   ]
 }
