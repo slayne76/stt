@@ -304,7 +304,7 @@ client/src/
                                  getChainSizeByName (chainName -> member count, drives the
                                  "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 21 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 23 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -3850,15 +3850,16 @@ when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
 outlined circle — the user specifically asked for solid). As of
 2026-08-18, `dilemmas.json` has grown from the original 4 seed dilemmas
-to 21 via several same-day additions — most purely data-only (new
+to 23 via several same-day additions — most purely data-only (new
 chains/rewards handed over as raw shorthand text, resolved against the
 crew or ship catalog as appropriate, added directly with no code
 changes, no brainstorming/plan/subagent pipeline needed for a pure data
 change against an already-approved schema; see the Dilemmas entries in
 `project_stt-tracker-state.md` for the running list), one ("Blow by
 Blow" / "Friends in Need") requiring real code — see "Dilemmas ship
-rewards" below — after which a second ship reward ("Class Act" /
-"Burden of Proof" → D'Kora Krayton) landed as pure data again, no code
+rewards" below — after which two more ship rewards ("Class Act" /
+"Burden of Proof" → D'Kora Krayton; "Cracks in the Wall" / "First
+Author" → I.S.S. Enterprise NCC-1701) both landed as pure data, no code
 needed, confirming the ship-reward infrastructure genuinely
 generalizes. None of them exercise the circle branch yet (every one has
 at least one positive choice) — first real test of that path arrives
