@@ -324,6 +324,65 @@
         { "letter": "B", "description": "Disable the probe with crew name's new deflector array." },
         { "letter": "C", "description": "Destroy the probe with crew name's new experimental torpedo.", "rewards": [{ "type": "ship", "shipArchetypeId": 2838, "dropRatePercent": 100, "showName": true }] }
       ]
+    },
+    {
+      "id": "blood-red-tide",
+      "name": "Blood-Red Tide",
+      "chainName": "Blood-Red Tide",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Avoid taking sides in the rebellion.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        },
+        {
+          "letter": "B",
+          "description": "Support the colony's governor.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        },
+        {
+          "letter": "C",
+          "description": "Support the rebelling colonists.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        }
+      ]
     }
   ]
 }
