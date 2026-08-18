@@ -657,6 +657,48 @@
         },
         { "letter": "B", "description": "Leave it." }
       ]
+    },
+    {
+      "id": "ladders-and-chains",
+      "name": "Ladders and Chains",
+      "chainName": "Ladders and Chains",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Defend the Vorta passenger.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        },
+        {
+          "letter": "B",
+          "description": "Return the Vorta passenger to the Dominion.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        }
+      ]
     }
   ]
 }
