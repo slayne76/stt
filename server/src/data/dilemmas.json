@@ -1,0 +1,61 @@
+{
+  "dilemmas": [
+    {
+      "id": "a-higher-duty-part-1",
+      "name": "A Higher Duty, Part 1",
+      "chainName": "A Higher Duty",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Give a rousing speech in support of the diplomat.", "leadsToDilemmaId": "a-higher-duty-part-2" },
+        { "letter": "B", "description": "Give a neutral speech to avoid sides.", "leadsToDilemmaId": "a-higher-duty-part-2" },
+        { "letter": "C", "description": "Refuse to speak at the diplomat's gala." }
+      ]
+    },
+    {
+      "id": "a-higher-duty-part-2",
+      "name": "A Higher Duty, Part 2",
+      "chainName": "A Higher Duty",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Suggest a lenient sentence in the hopes of reform." },
+        { "letter": "B", "description": "Suggest a harsh sentence in light of the consequences of his theft.", "leadsToDilemmaId": "a-higher-duty-part-3" }
+      ]
+    },
+    {
+      "id": "a-higher-duty-part-3",
+      "name": "A Higher Duty, Part 3",
+      "chainName": "A Higher Duty",
+      "partNumber": 3,
+      "choices": [
+        { "letter": "A", "description": "Disable his ship before he can harm the colony.", "rewards": [{ "crewArchetypeId": 6281, "dropRatePercent": 100, "showName": true }] },
+        { "letter": "B", "description": "Talk him down before he or anyone else is hurt.", "rewards": [{ "crewArchetypeId": 5882, "dropRatePercent": 100, "showName": true }] }
+      ]
+    },
+    {
+      "id": "lost-among-the-stars",
+      "name": "Lost Among the Stars",
+      "chainName": "Lost Among the Stars",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Search for the ship or any other survivors.",
+          "rewards": [
+            { "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        },
+        { "letter": "B", "description": "Tell the survivor I cannot take the risk." }
+      ]
+    }
+  ]
+}
