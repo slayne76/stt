@@ -127,6 +127,28 @@
         { "letter": "A", "description": "Lure the substance out without harming it.", "rewards": [{ "crewArchetypeId": 6970, "dropRatePercent": 100, "showName": true }] },
         { "letter": "B", "description": "Dissolve the substance before it reaches the impulse engines." }
       ]
+    },
+    {
+      "id": "the-beginning-of-the-end-of-the-world",
+      "name": "The Beginning of the End of the World",
+      "chainName": "The Beginning of the End of the World",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Debate the vedek.", "leadsToDilemmaId": "the-voice-of-the-prophets" },
+        { "letter": "B", "description": "Reassure the crowd that they are safe." },
+        { "letter": "C", "description": "Allow the vedek to share his beliefs." }
+      ]
+    },
+    {
+      "id": "the-voice-of-the-prophets",
+      "name": "The Voice of the Prophets",
+      "chainName": "The Beginning of the End of the World",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Ask the vedek to hand over the Orb." },
+        { "letter": "B", "description": "Stun him before he can open the Orb." },
+        { "letter": "C", "description": "Convince the vedek that he does not need the Orb's visions.", "rewards": [{ "crewArchetypeId": 6960, "dropRatePercent": 100, "showName": true }] }
+      ]
     }
   ]
 }

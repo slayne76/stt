@@ -31,3 +31,18 @@ export function sortedDilemmas(dilemmas: Dilemma[]): Dilemma[] {
 export function buildCatalogEntryMap(catalog: CatalogEntry[]): Map<number, CatalogEntry> {
   return new Map(catalog.map((c) => [c.archetype_id, c]));
 }
+
+// How many dilemmas share a given chainName — drives the "(part x/y)"
+// subtitle in DilemmasTable.tsx, shown only when this is > 1. Purely
+// derived from chainName/partNumber already on every Dilemma; no schema
+// change. Two dilemmas can share a chainName despite having completely
+// unrelated `name` values (see "The Beginning of the End of the World" /
+// "The Voice of the Prophets") — the subtitle is what makes that
+// relationship visible in the table.
+export function getChainSizeByName(dilemmas: Dilemma[]): Map<string, number> {
+  const sizes = new Map<string, number>();
+  for (const d of dilemmas) {
+    sizes.set(d.chainName, (sizes.get(d.chainName) ?? 0) + 1);
+  }
+  return sizes;
+}

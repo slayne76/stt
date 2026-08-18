@@ -22,6 +22,10 @@ export interface DilemmasTableProps {
   // sortedDilemmas) — this component only reads adjacency, it doesn't sort.
   dilemmas: Dilemma[];
   catalogMap: Map<number, CatalogEntry>;
+  // chainName -> how many dilemmas share it (see getters.ts's
+  // getChainSizeByName) — drives the "(part x/y)" subtitle, shown only
+  // when a dilemma's own chain size is > 1.
+  chainSizeByName: Map<string, number>;
 }
 
 function ChoiceIcon({ kind }: { kind: ChoiceIconKind }) {
@@ -111,7 +115,7 @@ function DropRateCell({ dilemma }: { dilemma: Dilemma }) {
   );
 }
 
-function DilemmasTable({ dilemmas, catalogMap }: DilemmasTableProps) {
+function DilemmasTable({ dilemmas, catalogMap, chainSizeByName }: DilemmasTableProps) {
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -128,13 +132,21 @@ function DilemmasTable({ dilemmas, catalogMap }: DilemmasTableProps) {
           {dilemmas.map((dilemma, index) => {
             const isChainEnd =
               index === dilemmas.length - 1 || dilemmas[index + 1].chainName !== dilemma.chainName;
+            const chainSize = chainSizeByName.get(dilemma.chainName) ?? 1;
             return (
               <TableRow
                 key={dilemma.id}
                 sx={isChainEnd ? { '& td': { borderBottom: `2px solid ${BLOCK_BOUNDARY_COLOR}` } } : undefined}
               >
                 <TableCell>{index + 1}</TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>{dilemma.name}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  {dilemma.name}
+                  {chainSize > 1 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      (part {dilemma.partNumber}/{chainSize})
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell>
                   <ChoicesList dilemma={dilemma} />
                 </TableCell>

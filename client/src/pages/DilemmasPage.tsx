@@ -1,6 +1,6 @@
 import { useDilemmas } from '../hooks/useDilemmas';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
-import { sortedDilemmas, buildCatalogEntryMap } from '../dilemmas/getters';
+import { sortedDilemmas, buildCatalogEntryMap, getChainSizeByName } from '../dilemmas/getters';
 import DilemmasTable from '../dilemmas/DilemmasTable';
 import PageShell from '../layout/PageShell';
 
@@ -12,6 +12,7 @@ function DilemmasPage() {
   const loaded = !loading && !error && !!data;
   const dilemmas = data ? sortedDilemmas(data.dilemmas) : [];
   const catalogMap = buildCatalogEntryMap(catalog ?? []);
+  const chainSizeByName = getChainSizeByName(dilemmas);
 
   return (
     <PageShell
@@ -23,7 +24,7 @@ function DilemmasPage() {
       count={dilemmas.length}
       emptyMessage="No dilemmas recorded yet."
     >
-      <DilemmasTable dilemmas={dilemmas} catalogMap={catalogMap} />
+      <DilemmasTable dilemmas={dilemmas} catalogMap={catalogMap} chainSizeByName={chainSizeByName} />
     </PageShell>
   );
 }
