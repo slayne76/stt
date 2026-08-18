@@ -281,6 +281,28 @@
         { "letter": "B", "description": "Urge him to arrest the suspect before she can flee the system." },
         { "letter": "C", "description": "Share the secret correspondences we received from the Ardanan's servant.", "rewards": [{ "type": "ship", "shipArchetypeId": 2837, "dropRatePercent": 100, "showName": true }] }
       ]
+    },
+    {
+      "id": "cracks-in-the-wall",
+      "name": "Cracks in the Wall",
+      "chainName": "Cracks in the Wall",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Cross the border and assist the Romulan interceptor.", "leadsToDilemmaId": "first-author" },
+        { "letter": "B", "description": "Ensure that the distress call reaches another Romulan ship.", "leadsToDilemmaId": "first-author" },
+        { "letter": "C", "description": "Ignore the distress call." }
+      ]
+    },
+    {
+      "id": "first-author",
+      "name": "First Author",
+      "chainName": "Cracks in the Wall",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Allow the researcher to claim the doctor's work." },
+        { "letter": "B", "description": "Attempt to warn the Romulan doctor." },
+        { "letter": "C", "description": "The captain of the Romulan interceptor we assisted is at the conference. Ask her to warn the doctor.", "rewards": [{ "type": "ship", "shipArchetypeId": 2836, "dropRatePercent": 100, "showName": true }] }
+      ]
     }
   ]
 }
