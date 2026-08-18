@@ -304,7 +304,7 @@ client/src/
                                  getChainSizeByName (chainName -> member count, drives the
                                  "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 34 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 35 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -3850,7 +3850,7 @@ when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
 outlined circle — the user specifically asked for solid). As of
 2026-08-18, `dilemmas.json` has grown from the original 4 seed dilemmas
-to 34 via several same-day additions — all but one purely data-only
+to 35 via several same-day additions — all but one purely data-only
 (new chains/rewards handed over as raw shorthand text, resolved against
 the crew or ship catalog as appropriate, added directly with no code
 changes, no brainstorming/plan/subagent pipeline needed for a pure data
