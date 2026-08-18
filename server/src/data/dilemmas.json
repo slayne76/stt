@@ -461,6 +461,17 @@
         { "letter": "A", "description": "Confiscate the stolen items." },
         { "letter": "B", "description": "Allow the scavenger to leave with what she has taken." }
       ]
+    },
+    {
+      "id": "true-to-the-uniform",
+      "name": "True to the Uniform",
+      "chainName": "True to the Uniform",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Recommend the commander for promotion" },
+        { "letter": "B", "description": "Advise Against promoting the commander." },
+        { "letter": "C", "description": "Decline to comment on the potential promotion." }
+      ]
     }
   ]
 }
