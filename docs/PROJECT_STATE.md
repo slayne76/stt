@@ -1,8 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-18 (Dilemmas: "(part x/y)" chain subtitle; also
-fixed a project-wide client `tsc` verification no-op — see "How this
-project is worked on"). This
+Last updated: 2026-08-18 (Dilemmas: ship rewards + a new ownership-
+independent ship catalog, first non-crew reward). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -106,9 +105,13 @@ client/src/
   context/DilemmasContext.tsx    Same shape again, third independent provider (see "Dilemmas page"
                                  below); simpler than its two siblings — `refresh` just re-runs the
                                  one fetch (no separate POST /refresh endpoint exists for this data)
+  context/ShipCatalogContext.tsx Fourth independent provider, same shape as CrewCatalogContext
+                                 (including the fetcher-parameterized refresh — this one DOES have a
+                                 POST /refresh endpoint) — see "Dilemmas ship rewards" below
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   hooks/useCrewCatalog.ts        Same shape, for CrewCatalogContext
   hooks/useDilemmas.ts           Same shape, for DilemmasContext
+  hooks/useShipCatalog.ts        Same shape, for ShipCatalogContext
   hooks/usePageData.ts          Wraps usePlayerData, adds optional extraLoading + derived loaded
                                  (see "usePageData hook + defaultCrewComparator")
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
@@ -116,13 +119,17 @@ client/src/
   api/catalogApi.ts              fetchCrewCatalog/refreshCrewCatalog (see "Crew catalog and Overview
                                  unique-crew counts")
   api/dilemmasApi.ts             fetchDilemmas — GET only, no refresh variant (see "Dilemmas page" below)
+  api/shipCatalogApi.ts          fetchShipCatalog/refreshShipCatalog, same shape as catalogApi.ts
+                                 (see "Dilemmas ship rewards" below)
   layout/AppLayout.tsx          AppBar + Drawer nav shell; hosts <RefreshControl /> (below) for the
                                  topbar's refresh trigger; wraps `<Outlet />` in `ErrorBoundary`, keyed
                                  by `location.key` (see "Router-level ErrorBoundary" below) — its
                                  first non-page `usePlayerData()` consumer
-  layout/RefreshControl.tsx     Dropdown + Apply button covering player data / assets / catalog /
-                                 all-three-at-once refresh (see "Consolidated refresh dropdown" below)
-                                 — takes the three refresh operations as props, calls no hook/API itself
+  layout/RefreshControl.tsx     Dropdown + Apply button covering player data / assets / catalogs
+                                 (crew + ship, as of 2026-08-18 — see "Dilemmas ship rewards" below;
+                                 label reads "Refresh catalogs", plural) / all-at-once refresh (see
+                                 "Consolidated refresh dropdown" below) — takes the refresh operations
+                                 as props, calls no hook/API itself
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
                                   QPs Ready chip") — first file in this folder, the app's home for
@@ -165,7 +172,12 @@ client/src/
     dilemma.ts                  Dilemma/Choice/Reward interfaces, mirroring
                                  server/src/dilemmasTypes.ts field-for-field (same
                                  no-shared-types-between-workspaces convention as CatalogEntry) —
-                                 see "Dilemmas page" below
+                                 see "Dilemmas page" below. Reward is a discriminated union on
+                                 `type: 'crew' | 'ship'` (added by "Dilemmas ship rewards" below) —
+                                 the two files are byte-identical (same git blob) as of that feature
+    shipCatalogEntry.ts         ShipCatalogEntry interface (archetype_id, name, icon: DatacoreAsset-
+                                 shaped {file}, rarity), mirroring server/src/shipCatalogClient.ts's
+                                 same-named export — see "Dilemmas ship rewards" below
   assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
     config.ts                  ASSET_BASE_URL = '/api/assets' (repointed at the local proxy — see "Asset cache proxy")
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
@@ -292,7 +304,7 @@ client/src/
                                  getChainSizeByName (chainName -> member count, drives the
                                  "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 17 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 19 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -366,7 +378,24 @@ server/src/
                                                           data + its GET-only route — no cache,
                                                           no upstream fetch, no refresh endpoint,
                                                           unlike every other resource in this repo
-                                                          (see "Dilemmas page" below)
+                                                          (see "Dilemmas page" below). Reward is a
+                                                          `type: 'crew' | 'ship'` discriminated union
+                                                          (see "Dilemmas ship rewards" below) — the
+                                                          `as DilemmasResponse` assertion on import
+                                                          does NOT verify `type` is present/correct
+                                                          on hand-added reward objects, see that
+                                                          section and the comment in routes/dilemmas.ts
+  shipCatalogClient.ts, shipCatalogCache.ts, routes/shipCatalog.ts   Ship catalog proxy/cache/route,
+                                                          mirrors catalogClient.ts/catalogCache.ts/
+                                                          routes/catalog.ts exactly (same 24h TTL,
+                                                          same stale-cache-on-GET/no-fallback-on-
+                                                          refresh split) — sourced from
+                                                          https://datacore.app/structured/
+                                                          ship_schematics.json, the ownership-
+                                                          independent ship catalog this app otherwise
+                                                          has no equivalent of (player.character.ships
+                                                          is the player's own *owned* ships only) —
+                                                          see "Dilemmas ship rewards" below
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
   authClient.ts, sessionCache.ts   The real 6-hop STT login flow, and its
                                     persisted-session-cookie cache (see
@@ -3821,13 +3850,15 @@ when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
 outlined circle — the user specifically asked for solid). As of
 2026-08-18, `dilemmas.json` has grown from the original 4 seed dilemmas
-to 17 via several same-day, data-only additions (new chains/rewards
-handed over as raw shorthand text, resolved against the crew catalog,
-and added directly — no code changes, no brainstorming/plan/subagent
-pipeline needed for a pure data change against an already-approved
-schema; see the Dilemmas entries in `project_stt-tracker-state.md` for
-the running list). None of them exercise the circle branch yet (every
-one has at least one positive choice) — first real test of that path
+to 19 via several same-day additions — most purely data-only (new
+chains/rewards handed over as raw shorthand text, resolved against the
+crew catalog, added directly with no code changes, no brainstorming/
+plan/subagent pipeline needed for a pure data change against an
+already-approved schema; see the Dilemmas entries in
+`project_stt-tracker-state.md` for the running list), one ("Blow by
+Blow" / "Friends in Need") requiring real code — see "Dilemmas ship
+rewards" below. None of them exercise the circle branch yet (every one
+has at least one positive choice) — first real test of that path
 arrives with the next dilemma added that has no chain/reward relation
 at all.
 
@@ -3861,21 +3892,102 @@ here, but it was a **verification-convention** issue, not a code defect
 `DropRateCell`): one group per reward-bearing choice, laid out **side by
 side in one flex row** (`flexWrap: 'wrap'`), never stacked — this was the
 first mockup correction: the user explicitly rejected a "one line per
-choice" vertical stack once they saw it rendered. Each reward's crew icon
-resolves via `catalogMap.get(crewArchetypeId)` against the full crew
-catalog (not the player's owned crew — a reward crew member is very
-plausibly unowned) for `imageUrlPortrait` + `name`, same `Thumbnail`/
-`ASSET_BASE_URL` pattern `FrozenCrewTable.tsx` already established for
-catalog-sourced (rather than player-sourced) portraits; a missing catalog
-entry falls back to `Thumbnail`'s built-in placeholder box and a
-`#<archetypeId>` label. Drop Rate collapses to one value when every
-reward-bearing choice in the row shares the same `dropRatePercent` (true
-for both seed examples: Part 3's two 100%s, the pool's eleven 2%s), else
-prints one `"A: N%"` line per choice — the code reads only
-`rewards[0].dropRatePercent` per choice on the documented (not
-type-enforced) assumption that a single choice's reward pool is always
-internally uniform, confirmed against the real seed data by the final
-reviewer.
+choice" vertical stack once they saw it rendered. As of the original
+ship-less version of this feature, each reward's crew icon resolved via
+`catalogMap.get(crewArchetypeId)` against the full crew catalog (not the
+player's owned crew — a reward crew member is very plausibly unowned)
+for `imageUrlPortrait` + `name`, same `Thumbnail`/`ASSET_BASE_URL`
+pattern `FrozenCrewTable.tsx` already established for catalog-sourced
+(rather than player-sourced) portraits; a missing catalog entry falls
+back to `Thumbnail`'s built-in placeholder box and a `#<archetypeId>`
+label. **Extended 2026-08-18 to support ship rewards too — see
+"Dilemmas ship rewards" below.** Drop Rate collapses to one value when
+every reward-bearing choice in the row shares the same `dropRatePercent`
+(true for every seed example so far), else prints one `"A: N%"` line per
+choice — the code reads only `rewards[0].dropRatePercent` per choice on
+the documented (not type-enforced) assumption that a single choice's
+reward pool is always internally uniform, confirmed against the real
+seed data by the final reviewer.
+
+**Dilemmas ship rewards (2026-08-18):** the first dilemma reward that
+isn't crew — "Blow by Blow" → "Friends in Need" rewards a ship ("Borg
+Cube"). This app had no ship data source independent of the current
+player's own owned ships (`player.character.ships`) — the same problem
+crew rewards would have if they resolved against owned crew instead of
+the catalog. Investigation found a genuine, ownership-independent ship
+catalog on the same host as the crew catalog:
+`https://datacore.app/structured/ship_schematics.json` (127 entries,
+each wrapping a `ship` object with `archetype_id`/`name`/`icon: {file}`/
+`rarity` — confirmed to include Borg Cube, archetype_id `2819`). A new
+server-side ship catalog subsystem (`shipCatalogClient.ts`/
+`shipCatalogCache.ts`/`routes/shipCatalog.ts`) mirrors the crew
+catalog's proxy/cache/route shape exactly (same 24h TTL, same
+stale-cache-on-GET/no-fallback-on-refresh split), and a client-side
+mirror (`ShipCatalogContext`/`useShipCatalog`/`shipCatalogApi.ts`) does
+the same for `CrewCatalogContext`. `Reward` (both server
+`dilemmasTypes.ts` and client `types/dilemma.ts` — the two files are the
+literal same git blob) became a discriminated union on
+`type: 'crew' | 'ship'` — a bare shared numeric id was rejected during
+design since crew and ship `archetype_id`s are independent numeric
+spaces that could collide (none currently do, confirmed by the final
+reviewer, but the discriminant is a correctness guard, not a workaround
+for an existing collision). `DilemmasTable.tsx`'s `RewardIcon` branches
+explicitly on `type`, looking crew rewards up only in `catalogMap` and
+ship rewards only in a new `shipCatalogMap` prop, rendering ship icons
+via `<Thumbnail asset={entry.icon} />` — the exact pattern
+`ShipsTable.tsx` already used for owned-ship icons, so no new
+asset-resolution code was needed at all.
+
+**Refresh dropdown wiring**: the topbar's "Refresh catalog" option
+(see "Consolidated refresh dropdown" above) is renamed **"Refresh
+catalogs"** (plural) and now fires crew-catalog and ship-catalog
+refresh together via `Promise.allSettled`; "Refresh all" includes both.
+`AppLayout.tsx` gained a second catalog-error `Snackbar`, mirroring the
+existing crew-catalog one.
+
+**Data migration**: all 52 pre-existing `Reward` objects in
+`dilemmas.json` needed `"type": "crew"` added. Done via a targeted `sed`
+text substitution (`{ "crewArchetypeId":` → `{ "type": "crew",
+"crewArchetypeId":`) rather than a full JSON re-serialize, which would
+have reformatted the entire ~250-line file into an unreviewable diff —
+the actual diff touched only the 52 reward-object lines. The final
+reviewer independently re-derived losslessness two ways: structural
+(52 pre-branch rewards → 52 typed rewards, byte-identical
+`crewArchetypeId`/`dropRatePercent`/`showName` values and order) and
+textual (undoing the exact `sed` substitution on the post-branch file
+leaves a diff against the pre-branch file that is purely additive —
+only the new chain's 21 lines, zero removed, zero modified elsewhere).
+
+**Four-task plan** (server ship catalog; server `Reward` type +
+migration + new data; client ship catalog + refresh wiring; client
+Dilemmas rendering), each task review clean on the first pass — task 2's
+reviewer specifically re-verified the migration's integrity
+independently rather than trusting the implementer's counts, task 3 and
+4's reviewers specifically scrutinized the real-browser evidence for
+authenticity per this project's documented verification-integrity
+history, and found it genuinely concrete (exact DOM values, exact
+network requests) both times. **Final review (opus) found no Critical
+issues; one Important finding, fixed in one round:** the comment above
+`routes/dilemmas.ts`'s `as DilemmasResponse` assertion claimed `tsc`
+catches "a field renamed on one side but not the other" — the reviewer
+empirically disproved this for the `type` discriminant specifically (a
+reward object with `type` omitted still compiles clean, since excess-
+property checking doesn't apply through a JSON-module type) and flagged
+it as a real risk given this file is hand-edited almost daily. Fixed by
+correcting the comment to state plainly that `type` is NOT checked by
+this assertion and must be added by hand on every new reward — a
+two-line, zero-behavior-change correction, plus (bundled in the same fix
+per the reviewer's own recommendation) making `DilemmasTable.tsx`'s
+`RewardIcon` ship branch explicit (`if (reward.type === 'ship')` instead
+of an implicit else) with a `return null` fallback for the
+should-be-impossible-but-no-longer-silently-accepted case, and a
+three-way `key` expression so a malformed reward can't collide on
+`ship-undefined`. Scoped re-review: both addressed, no new breakage. A
+few Minor findings parked, none load-bearing (the `rarity` field is
+fetched/cached/mirrored but never rendered; `ShipCatalogEntry.icon`
+could use the named `DatacoreAsset` type client-side instead of an
+inline structural shape; ship preview images are ~12× heavier than crew
+portraits per cell, fine at today's scale).
 
 **Chain grouping**: `sortedDilemmas` (chainName alpha, then partNumber asc)
 produces both the display order and the adjacency the divider needs — the
@@ -3937,7 +4049,9 @@ same crew twice — neither seed dilemma does).
 `docs/superpowers/plans/2026-08-18-dilemmas-page-plan.md` (original page);
 `docs/superpowers/specs/2026-08-18-dilemmas-chain-subtitle-design.md`,
 `docs/superpowers/plans/2026-08-18-dilemmas-chain-subtitle-plan.md`
-(chain subtitle).
+(chain subtitle); `docs/superpowers/specs/2026-08-18-dilemmas-ship-rewards-design.md`,
+`docs/superpowers/plans/2026-08-18-dilemmas-ship-rewards-plan.md`
+(ship rewards + ship catalog).
 
 ## Feature history (chronological)
 
@@ -5867,6 +5981,32 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     defect in this feature's code (independently confirmed clean via the
     correct command), but a real gap in how every prior client-side
     task's "tsc clean" claim was actually verified.
+
+61. **Dilemmas ship rewards + ship catalog**
+    (`2026-08-18-dilemmas-ship-rewards`) — the first non-crew dilemma
+    reward ("Blow by Blow" → "Friends in Need" rewards "Borg Cube").
+    Required a brand-new server-side ship catalog
+    (`shipCatalogClient.ts`/`shipCatalogCache.ts`/`routes/shipCatalog.ts`,
+    mirroring the crew catalog exactly) sourced from
+    `https://datacore.app/structured/ship_schematics.json` — discovered
+    specifically because this app had no ship data source independent of
+    the player's own owned ships, the same problem crew rewards would
+    have if they resolved against owned crew. `Reward` became a
+    `type: 'crew' | 'ship'` discriminated union on both server and
+    client (the two type files are the literal same git blob); the
+    topbar's "Refresh catalog" option was renamed "Refresh catalogs"
+    (plural) and now refreshes both catalogs together. Full write-up in
+    "Dilemmas ship rewards" above (data-model reasoning, migration
+    losslessness proof, refresh wiring, final-review finding and fix).
+    Four-task plan, every task review clean on first pass. **Final
+    review (opus) found no Critical issues; one Important finding** — a
+    comment in `routes/dilemmas.ts` overstated what the `as
+    DilemmasResponse` assertion catches (empirically disproved for the
+    `type` discriminant specifically, a real risk since `dilemmas.json`
+    is hand-edited almost daily) — fixed in one round (corrected comment
+    + an explicit ship branch/fallback in `RewardIcon` bundled in per the
+    reviewer's own recommendation), scoped re-review clean. Several Minor
+    findings parked, none load-bearing.
 
 ## Current routes / nav (in order)
 
