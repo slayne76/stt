@@ -10,8 +10,9 @@ import {
   Typography,
 } from '@mui/material';
 import { CheckCircle, Cancel, FiberManualRecord } from '@mui/icons-material';
-import type { Choice, Dilemma } from '../types/dilemma';
+import type { Choice, Dilemma, Reward } from '../types/dilemma';
 import type { CatalogEntry } from '../types/catalogEntry';
+import type { ShipCatalogEntry } from '../types/shipCatalogEntry';
 import { getChoiceIcon, type ChoiceIconKind } from './getters';
 import Thumbnail from '../assets/Thumbnail';
 import { ASSET_BASE_URL } from '../assets/config';
@@ -22,6 +23,7 @@ export interface DilemmasTableProps {
   // sortedDilemmas) — this component only reads adjacency, it doesn't sort.
   dilemmas: Dilemma[];
   catalogMap: Map<number, CatalogEntry>;
+  shipCatalogMap: Map<number, ShipCatalogEntry>;
   // chainName -> how many dilemmas share it (see getters.ts's
   // getChainSizeByName) — drives the "(part x/y)" subtitle, shown only
   // when a dilemma's own chain size is > 1.
@@ -56,7 +58,54 @@ function rewardChoices(dilemma: Dilemma): Choice[] {
   return dilemma.choices.filter((c) => (c.rewards?.length ?? 0) > 0);
 }
 
-function RewardCell({ dilemma, catalogMap }: { dilemma: Dilemma; catalogMap: Map<number, CatalogEntry> }) {
+// One reward icon (+ optional name), branching on the crew/ship discriminant.
+// Both catalogs are keyed by their own archetype_id space — a crew reward
+// only ever looks itself up in catalogMap, a ship reward only in
+// shipCatalogMap, never cross-checked against the other.
+function RewardIcon({
+  reward,
+  catalogMap,
+  shipCatalogMap,
+}: {
+  reward: Reward;
+  catalogMap: Map<number, CatalogEntry>;
+  shipCatalogMap: Map<number, ShipCatalogEntry>;
+}) {
+  if (reward.type === 'crew') {
+    const entry = catalogMap.get(reward.crewArchetypeId);
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
+        <Thumbnail url={entry ? `${ASSET_BASE_URL}/${entry.imageUrlPortrait}` : undefined} />
+        {reward.showName && (
+          <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
+            {entry?.name ?? `#${reward.crewArchetypeId}`}
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+  const entry = shipCatalogMap.get(reward.shipArchetypeId);
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
+      <Thumbnail asset={entry?.icon} />
+      {reward.showName && (
+        <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
+          {entry?.name ?? `#${reward.shipArchetypeId}`}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function RewardCell({
+  dilemma,
+  catalogMap,
+  shipCatalogMap,
+}: {
+  dilemma: Dilemma;
+  catalogMap: Map<number, CatalogEntry>;
+  shipCatalogMap: Map<number, ShipCatalogEntry>;
+}) {
   const choices = rewardChoices(dilemma);
   if (choices.length === 0) {
     return <Typography color="text.secondary">&mdash;</Typography>;
@@ -69,22 +118,14 @@ function RewardCell({ dilemma, catalogMap }: { dilemma: Dilemma; catalogMap: Map
             {choice.letter}:
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {(choice.rewards ?? []).map((reward) => {
-              const entry = catalogMap.get(reward.crewArchetypeId);
-              return (
-                <Box
-                  key={reward.crewArchetypeId}
-                  sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}
-                >
-                  <Thumbnail url={entry ? `${ASSET_BASE_URL}/${entry.imageUrlPortrait}` : undefined} />
-                  {reward.showName && (
-                    <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
-                      {entry?.name ?? `#${reward.crewArchetypeId}`}
-                    </Typography>
-                  )}
-                </Box>
-              );
-            })}
+            {(choice.rewards ?? []).map((reward) => (
+              <RewardIcon
+                key={reward.type === 'crew' ? `crew-${reward.crewArchetypeId}` : `ship-${reward.shipArchetypeId}`}
+                reward={reward}
+                catalogMap={catalogMap}
+                shipCatalogMap={shipCatalogMap}
+              />
+            ))}
           </Box>
         </Box>
       ))}
@@ -115,7 +156,7 @@ function DropRateCell({ dilemma }: { dilemma: Dilemma }) {
   );
 }
 
-function DilemmasTable({ dilemmas, catalogMap, chainSizeByName }: DilemmasTableProps) {
+function DilemmasTable({ dilemmas, catalogMap, shipCatalogMap, chainSizeByName }: DilemmasTableProps) {
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -151,7 +192,7 @@ function DilemmasTable({ dilemmas, catalogMap, chainSizeByName }: DilemmasTableP
                   <ChoicesList dilemma={dilemma} />
                 </TableCell>
                 <TableCell>
-                  <RewardCell dilemma={dilemma} catalogMap={catalogMap} />
+                  <RewardCell dilemma={dilemma} catalogMap={catalogMap} shipCatalogMap={shipCatalogMap} />
                 </TableCell>
                 <TableCell>
                   <DropRateCell dilemma={dilemma} />

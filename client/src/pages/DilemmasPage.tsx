@@ -1,17 +1,20 @@
 import { useDilemmas } from '../hooks/useDilemmas';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
-import { sortedDilemmas, buildCatalogEntryMap, getChainSizeByName } from '../dilemmas/getters';
+import { useShipCatalog } from '../hooks/useShipCatalog';
+import { sortedDilemmas, buildCatalogEntryMap, buildShipCatalogEntryMap, getChainSizeByName } from '../dilemmas/getters';
 import DilemmasTable from '../dilemmas/DilemmasTable';
 import PageShell from '../layout/PageShell';
 
 function DilemmasPage() {
   const { data: catalog, loading: catalogLoading } = useCrewCatalog();
+  const { data: shipCatalog, loading: shipCatalogLoading } = useShipCatalog();
   const { data, loading: dilemmasLoading, error, refresh } = useDilemmas();
 
-  const loading = dilemmasLoading || catalogLoading;
+  const loading = dilemmasLoading || catalogLoading || shipCatalogLoading;
   const loaded = !loading && !error && !!data;
   const dilemmas = data ? sortedDilemmas(data.dilemmas) : [];
   const catalogMap = buildCatalogEntryMap(catalog ?? []);
+  const shipCatalogMap = buildShipCatalogEntryMap(shipCatalog ?? []);
   const chainSizeByName = getChainSizeByName(dilemmas);
 
   return (
@@ -24,7 +27,12 @@ function DilemmasPage() {
       count={dilemmas.length}
       emptyMessage="No dilemmas recorded yet."
     >
-      <DilemmasTable dilemmas={dilemmas} catalogMap={catalogMap} chainSizeByName={chainSizeByName} />
+      <DilemmasTable
+        dilemmas={dilemmas}
+        catalogMap={catalogMap}
+        shipCatalogMap={shipCatalogMap}
+        chainSizeByName={chainSizeByName}
+      />
     </PageShell>
   );
 }

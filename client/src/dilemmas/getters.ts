@@ -1,4 +1,5 @@
 import type { CatalogEntry } from '../types/catalogEntry';
+import type { ShipCatalogEntry } from '../types/shipCatalogEntry';
 import type { Choice, Dilemma } from '../types/dilemma';
 
 export type ChoiceIconKind = 'check' | 'x' | 'circle';
@@ -29,6 +30,10 @@ export function sortedDilemmas(dilemmas: Dilemma[]): Dilemma[] {
 }
 
 export function buildCatalogEntryMap(catalog: CatalogEntry[]): Map<number, CatalogEntry> {
+  return new Map(catalog.map((c) => [c.archetype_id, c]));
+}
+
+export function buildShipCatalogEntryMap(catalog: ShipCatalogEntry[]): Map<number, ShipCatalogEntry> {
   return new Map(catalog.map((c) => [c.archetype_id, c]));
 }
 
