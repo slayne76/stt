@@ -393,6 +393,33 @@
         { "letter": "A", "description": "Repay the outpost for what crew name's counterpart took." },
         { "letter": "B", "description": "Reassure the outpost's inhabitants that <crew name> means them no harm." }
       ]
+    },
+    {
+      "id": "dangerous-whispers",
+      "name": "Dangerous Whispers",
+      "chainName": "Dangerous Whispers",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Tip the captain off.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        },
+        { "letter": "B", "description": "Try to persuade the crew plotting a potential mutiny." },
+        { "letter": "C", "description": "Inform Starfleet." }
+      ]
     }
   ]
 }
