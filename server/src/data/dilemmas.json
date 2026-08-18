@@ -56,6 +56,26 @@
         },
         { "letter": "B", "description": "Tell the survivor I cannot take the risk." }
       ]
+    },
+    {
+      "id": "a-life-alone-part-1",
+      "name": "A Life Alone, Part 1",
+      "chainName": "A Life Alone",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Encourage the young Trill to join Starfleet.", "leadsToDilemmaId": "a-life-alone-part-2" },
+        { "letter": "B", "description": "Advise the young Trill to look for purpose elsewhere." }
+      ]
+    },
+    {
+      "id": "a-life-alone-part-2",
+      "name": "A Life Alone, Part 2",
+      "chainName": "A Life Alone",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Tell him to remain at Starfleet Academy.", "rewards": [{ "crewArchetypeId": 6959, "dropRatePercent": 100, "showName": true }] },
+        { "letter": "B", "description": "Tell him to return home for the joining." }
+      ]
     }
   ]
 }
