@@ -482,6 +482,16 @@
         { "letter": "A", "description": "Save the captain." },
         { "letter": "B", "description": "Save the prisoner." }
       ]
+    },
+    {
+      "id": "what-smiles-may-hide",
+      "name": "What Smiles May Hide",
+      "chainName": "What Smiles May Hide",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Allow the trader to board the <ship name>." },
+        { "letter": "B", "description": "Tell the trader to make other arrangements." }
+      ]
     }
   ]
 }
