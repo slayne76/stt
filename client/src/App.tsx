@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { PlayerDataProvider } from './context/PlayerDataContext';
 import { CrewCatalogProvider } from './context/CrewCatalogContext';
 import { CitationPrioritiesProvider } from './context/CitationPrioritiesContext';
+import { DilemmasProvider } from './context/DilemmasContext';
 import AppLayout from './layout/AppLayout';
 import { ROUTES } from './routes';
 
@@ -15,18 +16,22 @@ function App() {
     // nesting it innermost would make /api/player and /api/catalog queue
     // behind that on every cold load, stalling the whole page instead of just
     // the two citation sections. Outermost means its fetch fires last.
+    // DilemmasProvider fetches a small static file — cheap regardless of
+    // nesting position — so it goes innermost, alongside CrewCatalogProvider.
     <CitationPrioritiesProvider>
       <PlayerDataProvider>
         <CrewCatalogProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route element={<AppLayout />}>
-                {ROUTES.map(({ path, element }) => (
-                  <Route key={path} path={path} element={element} />
-                ))}
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <DilemmasProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route element={<AppLayout />}>
+                  {ROUTES.map(({ path, element }) => (
+                    <Route key={path} path={path} element={element} />
+                  ))}
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </DilemmasProvider>
         </CrewCatalogProvider>
       </PlayerDataProvider>
     </CitationPrioritiesProvider>

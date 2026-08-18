@@ -12,6 +12,7 @@ import FiveStarsShipsPage from './pages/FiveStarsShipsPage';
 import FourStarsShipsPage from './pages/FourStarsShipsPage';
 import QPsPage from './pages/QPsPage';
 import FrozenCrewPage from './pages/FrozenCrewPage';
+import DilemmasPage from './pages/DilemmasPage';
 
 export interface NavLink {
   label: string;
@@ -52,6 +53,7 @@ export const NAV_ITEMS: (NavLink | NavGroup)[] = [
     ],
   },
   { label: 'Collections', path: '/collections', element: <CollectionsPage /> },
+  { label: 'Dilemmas', path: '/dilemmas', element: <DilemmasPage /> },
 ];
 
 function flattenRoutes(items: (NavLink | NavGroup)[]): NavLink[] {
