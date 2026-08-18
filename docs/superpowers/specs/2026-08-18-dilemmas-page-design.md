@@ -161,7 +161,7 @@ A throwaway standalone HTML mockup (real crew portraits pulled from the running 
 - No automatic reward computation — purely static, hand-maintained JSON, so it's trivial to swap for computed data later without touching the frontend.
 - No search/filter/pagination on this page yet.
 - No editing UI — updates to `dilemmas.json` are a manual edit + redeploy, same as any other static content in this repo.
-- No validation of the JSON's shape at server startup — TypeScript's `resolveJsonModule` type-checks it against the `Dilemma[]` interface at build time, which is sufficient for a hand-maintained file.
+- No validation of the JSON's shape at server startup — TypeScript's `resolveJsonModule` catches gross shape mismatches (missing/misspelled keys) against the `Dilemma[]` interface at build time via a type assertion (a checked assignment doesn't compile, since JSON string fields infer as plain `string`, not the narrower `'A' | 'B' | 'C'` literal union — see the plan for the exact assertion), which is sufficient for a hand-maintained file.
 
 ## Verification plan
 
