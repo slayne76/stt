@@ -84,17 +84,24 @@ function RewardIcon({
       </Box>
     );
   }
-  const entry = shipCatalogMap.get(reward.shipArchetypeId);
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
-      <Thumbnail asset={entry?.icon} />
-      {reward.showName && (
-        <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
-          {entry?.name ?? `#${reward.shipArchetypeId}`}
-        </Typography>
-      )}
-    </Box>
-  );
+  if (reward.type === 'ship') {
+    const entry = shipCatalogMap.get(reward.shipArchetypeId);
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
+        <Thumbnail asset={entry?.icon} />
+        {reward.showName && (
+          <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
+            {entry?.name ?? `#${reward.shipArchetypeId}`}
+          </Typography>
+        )}
+      </Box>
+    );
+  }
+  // Should be impossible under TypeScript, but Reward data is parsed from
+  // hand-maintained JSON at runtime (see server/src/routes/dilemmas.ts) and
+  // isn't guaranteed to actually carry a valid `type`. Fail visibly (render
+  // nothing) rather than silently falling into the ship branch.
+  return null;
 }
 
 function RewardCell({
@@ -120,7 +127,13 @@ function RewardCell({
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
             {(choice.rewards ?? []).map((reward) => (
               <RewardIcon
-                key={reward.type === 'crew' ? `crew-${reward.crewArchetypeId}` : `ship-${reward.shipArchetypeId}`}
+                key={
+                  reward.type === 'crew'
+                    ? `crew-${reward.crewArchetypeId}`
+                    : reward.type === 'ship'
+                      ? `ship-${reward.shipArchetypeId}`
+                      : `unknown-${JSON.stringify(reward)}`
+                }
                 reward={reward}
                 catalogMap={catalogMap}
                 shipCatalogMap={shipCatalogMap}
