@@ -260,6 +260,27 @@
         { "letter": "B", "description": "Ask the Andorian we rescued to distract the guards.", "rewards": [{ "type": "ship", "shipArchetypeId": 2819, "dropRatePercent": 100, "showName": true }] },
         { "letter": "C", "description": "Ask the Gorn we rescued to fight the guards." }
       ]
+    },
+    {
+      "id": "class-act",
+      "name": "Class Act",
+      "chainName": "Class Act",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Support the respectable Ardanan's accusations." },
+        { "letter": "B", "description": "Defend the frightened servant.", "leadsToDilemmaId": "burden-of-proof" }
+      ]
+    },
+    {
+      "id": "burden-of-proof",
+      "name": "Burden of Proof",
+      "chainName": "Class Act",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Encourage him to gather definitive proof before accusing the Ardanan." },
+        { "letter": "B", "description": "Urge him to arrest the suspect before she can flee the system." },
+        { "letter": "C", "description": "Share the secret correspondences we received from the Ardanan's servant.", "rewards": [{ "type": "ship", "shipArchetypeId": 2837, "dropRatePercent": 100, "showName": true }] }
+      ]
     }
   ]
 }
