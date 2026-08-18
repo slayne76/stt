@@ -289,7 +289,7 @@ client/src/
                                  alphabetical order and chain-adjacency for the divider),
                                  buildCatalogEntryMap (archetype_id -> CatalogEntry lookup)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 6 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 9 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -3816,14 +3816,17 @@ choice in the same dilemma does have a `leadsToDilemmaId` or `rewards` — the
 dilemma is part of a chain/has a reward, this choice just isn't it. Only
 when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
-outlined circle — the user specifically asked for solid). None of the 6
-seed dilemmas (as of the 2026-08-18 "A Life Alone" addition, a
-same-day two-part chain ending in a single guaranteed reward — Part 1
-A→Part 2/B dead-end, Part 2 A→Jannar (100%, `showName: true`)/B
-dead-end — added directly as a data-only change, no code touched, same
-schema) actually exercise the circle branch (every one has at least
-one positive choice) — first real test of that path arrives with the
-next dilemma added to the JSON that has no chain/reward relation at all.
+outlined circle — the user specifically asked for solid). None of the 9
+seed dilemmas (as of the 2026-08-18 same-day data-only additions — "A
+Life Alone", a two-part chain ending in a single guaranteed reward
+(Part 1 A→Part 2/B dead-end, Part 2 A→Jannar 100%/B dead-end); and
+"Champion of the People", a three-part chain ending in two single
+guaranteed rewards (Part 1 A→Part 2/B dead-end, Part 2 A dead-end/B→
+Part 3, Part 3 A→Ensign Picard 100%/B→Colonel Worf 100%) — both added
+directly to `dilemmas.json`, no code touched, same schema) actually
+exercise the circle branch (every one has at least one positive choice)
+— first real test of that path arrives with the next dilemma added to
+the JSON that has no chain/reward relation at all.
 
 **Reward/Drop Rate columns** (`DilemmasTable.tsx`'s `RewardCell`/
 `DropRateCell`): one group per reward-bearing choice, laid out **side by
