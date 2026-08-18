@@ -304,7 +304,7 @@ client/src/
                                  getChainSizeByName (chainName -> member count, drives the
                                  "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
-                                 list renders directly (only 26 rows so far, see "Dilemmas page" below)
+                                 list renders directly (only 27 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -3850,7 +3850,7 @@ when the *whole* dilemma has zero reward and zero chain link on any choice
 does every choice get the solid grey `FiberManualRecord` disc (not an
 outlined circle — the user specifically asked for solid). As of
 2026-08-18, `dilemmas.json` has grown from the original 4 seed dilemmas
-to 26 via several same-day additions — all but one purely data-only
+to 27 via several same-day additions — all but one purely data-only
 (new chains/rewards handed over as raw shorthand text, resolved against
 the crew or ship catalog as appropriate, added directly with no code
 changes, no brainstorming/plan/subagent pipeline needed for a pure data
@@ -3859,9 +3859,10 @@ change against an already-approved schema; see the Dilemmas entries in
 now, only the first one ("Blow by Blow" / "Friends in Need") needed
 real code, the other 3 landed as pure data confirming the `type: 'ship'`
 infrastructure genuinely generalizes; see "Dilemmas ship rewards"
-below). None of them exercise the circle branch yet (every one has
-at least one positive choice) — first real test of that path arrives
-with the next dilemma added that has no chain/reward relation at all.
+below). **"By Our Own Hands" is the first dilemma to exercise the
+circle branch** — both choices have no reward and no `leadsToDilemmaId`,
+confirmed rendering the solid grey disc on both, live, after 26 prior
+seed dilemmas each had at least one positive choice.
 
 **Chain subtitle** (`(part x/y)`, added 2026-08-18): a second-line
 caption under the dilemma's `name` in the Name cell, showing its
