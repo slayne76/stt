@@ -212,6 +212,33 @@
           ]
         }
       ]
+    },
+    {
+      "id": "a-tense-temporal-conundrum",
+      "name": "A Tense Temporal Conundrum",
+      "chainName": "A Tense Temporal Conundrum",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Tell him a palatable version of the truth.",
+          "rewards": [
+            { "crewArchetypeId": 18157, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 21976, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 23481, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24025, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 24853, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 26216, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 28013, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 29195, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31199, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 31546, "dropRatePercent": 2, "showName": false },
+            { "crewArchetypeId": 32154, "dropRatePercent": 2, "showName": false }
+          ]
+        },
+        { "letter": "B", "description": "Lie to him." },
+        { "letter": "C", "description": "Contact the DTI." }
+      ]
     }
   ]
 }
