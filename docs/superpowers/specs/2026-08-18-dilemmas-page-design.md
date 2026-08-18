@@ -133,7 +133,7 @@ The four dilemmas given, with crew names resolved to `archetype_id` by exact-nam
 
 - `client/src/types/dilemma.ts` — the three interfaces above.
 - `client/src/api/dilemmasApi.ts` — `fetchDilemmas(): Promise<{ dilemmas: Dilemma[] }>`.
-- `client/src/hooks/useDilemmas.ts` — a self-contained `useState`/`useEffect` hook (fetch-on-mount, `{ data, loading, error, refresh }`). No Context/Provider: only one page ever consumes this, unlike `CrewCatalogContext` which is shared by more than one page — a provider here would be unused ceremony.
+- `client/src/context/DilemmasContext.tsx` + `client/src/hooks/useDilemmas.ts` — the implementation plan reversed this section's original call: rather than a bespoke local-state hook, it uses a `DilemmasContext`/`DilemmasProvider` mirroring `CrewCatalogContext`'s shape (fetch-on-mount, `{ data, loading, error, refresh }`), mounted innermost in `App.tsx` alongside `CrewCatalogProvider`. Even with only one page consuming it today, this keeps every fetched data source in the app on the same pattern rather than introducing a one-off; the cost is `/api/dilemmas` being fetched on every app load, not just on visiting `/dilemmas` — a few KB against a local server, judged worth the consistency. `useDilemmas()` throws if used outside the provider, same as `useCrewCatalog()`.
 - `client/src/dilemmas/getters.ts`:
   - `dilemmaHasRelation(dilemma): boolean` — true if any choice has `leadsToDilemmaId` set or a non-empty `rewards`.
   - `getChoiceIcon(dilemma, choice): 'check' | 'x' | 'circle'`:
