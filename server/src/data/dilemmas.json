@@ -451,6 +451,16 @@
         { "letter": "A", "description": "Give the mining rights to the colonists, who own this star system." },
         { "letter": "B", "description": "Give the mining rights to the Ferengi company, who found the deposit." }
       ]
+    },
+    {
+      "id": "the-greater-need",
+      "name": "The Greater Need",
+      "chainName": "The Greater Need",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Confiscate the stolen items." },
+        { "letter": "B", "description": "Allow the scavenger to leave with what she has taken." }
+      ]
     }
   ]
 }
