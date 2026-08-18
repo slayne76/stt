@@ -431,6 +431,16 @@
         { "letter": "B", "description": "Arrest the Maquis stowaway." },
         { "letter": "C", "description": "Leave the stowaway at the nearest outpost." }
       ]
+    },
+    {
+      "id": "outstretched-talons",
+      "name": "Outstretched Talons",
+      "chainName": "Outstretched Talons",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Contact the Romulans and demand that they reverse course." },
+        { "letter": "B", "description": "Open fire on the trespassing Romulan warbird." }
+      ]
     }
   ]
 }
