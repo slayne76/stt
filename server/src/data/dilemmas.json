@@ -492,6 +492,17 @@
         { "letter": "A", "description": "Allow the trader to board the <ship name>." },
         { "letter": "B", "description": "Tell the trader to make other arrangements." }
       ]
+    },
+    {
+      "id": "sticks-and-stones",
+      "name": "Sticks and Stones",
+      "chainName": "Sticks and Stones",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Endure the Klingon captain's insults." },
+        { "letter": "B", "description": "Insult the drunken captain for his behavior." },
+        { "letter": "C", "description": "Correct the offensive rumors the Klingon captain has heard." }
+      ]
     }
   ]
 }
