@@ -303,6 +303,27 @@
         { "letter": "B", "description": "Attempt to warn the Romulan doctor." },
         { "letter": "C", "description": "The captain of the Romulan interceptor we assisted is at the conference. Ask her to warn the doctor.", "rewards": [{ "type": "ship", "shipArchetypeId": 2836, "dropRatePercent": 100, "showName": true }] }
       ]
+    },
+    {
+      "id": "retrofit",
+      "name": "Retrofit",
+      "chainName": "Retrofit",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Give the space to <crew name> for auxiliary deflector array." },
+        { "letter": "B", "description": "Give the space to <crew name> for torpedo development.", "leadsToDilemmaId": "the-tools-at-hand" }
+      ]
+    },
+    {
+      "id": "the-tools-at-hand",
+      "name": "The Tools at Hand",
+      "chainName": "Retrofit",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Distract the probe with phaser fire." },
+        { "letter": "B", "description": "Disable the probe with crew name's new deflector array." },
+        { "letter": "C", "description": "Destroy the probe with crew name's new experimental torpedo.", "rewards": [{ "type": "ship", "shipArchetypeId": 2838, "dropRatePercent": 100, "showName": true }] }
+      ]
     }
   ]
 }
