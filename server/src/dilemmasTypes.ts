@@ -1,8 +1,6 @@
-export interface Reward {
-  crewArchetypeId: number;
-  dropRatePercent: number;
-  showName: boolean;
-}
+export type Reward =
+  | { type: 'crew'; crewArchetypeId: number; dropRatePercent: number; showName: boolean }
+  | { type: 'ship'; shipArchetypeId: number; dropRatePercent: number; showName: boolean };
 
 export interface Choice {
   letter: 'A' | 'B' | 'C';
