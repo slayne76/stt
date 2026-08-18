@@ -1,7 +1,7 @@
 # STT Tracker — Project State
 
-Last updated: 2026-08-17 (Collections page: green Upgradable chip when
-Ready crew alone cover the gap). This
+Last updated: 2026-08-18 (new "Dilemmas" page — static, hand-maintained
+data). This
 document is the durable, in-depth record of what has been built, why,
 and how the trickier pieces of logic work. It's meant to let a fresh
 session (or a fresh person) get back up to speed
@@ -82,8 +82,10 @@ pattern was simpler than standing up bespoke server endpoints per view.
 
 ```
 client/src/
-  App.tsx                       PlayerDataProvider + CrewCatalogProvider + <Routes> wiring, maps
-                                 routes.tsx's ROUTES to <Route> elements
+  App.tsx                       CitationPrioritiesProvider (outermost, deliberately — see its own
+                                 in-file comment) > PlayerDataProvider > CrewCatalogProvider >
+                                 DilemmasProvider (innermost, added 2026-08-18 — see "Dilemmas page"
+                                 below) > <Routes> wiring, maps routes.tsx's ROUTES to <Route> elements
   routes.tsx                    Single source of truth for pages: NAV_ITEMS (nested, for the nav)
                                  and ROUTES (flat, derived) — see "routes.tsx single source of
                                  truth" below
@@ -100,14 +102,19 @@ client/src/
   context/CrewCatalogContext.tsx Same shape, second independent provider (see "Crew catalog and
                                  Overview unique-crew counts") — a slow/failed catalog fetch never
                                  blocks player-identity rendering
+  context/DilemmasContext.tsx    Same shape again, third independent provider (see "Dilemmas page"
+                                 below); simpler than its two siblings — `refresh` just re-runs the
+                                 one fetch (no separate POST /refresh endpoint exists for this data)
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   hooks/useCrewCatalog.ts        Same shape, for CrewCatalogContext
+  hooks/useDilemmas.ts           Same shape, for DilemmasContext
   hooks/usePageData.ts          Wraps usePlayerData, adds optional extraLoading + derived loaded
                                  (see "usePageData hook + defaultCrewComparator")
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
   api/assetsApi.ts               refreshAssets (see "Asset cache proxy")
   api/catalogApi.ts              fetchCrewCatalog/refreshCrewCatalog (see "Crew catalog and Overview
                                  unique-crew counts")
+  api/dilemmasApi.ts             fetchDilemmas — GET only, no refresh variant (see "Dilemmas page" below)
   layout/AppLayout.tsx          AppBar + Drawer nav shell; hosts <RefreshControl /> (below) for the
                                  topbar's refresh trigger; wraps `<Outlet />` in `ErrorBoundary`, keyed
                                  by `location.key` (see "Router-level ErrorBoundary" below) — its
@@ -154,6 +161,10 @@ client/src/
                                  independently of the server's identical interface (this monorepo
                                  doesn't share types between workspaces) — see "Crew catalog and
                                  Overview unique-crew counts" and "Missing 4 Stars tables"
+    dilemma.ts                  Dilemma/Choice/Reward interfaces, mirroring
+                                 server/src/dilemmasTypes.ts field-for-field (same
+                                 no-shared-types-between-workspaces convention as CatalogEntry) —
+                                 see "Dilemmas page" below
   assets/                        Asset-URL logic + the shared Thumbnail component (see "Crew/ship image column")
     config.ts                  ASSET_BASE_URL = '/api/assets' (repointed at the local proxy — see "Asset cache proxy")
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
@@ -270,6 +281,15 @@ client/src/
                                  always fully immortalized, so Level/Items/Collections would be
                                  constant/meaningless; see "Two new crew pages" below), paginated
                                  (see "Table pagination" below)
+  dilemmas/                      Static dilemma-mission data logic + the Dilemmas page's table (see
+                                 "Dilemmas page" below) — first module for genuinely static,
+                                 not-derived-from-player-data content
+    getters.ts                  dilemmaHasRelation, getChoiceIcon ('check'/'x'/'circle' rule),
+                                 sortedDilemmas (chainName asc, then partNumber asc — drives both
+                                 alphabetical order and chain-adjacency for the divider),
+                                 buildCatalogEntryMap (archetype_id -> CatalogEntry lookup)
+    DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
+                                 list renders directly (only 4 rows so far, see "Dilemmas page" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -334,8 +354,16 @@ client/src/
     FrozenCrewPage.tsx                frozen crew (stored_immortals) cross-referenced against the
                                        catalog, max_rarity 4 or 5 combined — last item in the Crew
                                        nav group (see "Two new crew pages" below)
+    DilemmasPage.tsx                   one row per dilemma mission, static data — new last top-level
+                                       drawer entry, after Collections (see "Dilemmas page" below)
 
 server/src/
+  data/dilemmas.json, dilemmasTypes.ts, routes/dilemmas.ts   Static, git-tracked (not gitignored
+                                                          `server/data/`) hand-maintained dilemma
+                                                          data + its GET-only route — no cache,
+                                                          no upstream fetch, no refresh endpoint,
+                                                          unlike every other resource in this repo
+                                                          (see "Dilemmas page" below)
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
   authClient.ts, sessionCache.ts   The real 6-hop STT login flow, and its
                                     persisted-session-cookie cache (see
@@ -3756,6 +3784,122 @@ way.
 **Spec/plan:** `docs/superpowers/specs/2026-08-11-search-clear-button-design.md`,
 `docs/superpowers/plans/2026-08-11-search-clear-button-plan.md`.
 
+## Dilemmas page
+
+A new top-level page (`/dilemmas`, last in the drawer, after Collections)
+showing static, hand-maintained data about dilemma missions — knowledge
+players gather by hand while playing, not derivable from live player/
+collections data. First page in the app whose content isn't a view over
+`player-cache.json`; deliberately kept decoupled (a static JSON file behind
+a plain GET route) so a future automatic-gathering mechanism could replace
+the data source without touching the frontend at all.
+
+**Data model** (`server/src/dilemmasTypes.ts`, mirrored field-for-field in
+`client/src/types/dilemma.ts`): a `Dilemma` has `id`, `name` (full display
+name, e.g. "A Higher Duty, Part 3"), `chainName` (grouping/sort key — the
+same for every part of a multi-part mission, equal to its own `name` for a
+standalone one), `partNumber`, and 2-3 `choices` (letters `'A'|'B'|'C'`).
+Each `Choice` has a `description` and optionally `leadsToDilemmaId` (the
+next dilemma this choice unlocks) and/or `rewards` (a `Reward[]`, each with
+`crewArchetypeId`, `dropRatePercent`, and `showName` — false for a
+multi-crew reward pool where only icons are shown, true for a single
+guaranteed pickup where the name renders too).
+
+**Choice icon rule** (`dilemmas/getters.ts`'s `getChoiceIcon`) — arrived at
+after 3 rounds of visual correction against a real-portrait static mockup,
+built and iterated on with the user *before* the design spec was written:
+a choice gets the green check if it has `leadsToDilemmaId` **or** a
+non-empty `rewards` (a reward counts as a positive outcome exactly like
+continuing the chain — not narrowly "this choice continues the chain").
+Otherwise it gets the red X if `dilemmaHasRelation(dilemma)` — some *other*
+choice in the same dilemma does have a `leadsToDilemmaId` or `rewards` — the
+dilemma is part of a chain/has a reward, this choice just isn't it. Only
+when the *whole* dilemma has zero reward and zero chain link on any choice
+does every choice get the solid grey `FiberManualRecord` disc (not an
+outlined circle — the user specifically asked for solid). None of the 4
+seed dilemmas actually exercise the circle branch (all four have at least
+one positive choice) — first real test of that path arrives with the next
+dilemma added to the JSON that has no chain/reward relation at all.
+
+**Reward/Drop Rate columns** (`DilemmasTable.tsx`'s `RewardCell`/
+`DropRateCell`): one group per reward-bearing choice, laid out **side by
+side in one flex row** (`flexWrap: 'wrap'`), never stacked — this was the
+first mockup correction: the user explicitly rejected a "one line per
+choice" vertical stack once they saw it rendered. Each reward's crew icon
+resolves via `catalogMap.get(crewArchetypeId)` against the full crew
+catalog (not the player's owned crew — a reward crew member is very
+plausibly unowned) for `imageUrlPortrait` + `name`, same `Thumbnail`/
+`ASSET_BASE_URL` pattern `FrozenCrewTable.tsx` already established for
+catalog-sourced (rather than player-sourced) portraits; a missing catalog
+entry falls back to `Thumbnail`'s built-in placeholder box and a
+`#<archetypeId>` label. Drop Rate collapses to one value when every
+reward-bearing choice in the row shares the same `dropRatePercent` (true
+for both seed examples: Part 3's two 100%s, the pool's eleven 2%s), else
+prints one `"A: N%"` line per choice — the code reads only
+`rewards[0].dropRatePercent` per choice on the documented (not
+type-enforced) assumption that a single choice's reward pool is always
+internally uniform, confirmed against the real seed data by the final
+reviewer.
+
+**Chain grouping**: `sortedDilemmas` (chainName alpha, then partNumber asc)
+produces both the display order and the adjacency the divider needs — the
+**last** row of each `chainName` group gets a `BLOCK_BOUNDARY_COLOR` bottom
+border, the same "grouped-block divider" idiom `CollectionsTable.tsx`
+established for one-collection-per-block dividers, reused here for
+one-chain-per-block instead of introducing a new visual language.
+
+**Data fetching**: `DilemmasContext`/`DilemmasProvider`/`useDilemmas()`
+mirror `CrewCatalogContext`'s shape exactly (mounted innermost in `App.tsx`,
+alongside `CrewCatalogProvider`) — the design spec originally called for a
+bespoke local-state hook instead (only one page consumes this data), but
+the implementation plan deliberately reversed that call for consistency
+with every other fetched data source in the app; caught as a stale spec
+sentence by the final review and corrected post-merge, no code changed.
+`refresh` just re-runs the one `GET /api/dilemmas` fetch — there's no
+`POST /refresh` variant, since (unlike the crew catalog or player data)
+there's no live upstream to refresh against.
+
+**Verification approach**: before the design spec was even written, a
+throwaway standalone static HTML mockup (real crew portraits pulled live
+from the running dev server's `/api/assets` endpoint, no app code touched)
+was built and shown to the user, then corrected through 3 rounds based on
+their feedback (reward icons side-by-side not stacked; reward-bearing
+choices get the check icon, not just chain-continuing ones; grey circle
+solid, and reserved for zero-relation dilemmas only) — all three
+corrections became binding rules in the spec/plan rather than staying
+implicit. Both implementation tasks (server data+route, then client
+page+table+nav) were mechanical transcriptions of complete code the plan
+already specified — Task 1 dispatched on the cheapest model tier, Task 2 on
+a standard tier for its real-browser verification judgment calls.
+
+**Final review (opus) found no Critical/Important issues, ready to merge as-is.**
+Independently re-verified: a real `tsc`/lint pass; a scratch production
+build confirming `resolveJsonModule` genuinely copies
+`server/src/data/dilemmas.json` into `dist/data/dilemmas.json` (a
+task-scoped review using only `tsx` dev-mode couldn't have caught a
+build-only regression here); all 13 seed crew names re-resolved against
+the real catalog cache (13/13 exact matches, all with non-empty
+portraits); a full fresh headless-Chromium pass over all 7 plan
+checkpoints (nav order, row order, per-choice icons on all 4 rows,
+genuinely-side-by-side reward groups via bounding-box comparison, drop
+rate collapsing, the chain-boundary divider's computed CSS) — zero console
+errors, zero broken images. 7 Minors, all parked (no code change): the
+stale spec sentence above (fixed directly, doc-only); the un-exercised
+circle branch (noted, not a defect); a hardcoded `rgba(0, 0, 0, 0.38)`
+color on the circle icon instead of MUI's `color="disabled"` token; no
+referential-integrity check on `leadsToDilemmaId` (a typo would silently
+show a green check with no visible link — accepted, matches the spec's
+explicit no-startup-validation non-goal for this hand-maintained file);
+`useCrewCatalog()`'s `error` unused on `DilemmasPage` (a catalog outage
+degrades to placeholder icons rather than an explicit page-level error —
+mitigated by `AppLayout`'s existing app-wide catalog-error Snackbar); two
+cosmetic nits (missing `variant="body2"` on the em-dash `Typography`;
+`key={reward.crewArchetypeId}` would collide if a pool ever listed the
+same crew twice — neither seed dilemma does).
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-18-dilemmas-page-design.md`,
+`docs/superpowers/plans/2026-08-18-dilemmas-page-plan.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -5624,6 +5768,48 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     explaining the green/blue distinction to the user (label text
     intentionally fixed by spec, not requested this round).
 
+59. **"Dilemmas" page — static dilemma-mission data**
+    (`2026-08-18-dilemmas-page`) — new top-level page (`/dilemmas`, last in
+    the drawer) rendering static, hand-maintained data about dilemma
+    missions (see "Dilemmas page" above for the full deep-dive: data model,
+    the check/x/circle choice-icon rule, side-by-side reward layout,
+    drop-rate collapsing, chain-boundary grouping, and the `DilemmasContext`
+    data-fetching decision). First page in the app not derived from live
+    player/collections data — a static JSON file (`server/src/data/
+    dilemmas.json`) behind a plain `GET /api/dilemmas`, deliberately
+    decoupled so a future automatic-gathering mechanism could replace the
+    source without touching the frontend.
+
+    Design and plan were validated against a throwaway static HTML mockup
+    (real crew portraits pulled from the live dev server, no app code
+    touched) built and corrected through 3 rounds of user feedback *before*
+    the spec was written — all three corrections (reward icons side by
+    side not stacked; a reward alone earns the check icon, not just
+    chain-continuation; the grey circle is solid and reserved for
+    zero-relation dilemmas only) became binding spec/plan rules rather than
+    staying implicit, and the final implementation matched the
+    mockup-derived rules exactly on first real-browser verification.
+
+    **Final review (opus) found no Critical/Important issues** — ready to
+    merge as reviewed. It independently re-verified past what the two
+    task-scoped reviews could see: a scratch production build confirming
+    `resolveJsonModule` genuinely copies the JSON into `dist/` (a
+    `tsx`-dev-mode task review can't catch a build-only regression); all 13
+    seed crew names re-resolved against the real catalog cache (13/13
+    exact); a fresh 7-checkpoint headless-Chromium pass including a
+    bounding-box comparison proving the reward groups are genuinely side by
+    side, not merely visually adjacent. 7 Minors parked, none blocking: a
+    stale design-spec sentence (the spec's original "no Context/Provider"
+    call was reversed by the plan for consistency with the app's other
+    data sources; implementation correctly followed the plan — fixed
+    directly post-merge as a doc-only correction, no code change); the
+    circle-icon branch has no seed data exercising it; a hardcoded icon
+    color instead of an MUI theme token; no referential-integrity check on
+    `leadsToDilemmaId` (accepted — matches the spec's explicit
+    no-startup-validation non-goal); a crew-catalog fetch failure degrades
+    silently on this page rather than surfacing inline (mitigated by the
+    existing app-wide catalog-error Snackbar); two cosmetic nits.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
@@ -5641,12 +5827,13 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Ships → 5 Stars Ships | `/5-stars-ships` | ship rarity=5, not yet fully leveled |
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
+| Dilemmas | `/dilemmas` | one row per dilemma mission, static hand-maintained data |
 
-Top-level drawer order: **Overview / Crew / Ships / Collections**. "Crew"
-and "Ships" are both hover/focus flyout groups (see "The nav flyout" and
-"Crew nav group and schematics progress bar" above) — neither is itself a
-route. "Overview" and "Collections" are the only remaining flat,
-directly-clickable drawer entries.
+Top-level drawer order: **Overview / Crew / Ships / Collections / Dilemmas**.
+"Crew" and "Ships" are both hover/focus flyout groups (see "The nav flyout"
+and "Crew nav group and schematics progress bar" above) — neither is itself
+a route. "Overview", "Collections", and "Dilemmas" are the only remaining
+flat, directly-clickable drawer entries.
 
 ## How this project is worked on (process notes for a future session)
 
