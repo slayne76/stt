@@ -562,6 +562,48 @@
           ]
         }
       ]
+    },
+    {
+      "id": "where-earth-meets-sky",
+      "name": "Where Earth Meets Sky",
+      "chainName": "Where Earth Meets Sky",
+      "partNumber": 1,
+      "choices": [
+        {
+          "letter": "A",
+          "description": "Evacuate the station for as long as possible, allowing it to crash.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        },
+        {
+          "letter": "B",
+          "description": "Destroy the station before it can impact the planet's surface.",
+          "rewards": [
+            { "type": "crew", "crewArchetypeId": 18157, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 21976, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 23481, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24025, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 24853, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 26216, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 28013, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 29195, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31199, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 31546, "dropRatePercent": 1, "showName": false },
+            { "type": "crew", "crewArchetypeId": 32154, "dropRatePercent": 1, "showName": false }
+          ]
+        }
+      ]
     }
   ]
 }
