@@ -3,6 +3,7 @@ import { PlayerDataProvider } from './context/PlayerDataContext';
 import { CrewCatalogProvider } from './context/CrewCatalogContext';
 import { CitationPrioritiesProvider } from './context/CitationPrioritiesContext';
 import { DilemmasProvider } from './context/DilemmasContext';
+import { ShipCatalogProvider } from './context/ShipCatalogContext';
 import AppLayout from './layout/AppLayout';
 import { ROUTES } from './routes';
 
@@ -16,21 +17,24 @@ function App() {
     // nesting it innermost would make /api/player and /api/catalog queue
     // behind that on every cold load, stalling the whole page instead of just
     // the two citation sections. Outermost means its fetch fires last.
-    // DilemmasProvider fetches a small static file — cheap regardless of
-    // nesting position — so it goes innermost, alongside CrewCatalogProvider.
+    // DilemmasProvider/ShipCatalogProvider both fetch small, cheap resources
+    // regardless of nesting position — they go innermost, alongside
+    // CrewCatalogProvider.
     <CitationPrioritiesProvider>
       <PlayerDataProvider>
         <CrewCatalogProvider>
           <DilemmasProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route element={<AppLayout />}>
-                  {ROUTES.map(({ path, element }) => (
-                    <Route key={path} path={path} element={element} />
-                  ))}
-                </Route>
-              </Routes>
-            </BrowserRouter>
+            <ShipCatalogProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route element={<AppLayout />}>
+                    {ROUTES.map(({ path, element }) => (
+                      <Route key={path} path={path} element={element} />
+                    ))}
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </ShipCatalogProvider>
           </DilemmasProvider>
         </CrewCatalogProvider>
       </PlayerDataProvider>

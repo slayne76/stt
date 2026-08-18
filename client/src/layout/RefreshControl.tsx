@@ -10,12 +10,14 @@ interface RefreshControlProps {
   onRefreshAssets: () => Promise<void>;
   catalogRefreshing: boolean;
   onRefreshCatalog: () => Promise<void>;
+  shipCatalogRefreshing: boolean;
+  onRefreshShipCatalog: () => Promise<void>;
 }
 
 const OPTIONS: { value: RefreshOption; label: string }[] = [
   { value: 'player', label: 'Refresh player data' },
   { value: 'assets', label: 'Refresh assets' },
-  { value: 'catalog', label: 'Refresh catalog' },
+  { value: 'catalog', label: 'Refresh catalogs' },
   { value: 'all', label: 'Refresh all' },
 ];
 
@@ -26,17 +28,19 @@ function RefreshControl({
   onRefreshAssets,
   catalogRefreshing,
   onRefreshCatalog,
+  shipCatalogRefreshing,
+  onRefreshShipCatalog,
 }: RefreshControlProps) {
   const [selected, setSelected] = useState<RefreshOption>('player');
 
   const isRefreshing =
     selected === 'all'
-      ? playerLoading || assetsRefreshing || catalogRefreshing
+      ? playerLoading || assetsRefreshing || catalogRefreshing || shipCatalogRefreshing
       : selected === 'player'
         ? playerLoading
         : selected === 'assets'
           ? assetsRefreshing
-          : catalogRefreshing;
+          : catalogRefreshing || shipCatalogRefreshing;
 
   function handleChange(event: SelectChangeEvent<RefreshOption>) {
     setSelected(event.target.value as RefreshOption);
@@ -48,9 +52,9 @@ function RefreshControl({
     } else if (selected === 'assets') {
       await onRefreshAssets();
     } else if (selected === 'catalog') {
-      await onRefreshCatalog();
+      await Promise.allSettled([onRefreshCatalog(), onRefreshShipCatalog()]);
     } else {
-      await Promise.allSettled([onRefreshPlayer(), onRefreshAssets(), onRefreshCatalog()]);
+      await Promise.allSettled([onRefreshPlayer(), onRefreshAssets(), onRefreshCatalog(), onRefreshShipCatalog()]);
     }
   }
 
