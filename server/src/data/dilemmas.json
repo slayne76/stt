@@ -149,6 +149,27 @@
         { "letter": "B", "description": "Stun him before he can open the Orb." },
         { "letter": "C", "description": "Convince the vedek that he does not need the Orb's visions.", "rewards": [{ "crewArchetypeId": 6960, "dropRatePercent": 100, "showName": true }] }
       ]
+    },
+    {
+      "id": "off-the-books-part-1",
+      "name": "Off the Books, Part 1",
+      "chainName": "Off the Books",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Allow the supposed agent to use the <ship name>.", "leadsToDilemmaId": "off-the-books-part-2" },
+        { "letter": "B", "description": "Refuse the supposed agent's demands." }
+      ]
+    },
+    {
+      "id": "off-the-books-part-2",
+      "name": "Off the Books, Part 2",
+      "chainName": "Off the Books",
+      "partNumber": 2,
+      "choices": [
+        { "letter": "A", "description": "Transport the wounded agent to sickbay." },
+        { "letter": "B", "description": "Transport the agent to the brig.", "rewards": [{ "crewArchetypeId": 6965, "dropRatePercent": 100, "showName": true }] },
+        { "letter": "C", "description": "Leave the agent to face the enemies she has made." }
+      ]
     }
   ]
 }
