@@ -472,6 +472,16 @@
         { "letter": "B", "description": "Advise Against promoting the commander." },
         { "letter": "C", "description": "Decline to comment on the potential promotion." }
       ]
+    },
+    {
+      "id": "winters-price",
+      "name": "Winter's Price",
+      "chainName": "Winter's Price",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Save the captain." },
+        { "letter": "B", "description": "Save the prisoner." }
+      ]
     }
   ]
 }
