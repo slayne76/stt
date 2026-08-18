@@ -383,6 +383,16 @@
           ]
         }
       ]
+    },
+    {
+      "id": "by-our-own-hands",
+      "name": "By Our Own Hands",
+      "chainName": "By Our Own Hands",
+      "partNumber": 1,
+      "choices": [
+        { "letter": "A", "description": "Repay the outpost for what crew name's counterpart took." },
+        { "letter": "B", "description": "Reassure the outpost's inhabitants that <crew name> means them no harm." }
+      ]
     }
   ]
 }
