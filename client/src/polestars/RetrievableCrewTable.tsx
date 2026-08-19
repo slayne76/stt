@@ -28,9 +28,9 @@ function PolestarCell({
     return <EmDash />;
   }
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56, gap: '2px' }}>
       <Thumbnail asset={entry.icon} circleBackgroundColor={getPolestarTypeColor(entry.filter.type)} />
-      <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
+      <Typography variant="caption" align="center" sx={{ lineHeight: 1.1 }}>
         {entry.short_name}
       </Typography>
     </Box>
