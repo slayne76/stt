@@ -1,10 +1,11 @@
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import type { PolestarCatalogEntry } from '../types/polestarCatalogEntry';
 import type { RetrievableCrewRow } from './getters';
-import { resolvePolestarSlot, getPolestarTypeColor } from './getters';
+import { resolvePolestarSlot } from './getters';
 import { usePagination } from '../lib/usePagination';
 import StarRating from '../crew/StarRating';
 import Thumbnail from '../assets/Thumbnail';
+import PolestarBadge from './PolestarBadge';
 import TablePaginationFooter from '../components/TablePaginationFooter';
 
 export interface RetrievableCrewTableProps {
@@ -27,14 +28,7 @@ function PolestarCell({
   if (entry === null) {
     return <EmDash />;
   }
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56, gap: '2px', mx: 'auto' }}>
-      <Thumbnail asset={entry.icon} circleBackgroundColor={getPolestarTypeColor(entry.filter.type)} />
-      <Typography variant="caption" align="center" sx={{ lineHeight: 1.1 }}>
-        {entry.short_name}
-      </Typography>
-    </Box>
-  );
+  return <PolestarBadge entry={entry} selected />;
 }
 
 function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTableProps) {
