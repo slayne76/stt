@@ -5,6 +5,7 @@ import { CitationPrioritiesProvider } from './context/CitationPrioritiesContext'
 import { DilemmasProvider } from './context/DilemmasContext';
 import { ShipCatalogProvider } from './context/ShipCatalogContext';
 import { PolestarCatalogProvider } from './context/PolestarCatalogContext';
+import { RetrievableCrewProvider } from './context/RetrievableCrewContext';
 import AppLayout from './layout/AppLayout';
 import { ROUTES } from './routes';
 
@@ -18,24 +19,26 @@ function App() {
     // nesting it innermost would make /api/player and /api/catalog queue
     // behind that on every cold load, stalling the whole page instead of just
     // the two citation sections. Outermost means its fetch fires last.
-    // DilemmasProvider/ShipCatalogProvider/PolestarCatalogProvider all fetch
-    // small, cheap resources regardless of nesting position — they go
-    // innermost, alongside CrewCatalogProvider.
+    // DilemmasProvider/ShipCatalogProvider/PolestarCatalogProvider/
+    // RetrievableCrewProvider all fetch small, cheap resources regardless of
+    // nesting position — they go innermost, alongside CrewCatalogProvider.
     <CitationPrioritiesProvider>
       <PlayerDataProvider>
         <CrewCatalogProvider>
           <DilemmasProvider>
             <ShipCatalogProvider>
               <PolestarCatalogProvider>
-                <BrowserRouter>
-                  <Routes>
-                    <Route element={<AppLayout />}>
-                      {ROUTES.map(({ path, element }) => (
-                        <Route key={path} path={path} element={element} />
-                      ))}
-                    </Route>
-                  </Routes>
-                </BrowserRouter>
+                <RetrievableCrewProvider>
+                  <BrowserRouter>
+                    <Routes>
+                      <Route element={<AppLayout />}>
+                        {ROUTES.map(({ path, element }) => (
+                          <Route key={path} path={path} element={element} />
+                        ))}
+                      </Route>
+                    </Routes>
+                  </BrowserRouter>
+                </RetrievableCrewProvider>
               </PolestarCatalogProvider>
             </ShipCatalogProvider>
           </DilemmasProvider>
