@@ -423,9 +423,9 @@ client/src/
                                        nav group (see "Two new crew pages" below)
     DilemmasPage.tsx                   one row per dilemma mission, static data — new last top-level
                                        drawer entry, after Collections (see "Dilemmas page" below)
-    RetrievableCrewPage.tsx            one row per curated retrievable crew, read-only this phase —
+    RetrievableCrewPage.tsx            one row per curated retrievable crew, now add/edit/delete —
                                        new last top-level drawer entry, after Dilemmas (see
-                                       "Retrievable Crew page" below)
+                                       "Retrievable Crew page" and "Retrievable Crew edit UI" below)
 
 server/src/
   data/dilemmas.json, dilemmasTypes.ts, routes/dilemmas.ts   Static, git-tracked (not gitignored
@@ -469,13 +469,13 @@ server/src/
                                                           retrievable-crew.json`) hand-authored config
                                                           — NOT a remote-fetch cache (no TTL, no
                                                           upstream) and NOT committed like
-                                                          `dilemmas.json` either, since a future
-                                                          phase's edit UI writes to this same file
-                                                          directly. `writeRetrievableCrew()` exists
-                                                          unused — no route calls it yet, intentional
-                                                          forward-compat plumbing. GET-only route
-                                                          this phase — see "Retrievable Crew page"
-                                                          below
+                                                          `dilemmas.json` either, since the edit UI
+                                                          writes to this same file directly.
+                                                          `POST`/`PUT /:archetypeId`/`DELETE
+                                                          /:archetypeId` routes now call
+                                                          `writeRetrievableCrew()` (structural-only
+                                                          validation — see "Retrievable Crew edit UI"
+                                                          below), alongside the original GET route
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
   authClient.ts, sessionCache.ts   The real 6-hop STT login flow, and its
                                     persisted-session-cookie cache (see
@@ -4298,6 +4298,120 @@ confirmed themselves. Commit `e0ad25a`.
 **Spec/plan:** `docs/superpowers/specs/2026-08-19-retrievable-crew-design.md`,
 `docs/superpowers/plans/2026-08-19-retrievable-crew.md`.
 
+## Retrievable Crew edit UI
+
+Same-day-scale follow-up (2026-08-20) to "Retrievable Crew page" above,
+closing its own explicitly-deferred "editing comes next" note: the page
+gained a full Add/Edit/Delete UI writing directly to
+`server/data/retrievable-crew.json` via new server routes, on top of the
+already-existing (previously unused) `writeRetrievableCrew()`.
+
+**Server:** three new routes on `routes/retrievableCrew.ts` — `POST`
+(archetypeId + polestars, 409 on duplicate), `PUT /:archetypeId` (path id
+identifies the row; body archetypeId may differ — a crew swap re-keys the
+row; 404 if missing, 409 on collision with a *different* row), `DELETE
+/:archetypeId` (404 if missing). All three return the full updated array,
+matching the existing GET's shape, so the client can replace its whole
+state in one step. Validation is structural-only (types, ≤4 slots, no
+duplicate ids within a row, normalized to exactly 4 null-padded slots on
+write) — deliberately does NOT check `archetypeId`/`polestars` against the
+live crew/Polestar catalogs; that's the client's job. First route in the
+app to read `req.body`, so `index.ts` gained its first `express.json()`
+middleware.
+
+**Client architecture:** `RetrievableCrewContext` gained `addEntry`/
+`updateEntry`/`deleteEntry`, each calling its API wrapper and setting
+`data` directly from the response — deliberately not touching
+`loading`/`error` (those stay reserved for the initial page load; mutation
+failures propagate/throw to the caller instead). The table gained a
+single-select checkbox column (`selectedArchetypeId` state lives in the
+page, passed down); an `RetrievableCrewActions` button group (Add always
+enabled, Edit/Delete enabled only with a selection) sits in `PageShell`'s
+`titleActions` slot. **A real `PageShell` gotcha surfaced and was designed
+around up front**: its `children` only render when `loaded && count > 0`
+(see `layout/PageShell.tsx`), so the page was restructured as a
+`<>...</>` fragment with `PageShell` (table only) as one child and the
+dialogs/`Snackbar` as siblings — otherwise Add would silently stop working
+the moment the tracked-crew list hit zero rows.
+
+**This is the app's first use of MUI `Dialog` and `Autocomplete`** (both
+stock `@mui/material` exports, no new dependency). A small
+`PolestarBadge` component was extracted from the existing read-only
+table's inline Polestar-icon markup first (pure refactor, zero visual
+change — verified via a live hex-color DOM read matching the pre-refactor
+value exactly) specifically so the new interactive picker could reuse it
+unmodified: grey when unselected, colored by type when selected, dimmed +
+non-interactive once 4 are chosen.
+
+**The Add/Edit form dialog** (`RetrievableCrewFormDialog`) is one
+component for both modes. Crew-name `Autocomplete` is `freeSolo`
+(typing is never locked to picking a suggestion), no suggestions below 3
+characters, suggestions capped at 25 and exclude crew already tracked by
+another row. **A real bug was caught and fixed during brainstorming
+itself, before any code was written**: resolving/validating the typed
+name has to run against a *broader* pool (all catalog crew with ≥1
+eligible Polestar, including already-tracked ones) than the Autocomplete's
+own suggestion list — otherwise typing an exact, already-tracked crew's
+name would never resolve to a real `CatalogEntry` at all, and the intended
+specific "`<name>` is already tracked" error could never fire, silently
+falling back to the generic "invalid name" message instead. Both pools are
+real in the shipped code (`eligiblePool` vs `autocompleteOptions` in
+`polestars/getters.ts`/`RetrievableCrewFormDialog.tsx`), re-verified
+independently by both the Task 5 task review and the final whole-branch
+review.
+
+Below the name field, a picker renders one badge per the resolved crew's
+`resolveEligiblePolestars(...)` pool (already-existing plumbing from the
+original feature, unused until now); clicking toggles selection, capped at
+4 (remaining badges disable, not hide, once full). Changing to a
+*genuinely different* crew in Edit mode resets all 4 selections. Two
+independent inline validations (invalid/duplicate name; zero Polestars
+selected) both compute before any early return, so both can show at once.
+Delete goes through a small, separate confirm dialog (first destructive
+action in this whole app) rather than firing immediately — an explicit
+design decision, not a default. Both mutations reuse the app's existing
+`Snackbar`/`Alert` success/error convention (from `AppLayout.tsx`'s
+catalog-refresh handling) and the topbar Refresh button's existing
+disabled+spinner pattern while a request is in flight.
+
+**Five-task plan, every task review clean on first pass** (server routes;
+client API+context; `PolestarBadge` extraction; selection+delete flow;
+form dialog+full wiring). **Final review (opus) found no Critical issues;
+one Important, caught only at the whole-branch level, not any single
+task's own diff**: the crew-swap-reset effect had a stray branch —
+`else if (!resolvedCrew) { setResolvedArchetypeId(null); }` — whose only
+effect was to null the comparison basis whenever the typed name
+*transiently* stopped matching any crew (e.g. mid-typo), not just on a
+genuine crew change. Real failure mode: in Edit mode with Polestars
+already selected, backspacing one character and retyping it to restore
+the exact original name would silently wipe all 4 selections, since the
+restore-to-original-name step then looked indistinguishable from "a
+genuinely different crew" to the comparison. Traced to the *plan's own*
+literal code (transcribed faithfully, not an implementation slip) — fixed
+by deleting the branch (commit `2610516`), scoped re-review confirmed
+ADDRESSED with no new breakage, both the spec doc and the plan file
+corrected in the same commit so no future transcription reintroduces it.
+Five Minor findings parked with rulings, none load-bearing: validation
+errors clear on any edit to their own field rather than staying live
+until actually fixed (design-doc wording corrected to match, since the
+shipped behavior — calmer UX, no correctness impact — was judged better
+than the original spec's "live-recomputed" phrasing); a mutation success
+after a failed initial page load doesn't clear the page's stuck error
+state (narrow — a GET failure usually implies POST/PUT/DELETE would also
+fail; one Retry click recovers); a ~200ms MUI dialog-close-transition
+content flicker (purely cosmetic); the Polestar picker being mouse-only
+(not specced, consistent with this app's existing custom-control style
+elsewhere); plus two pre-existing-code observations from Task 1/5's own
+reviews (no concurrency guard on the local JSON file's read-modify-write —
+fine for a single-operator local tool; `writeRetrievableCrew` has no
+try/catch around `writeFileSync`, confirmed benign — a sync throw
+surfaces as an opaque 500 the client already handles cleanly, no
+corruption risk).
+
+**Spec/plan:**
+`docs/superpowers/specs/2026-08-20-retrievable-crew-edit-ui-design.md`,
+`docs/superpowers/plans/2026-08-20-retrievable-crew-edit-ui.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -6274,6 +6388,29 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     prior widening had extended it), and the `polestars` array's "always
     4 slots" invariant was documented but never enforced against
     hand-edited data. Both fixed in one round, scoped re-review clean.
+63. **Retrievable Crew edit UI** (`2026-08-20-retrievable-crew-edit-ui`) —
+    closes (62)'s own deferred "editing comes next" note: full Add/Edit/
+    Delete UI for the Retrievable Crew page, writing directly to
+    `server/data/retrievable-crew.json` via 3 new server routes on top of
+    the already-existing, previously-unused `writeRetrievableCrew()`.
+    First use of MUI `Dialog`/`Autocomplete` anywhere in the app, and the
+    app's first destructive action (Delete goes through its own confirm
+    dialog). Full write-up in "Retrievable Crew edit UI" above. Five-task
+    plan, every task review clean on first pass. **Final review (opus)
+    found no Critical issues; one Important, caught only at the
+    whole-branch level**: a stray branch in the crew-swap-reset effect
+    (transcribed faithfully from the plan's own literal code) could
+    silently wipe a user's Polestar selections on an Edit-mode
+    typo-and-restore-the-same-name round trip. Fixed in one round (commit
+    `2610516`), scoped re-review clean, spec+plan text corrected in the
+    same commit. Five Minor findings parked, none load-bearing (validation
+    errors clear-on-edit rather than staying live until fixed — design
+    doc corrected to match the shipped, judged-better behavior; a
+    mutation success after a failed initial load doesn't clear the
+    page's stuck error state; a cosmetic dialog-close-transition flicker;
+    mouse-only Polestar picker, consistent with this app's existing
+    custom-control style; two pre-existing-code notes on the local
+    JSON store, both confirmed benign).
 
 ## Current routes / nav (in order)
 
@@ -6293,7 +6430,7 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
 | Dilemmas | `/dilemmas` | one row per dilemma mission, static hand-maintained data |
-| Retrievable Crew | `/retrievable-crew` | one row per curated crew, read-only this phase, `server/data/retrievable-crew.json` |
+| Retrievable Crew | `/retrievable-crew` | one row per curated crew, add/edit/delete via UI, `server/data/retrievable-crew.json` |
 
 Top-level drawer order: **Overview / Crew / Ships / Collections / Dilemmas /
 Retrievable Crew**. "Crew" and "Ships" are both hover/focus flyout groups
