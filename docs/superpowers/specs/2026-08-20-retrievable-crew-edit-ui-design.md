@@ -45,7 +45,7 @@ Clicking an unselected badge selects it (colored background); clicking a selecte
 
 **Edit-mode crew swap:** if the resolved crew changes to a different `archetypeId` than `initialEntry.archetypeId`, all 4 Polestar selections reset to unselected immediately (the old crew's pool essentially never overlaps the new one).
 
-**Validation**, checked on Submit and live-recomputed while an error is showing (so it clears as soon as the user fixes it):
+**Validation**, checked on Submit; each error clears on the next edit to its own field — typing in the name field clears the name error, toggling a Polestar clears the Polestar error — rather than being live-recomputed against the fix (**doc-corrected post-implementation**: the original wording here said "live-recomputed while an error is showing," but the shipped dialog clears each error unconditionally on the next relevant edit instead of re-validating it — e.g. retyping a still-duplicate name clears the "already tracked" message immediately rather than only once it's actually valid. No correctness impact — Submit always re-validates before calling the API — and the final whole-branch review judged the shipped behavior calmer UX, not a regression worth changing; this doc is updated to match what shipped, per this project's established convention that doc/plan text yields to correct shipped behavior when the two diverge post-review):
 - Name doesn't resolve to a valid, eligible, not-elsewhere-tracked crew → red border on the `Autocomplete` input + helper text below it ("Enter a valid crew name" / "`<name>` is already tracked").
 - Zero Polestars selected → red outline around the Polestar picker section + helper text below it ("Select at least 1 Polestar").
 
