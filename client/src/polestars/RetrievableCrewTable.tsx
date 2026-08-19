@@ -28,7 +28,7 @@ function PolestarCell({
     return <EmDash />;
   }
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56, gap: '2px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56, gap: '2px', mx: 'auto' }}>
       <Thumbnail asset={entry.icon} circleBackgroundColor={getPolestarTypeColor(entry.filter.type)} />
       <Typography variant="caption" align="center" sx={{ lineHeight: 1.1 }}>
         {entry.short_name}
@@ -52,10 +52,10 @@ function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTable
             <TableCell align="right">Level</TableCell>
             <TableCell align="right">Items to equip</TableCell>
             <TableCell align="right">Total collections</TableCell>
-            <TableCell>Polestar #1</TableCell>
-            <TableCell>Polestar #2</TableCell>
-            <TableCell>Polestar #3</TableCell>
-            <TableCell>Polestar #4</TableCell>
+            <TableCell align="center">Polestar #1</TableCell>
+            <TableCell align="center">Polestar #2</TableCell>
+            <TableCell align="center">Polestar #3</TableCell>
+            <TableCell align="center">Polestar #4</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -73,7 +73,7 @@ function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTable
               <TableCell align="right">{row.itemsToEquip === null ? <EmDash /> : row.itemsToEquip}</TableCell>
               <TableCell align="right">{row.totalCollections}</TableCell>
               {row.polestarIds.map((id, slotIndex) => (
-                <TableCell key={slotIndex}>
+                <TableCell key={slotIndex} align="center">
                   <PolestarCell id={id} polestarCatalogMap={polestarCatalogMap} />
                 </TableCell>
               ))}
