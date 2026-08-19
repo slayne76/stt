@@ -84,8 +84,10 @@ pattern was simpler than standing up bespoke server endpoints per view.
 client/src/
   App.tsx                       CitationPrioritiesProvider (outermost, deliberately — see its own
                                  in-file comment) > PlayerDataProvider > CrewCatalogProvider >
-                                 DilemmasProvider (innermost, added 2026-08-18 — see "Dilemmas page"
-                                 below) > <Routes> wiring, maps routes.tsx's ROUTES to <Route> elements
+                                 DilemmasProvider > ShipCatalogProvider > PolestarCatalogProvider >
+                                 RetrievableCrewProvider (innermost, added 2026-08-19 — see
+                                 "Retrievable Crew page" below) > <Routes> wiring, maps routes.tsx's
+                                 ROUTES to <Route> elements
   routes.tsx                    Single source of truth for pages: NAV_ITEMS (nested, for the nav)
                                  and ROUTES (flat, derived) — see "routes.tsx single source of
                                  truth" below
@@ -108,10 +110,17 @@ client/src/
   context/ShipCatalogContext.tsx Fourth independent provider, same shape as CrewCatalogContext
                                  (including the fetcher-parameterized refresh — this one DOES have a
                                  POST /refresh endpoint) — see "Dilemmas ship rewards" below
+  context/PolestarCatalogContext.tsx Fifth independent provider, same dual-fetcher shape as
+                                 ShipCatalogContext — see "Retrievable Crew page" below
+  context/RetrievableCrewContext.tsx Sixth independent provider, same single-fetcher shape as
+                                 DilemmasContext (no upstream to refresh against — `refresh` just
+                                 re-fetches our own GET endpoint) — see "Retrievable Crew page" below
   hooks/usePlayerData.ts        Thin context-read hook, same shape as before the refactor
   hooks/useCrewCatalog.ts        Same shape, for CrewCatalogContext
   hooks/useDilemmas.ts           Same shape, for DilemmasContext
   hooks/useShipCatalog.ts        Same shape, for ShipCatalogContext
+  hooks/usePolestarCatalog.ts    Same shape, for PolestarCatalogContext
+  hooks/useRetrievableCrew.ts    Same shape, for RetrievableCrewContext
   hooks/usePageData.ts          Wraps usePlayerData, adds optional extraLoading + derived loaded
                                  (see "usePageData hook + defaultCrewComparator")
   api/playerApi.ts              fetchPlayer/refreshPlayer, PlayerApiError
@@ -121,15 +130,19 @@ client/src/
   api/dilemmasApi.ts             fetchDilemmas — GET only, no refresh variant (see "Dilemmas page" below)
   api/shipCatalogApi.ts          fetchShipCatalog/refreshShipCatalog, same shape as catalogApi.ts
                                  (see "Dilemmas ship rewards" below)
+  api/polestarCatalogApi.ts      fetchPolestarCatalog/refreshPolestarCatalog, same shape as
+                                 shipCatalogApi.ts (see "Retrievable Crew page" below)
+  api/retrievableCrewApi.ts      fetchRetrievableCrew — GET only, same shape as dilemmasApi.ts
+                                 (see "Retrievable Crew page" below)
   layout/AppLayout.tsx          AppBar + Drawer nav shell; hosts <RefreshControl /> (below) for the
                                  topbar's refresh trigger; wraps `<Outlet />` in `ErrorBoundary`, keyed
                                  by `location.key` (see "Router-level ErrorBoundary" below) — its
                                  first non-page `usePlayerData()` consumer
   layout/RefreshControl.tsx     Dropdown + Apply button covering player data / assets / catalogs
-                                 (crew + ship, as of 2026-08-18 — see "Dilemmas ship rewards" below;
-                                 label reads "Refresh catalogs", plural) / all-at-once refresh (see
-                                 "Consolidated refresh dropdown" below) — takes the refresh operations
-                                 as props, calls no hook/API itself
+                                 (crew + ship + Polestar, as of 2026-08-19 — see "Retrievable Crew
+                                 page" below; label reads "Refresh catalogs", plural) / all-at-once
+                                 refresh (see "Consolidated refresh dropdown" below) — takes the
+                                 refresh operations as props, calls no hook/API itself
   layout/NavGroupItem.tsx        Generic hover/focus-triggered flyout submenu (see "Ships pages")
   components/StatusChip.tsx      Generic {label, color} status chip (see "StatusChip component and
                                   QPs Ready chip") — first file in this folder, the app's home for
@@ -168,7 +181,20 @@ client/src/
                                  imageUrlPortrait, data_score, traits, traits_hidden`), defined
                                  independently of the server's identical interface (this monorepo
                                  doesn't share types between workspaces) — see "Crew catalog and
-                                 Overview unique-crew counts" and "Missing 4 Stars tables"
+                                 Overview unique-crew counts" and "Missing 4 Stars tables"; also
+                                 carries `uniquely_retrievable`/`gauntlet_rank` (see the server-side
+                                 `catalogClient.ts` entry below) and, as of "Retrievable Crew page"
+                                 below, `polestarFilterKeys: string[]` — deduplicated raw
+                                 Polestar-filter keys, unrendered this phase, plumbing for the next
+                                 phase's Polestar picker
+    polestarCatalogEntry.ts     PolestarCatalogEntry interface (id, name, short_name, icon:
+                                 DatacoreAsset-shaped {file}, rarity, filter: a `{type: 'rarity' |
+                                 'trait' | 'skill', ...}` discriminated union), mirroring
+                                 server/src/polestarCatalogClient.ts's same-named export — see
+                                 "Retrievable Crew page" below
+    retrievableCrew.ts          RetrievableCrewEntry interface (archetypeId, polestars: a fixed
+                                 4-slot `(number | null)[]` in Polestar #1-4 order), mirroring
+                                 server/src/retrievableCrewTypes.ts — see "Retrievable Crew page" below
     dilemma.ts                  Dilemma/Choice/Reward interfaces, mirroring
                                  server/src/dilemmasTypes.ts field-for-field (same
                                  no-shared-types-between-workspaces convention as CatalogEntry) —
@@ -305,6 +331,27 @@ client/src/
                                  "(part x/y)" subtitle — see "Dilemmas page" below)
     DilemmasTable.tsx            #/Name/Choices/Reward/Drop Rate table; no usePagination — the whole
                                  list renders directly (only 41 rows so far, see "Dilemmas page" below)
+  polestars/                     Retrievable Crew page's logic + table — see "Retrievable Crew page"
+                                 below
+    getters.ts                  buildPolestarCatalogMap (id -> PolestarCatalogEntry lookup),
+                                 resolvePolestarFilterKey/resolveEligiblePolestars (raw filter-key ->
+                                 catalog entry, unused by the table this phase — plumbing for the
+                                 next phase's Polestar picker), resolvePolestarSlot (chosen-id-or-null
+                                 -> catalog entry, never throws), buildRetrievableCrewRows (joins
+                                 config + crew catalog + owned crew + collections into
+                                 RetrievableCrewRow[]; `pickBestOwnedCopy` breaks ties on
+                                 multiple-owned-copies by rarity desc then level desc; a tracked
+                                 archetype missing from the catalog is skipped; `polestarIds` is
+                                 always normalized to exactly 4 slots regardless of the hand-edited
+                                 source array's actual length — a final-review fix, see "Retrievable
+                                 Crew page" below)
+    RetrievableCrewTable.tsx     #/Image/Stars/Name/Level/Items-to-equip/Total-collections/Polestar
+                                 #1-4 table (11 columns, no separate showCollectionsNames toggle
+                                 unlike CrewTable — Collection *names* were never requested for this
+                                 page, only the count); Stars/Level/Items-to-equip each render `—`
+                                 via strict `=== null` checks (not `??`) so a real `0` for
+                                 Items-to-equip is never mistaken for "not owned"; paginated (see
+                                 "Table pagination" below)
   pages/
     OverviewPage.tsx            "Player Info" table (Player ID, DBID) + four "Priorities" tables,
                                  in page order **DataScore → Original Algorithm → Beta Tachyon →
@@ -371,6 +418,9 @@ client/src/
                                        nav group (see "Two new crew pages" below)
     DilemmasPage.tsx                   one row per dilemma mission, static data — new last top-level
                                        drawer entry, after Collections (see "Dilemmas page" below)
+    RetrievableCrewPage.tsx            one row per curated retrievable crew, read-only this phase —
+                                       new last top-level drawer entry, after Dilemmas (see
+                                       "Retrievable Crew page" below)
 
 server/src/
   data/dilemmas.json, dilemmasTypes.ts, routes/dilemmas.ts   Static, git-tracked (not gitignored
@@ -396,6 +446,31 @@ server/src/
                                                           has no equivalent of (player.character.ships
                                                           is the player's own *owned* ships only) —
                                                           see "Dilemmas ship rewards" below
+  polestarCatalogClient.ts, polestarCatalogCache.ts, routes/polestarCatalog.ts   Polestar catalog
+                                                          proxy/cache/route, same mirror pattern as
+                                                          the ship catalog trio above — sourced from
+                                                          https://datacore.app/structured/
+                                                          keystones.json, filtered to `type ===
+                                                          'keystone'` entries only (278 of 1913 — the
+                                                          rest are multi-Polestar "constellation
+                                                          crate" bundles); strips a trailing `.png`
+                                                          from `icon.file` (unlike the ship catalog,
+                                                          Polestar icon paths already carry it, and
+                                                          the shared client-side `getAssetUrl()`
+                                                          always appends one) — see "Retrievable Crew
+                                                          page" below
+  retrievableCrewTypes.ts, retrievableCrewStore.ts, routes/retrievableCrew.ts   Small local,
+                                                          gitignored (`server/data/
+                                                          retrievable-crew.json`) hand-authored config
+                                                          — NOT a remote-fetch cache (no TTL, no
+                                                          upstream) and NOT committed like
+                                                          `dilemmas.json` either, since a future
+                                                          phase's edit UI writes to this same file
+                                                          directly. `writeRetrievableCrew()` exists
+                                                          unused — no route calls it yet, intentional
+                                                          forward-compat plumbing. GET-only route
+                                                          this phase — see "Retrievable Crew page"
+                                                          below
   index.ts, config.ts, errors.ts, cache.ts, sttClient.ts, routes/player.ts
   authClient.ts, sessionCache.ts   The real 6-hop STT login flow, and its
                                     persisted-session-cookie cache (see
@@ -418,7 +493,13 @@ server/src/
                                                           `uniquely_retrievable` — a same-session
                                                           follow-up commit fixed it; the
                                                           `gauntlet_rank` field landed with its guard
-                                                          update from the start)
+                                                          update from the start; `polestarFilterKeys`
+                                                          — see "Retrievable Crew page" below — missed
+                                                          it a SECOND time, caught this time by the
+                                                          final whole-branch review rather than a
+                                                          same-session follow-up, and live-confirmed
+                                                          against the main checkout's own still-fresh,
+                                                          old-shape cache post-merge)
   citationCrewCache.ts, citationCrewClient.ts   A SECOND, independent fetch/cache of
                                                   `crew.json`, deliberately separate from
                                                   `catalogCache.ts`/`CatalogEntry` — carries the much
@@ -4055,6 +4136,120 @@ same crew twice — neither seed dilemma does).
 `docs/superpowers/plans/2026-08-18-dilemmas-ship-rewards-plan.md`
 (ship rewards + ship catalog).
 
+## Retrievable Crew page
+
+A new top-level page (`/retrievable-crew`, last in the drawer) tracking a
+small, hand-curated list of crew eligible for Polestar retrieval, with the
+usual crew columns (`# / Image / Stars / Name / Level / Items to equip /
+Total collections`) plus four `Polestar #1`-`Polestar #4` columns (icon +
+short name, `—` for an empty slot). Read-only this phase — a future phase
+adds add/edit/remove UI against the same storage.
+
+**Two data-source gaps had to be resolved before any of this could
+render**, both found by direct investigation rather than assumption:
+
+- **No Polestar catalog existed anywhere in the app.**
+  `https://datacore.app/structured/keystones.json` (same host as the
+  crew/ship catalogs) turned out to be exactly that: 1913 entries, of
+  which only the 278 with `type: "keystone"` are individual Polestars
+  (the rest are multi-Polestar "constellation crate" bundles, not
+  needed). Each has `id`/`name`/`short_name`/`icon.file`/`rarity`/a
+  `filter` discriminant (`rarity`|`trait`|`skill` — 5/267/6 entries
+  respectively, matching the game's 5 crew rarities and 6 skills
+  exactly). One data-shape quirk: unlike ship catalog `icon.file` values,
+  Polestar ones already end in `.png`, so the mapping strips it before
+  storage (the shared `getAssetUrl()` helper always appends `.png`
+  itself). New server subsystem
+  (`polestarCatalogClient.ts`/`polestarCatalogCache.ts`/`routes/polestarCatalog.ts`)
+  mirrors the ship catalog file-for-file; client mirror is the same
+  4-file shape as `ShipCatalogContext`. Topbar's "Refresh catalogs"/"Refresh
+  all" now refresh crew, ship, *and* Polestar catalogs together.
+- **No per-crew "which Polestars can retrieve this crew" data existed
+  either** — but it turned out the crew catalog's own upstream
+  (`crew.json`) already carries it, in two fields `fetchCrewCatalog()`
+  had always discarded: `unique_polestar_combos` and
+  `unique_polestar_combos_later`. Flattening and unioning **both** (one
+  field alone is insufficient either direction — confirmed on real data:
+  the "later" field is missing skill keys the other has, and vice versa
+  for a trait key) gives the crew's exact eligible-Polestar pool, no
+  manual entry needed. Cross-checked against a hand-provided 12-item
+  list for the seed crew (Minooki Freeman) and got a 12/12 exact match.
+  `CatalogEntry` gained one additive field, `polestarFilterKeys:
+  string[]` (deduplicated, sorted raw filter keys), computed once in the
+  existing fetch mapping. Unrendered this phase — it's plumbing for the
+  next phase's "choose up to 4 from the eligible pool" UI, alongside two
+  unused-by-design client resolver functions
+  (`resolveEligiblePolestars`/`resolvePolestarFilterKey` in
+  `client/src/polestars/getters.ts`) that map a raw key back to its
+  catalog entry (`crew_max_rarity_N` → rarity Polestar, one of the 6
+  known `*_skill` keys → skill Polestar, else → trait Polestar).
+
+**Storage:** the curated list (`{archetypeId, polestars: (number|null)[4]}`
+per row, fixed Polestar #1-4 slot order) lives at
+`server/data/retrievable-crew.json` — gitignored local state, not a
+git-committed seed file like `dilemmas.json`, deliberately: the next
+phase's edit UI will write to this same file directly, so treating it as
+committed source would fight that model. `readRetrievableCrew()` returns
+`[]` if the file is absent; `writeRetrievableCrew()` exists unused this
+phase (no route calls it yet — intentional forward-compat plumbing for
+the write endpoint the next phase adds). `GET /api/retrievable-crew` is
+the only route this phase.
+
+**Page assembly** (`RetrievableCrewPage.tsx`) joins four sources — the
+config, the crew catalog (name/image/collections-matching, works even
+unowned), the player's own crew list (for Level/Items-to-equip/Stars —
+render `—` if the tracked crew isn't currently owned, using `=== null`
+checks throughout so a real `0` for Items-to-equip is never mistaken for
+"missing"), and the Polestar catalog (icon+name per chosen slot) — mirrors
+`DilemmasPage`'s multi-source-loading pattern, not the single-extra-flag
+`usePageData` pattern most crew-rarity pages use. If a tracked crew is
+owned in multiple copies, the most-invested one wins (rarity desc, then
+level desc) — this page shows exactly one row per tracked crew, unlike
+every other crew page which shows one row per owned copy.
+
+**Data-model discovery drove the design choice on how to store the
+eligible pool** — this is the same pattern as ship rewards (#61)
+discovering `ship_schematics.json` instead of resolving against owned
+ships: investigate the real upstream data before designing storage for
+something that might already exist there.
+
+**Eight-task plan, every task review clean on first pass** (the
+per-task-review pipeline caught nothing — all seven per-task diffs
+matched their briefs verbatim). **Final review (opus) found no Critical
+issues; two Important findings**, both genuinely cross-task and invisible
+to any single task's own diff: (1) `catalogCache.ts`'s stale-cache shape
+guard was never extended for the new `polestarFilterKeys` field — every
+prior `CatalogEntry` widening (`uniquely_retrievable`, `gauntlet_rank`)
+had extended this guard, this one didn't, and the main checkout's own
+still-fresh cache was confirmed to be in the old shape at review time;
+(2) the `polestars` array's documented "always exactly 4 slots" invariant
+was never enforced anywhere, so a malformed hand-edited
+`retrievable-crew.json` entry (wrong length, or the key omitted) could
+silently misalign the table's fixed 11-column layout or crash the page —
+fixed by normalizing to exactly 4 slots (`null`-padded/truncated) at the
+row-building boundary, the same "defensive at render boundary" convention
+`resolvePolestarSlot` already used. Both fixed in one round, scoped
+re-review clean. One Minor parked (a missing explanatory comment on the
+new route's stale-cache-fallback branch — present on the sibling
+`shipCatalog`/`catalog` routes, absent here because the plan's own brief
+text lacked it), one Minor explicitly declined (a two-loop union could
+collapse to one — the plan specified it verbatim, not worth the churn).
+
+Live cross-checks re-run independently by the controller at three points
+(after Task 2, after Task 8, and again post-merge against the main
+checkout) all matched: Minooki Freeman `archetype_id` 26275,
+`polestarFilterKeys` exactly the hand-provided 12-item list every time,
+Desperate/Explorer/Spiritual Polestar ids 14247/14276/14431 stable across
+all three checks. The post-merge check also live-confirmed finding (1)'s
+fix works for real: the main checkout's pre-existing cache was correctly
+rejected as stale-shape, forcing (and succeeding at, on retry past a
+transient sandbox network outage — recurred three separate times this
+session, always resolved within seconds to low tens of seconds) a live
+refetch that returned the new field.
+
+**Spec/plan:** `docs/superpowers/specs/2026-08-19-retrievable-crew-design.md`,
+`docs/superpowers/plans/2026-08-19-retrievable-crew.md`.
+
 ## Feature history (chronological)
 
 Each entry has a paired spec (`docs/superpowers/specs/`) and plan
@@ -6010,6 +6205,28 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
     reviewer's own recommendation), scoped re-review clean. Several Minor
     findings parked, none load-bearing.
 
+62. **Retrievable Crew page + Polestar catalog**
+    (`2026-08-19-retrievable-crew`) — new top-level page listing crew
+    eligible for Polestar retrieval plus their 4 chosen Polestars,
+    read-only this phase (editing comes next). Required a brand-new
+    server-side Polestar catalog
+    (`polestarCatalogClient.ts`/`polestarCatalogCache.ts`/`routes/polestarCatalog.ts`,
+    mirroring the crew/ship catalogs) sourced from
+    `https://datacore.app/structured/keystones.json`, plus one additive
+    `CatalogEntry` field (`polestarFilterKeys`) derived from two crew.json
+    fields the fetch had always discarded — cross-checked 12/12 exact
+    against a hand-provided list. Curated crew+Polestar selections live in
+    a new gitignored `server/data/retrievable-crew.json` (not a committed
+    seed file like `dilemmas.json` — the next phase's edit UI writes here
+    directly). Full write-up in "Retrievable Crew page" above.
+    Eight-task plan, every task review clean on first pass. **Final
+    review (opus) found no Critical issues; two Important findings**, both
+    cross-task (invisible to any single task's diff): the crew-catalog
+    cache's stale-shape guard wasn't extended for the new field (every
+    prior widening had extended it), and the `polestars` array's "always
+    4 slots" invariant was documented but never enforced against
+    hand-edited data. Both fixed in one round, scoped re-review clean.
+
 ## Current routes / nav (in order)
 
 | Nav label | Path | Filter |
@@ -6028,12 +6245,14 @@ Each entry has a paired spec (`docs/superpowers/specs/`) and plan
 | Ships → 4 Stars Ships | `/4-stars-ships` | ship rarity=4, not yet fully leveled |
 | Collections | `/collections` | one row per collection, reverse (collection→crew) view |
 | Dilemmas | `/dilemmas` | one row per dilemma mission, static hand-maintained data |
+| Retrievable Crew | `/retrievable-crew` | one row per curated crew, read-only this phase, `server/data/retrievable-crew.json` |
 
-Top-level drawer order: **Overview / Crew / Ships / Collections / Dilemmas**.
-"Crew" and "Ships" are both hover/focus flyout groups (see "The nav flyout"
-and "Crew nav group and schematics progress bar" above) — neither is itself
-a route. "Overview", "Collections", and "Dilemmas" are the only remaining
-flat, directly-clickable drawer entries.
+Top-level drawer order: **Overview / Crew / Ships / Collections / Dilemmas /
+Retrievable Crew**. "Crew" and "Ships" are both hover/focus flyout groups
+(see "The nav flyout" and "Crew nav group and schematics progress bar"
+above) — neither is itself a route. "Overview", "Collections", "Dilemmas",
+and "Retrievable Crew" are the only remaining flat, directly-clickable
+drawer entries.
 
 ## How this project is worked on (process notes for a future session)
 
