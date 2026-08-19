@@ -23,6 +23,21 @@ export function buildPolestarCatalogMap(catalog: PolestarCatalogEntry[]): Map<nu
   return new Map(catalog.map((p) => [p.id, p]));
 }
 
+// Polestar icon art is white/light on a transparent background (matches
+// the in-game style) — invisible against this app's light table
+// background without a colored badge behind it. Color follows the
+// Polestar's filter type, matching the in-game convention: rarity Polestars
+// red, trait Polestars purple, skill Polestars blue.
+const POLESTAR_TYPE_COLORS: Record<PolestarCatalogEntry['filter']['type'], string> = {
+  rarity: '#B71C1C',
+  trait: '#6A1B9A',
+  skill: '#1565C0',
+};
+
+export function getPolestarTypeColor(filterType: PolestarCatalogEntry['filter']['type']): string {
+  return POLESTAR_TYPE_COLORS[filterType];
+}
+
 const SKILL_FILTER_KEYS = new Set([
   'command_skill',
   'diplomacy_skill',

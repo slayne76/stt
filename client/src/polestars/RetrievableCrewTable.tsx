@@ -1,7 +1,7 @@
 import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import type { PolestarCatalogEntry } from '../types/polestarCatalogEntry';
 import type { RetrievableCrewRow } from './getters';
-import { resolvePolestarSlot } from './getters';
+import { resolvePolestarSlot, getPolestarTypeColor } from './getters';
 import { usePagination } from '../lib/usePagination';
 import StarRating from '../crew/StarRating';
 import Thumbnail from '../assets/Thumbnail';
@@ -29,7 +29,7 @@ function PolestarCell({
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 56 }}>
-      <Thumbnail asset={entry.icon} />
+      <Thumbnail asset={entry.icon} circleBackgroundColor={getPolestarTypeColor(entry.filter.type)} />
       <Typography variant="caption" align="center" sx={{ lineHeight: 1.1, mt: 0.25 }}>
         {entry.short_name}
       </Typography>
