@@ -209,7 +209,12 @@ client/src/
     getAssetUrl.ts              DatacoreAsset -> full image URL, agnostic over any {file} shape
     Thumbnail.tsx                40x40 image-or-placeholder renderer, shared by CrewTable/ShipsTable/
                                  QPsTable/MissingCrewTable; takes EITHER `asset` (a `DatacoreAsset`)
-                                 OR a raw `url` string directly (see "Missing 4 Stars tables")
+                                 OR a raw `url` string directly (see "Missing 4 Stars tables"); optional
+                                 `circleBackgroundColor?: string` (added for Polestar icons — see
+                                 "Retrievable Crew page" below) renders a colored circular badge with
+                                 the image inset instead of the default 40x40 square, for icon art
+                                 that's white/light on a transparent background — undefined leaves
+                                 every other consumer byte-identical
   crew/                         All crew-related pure logic + shared components
     getters.ts                 Data extraction + derived single-crew values; also
                                 getDuplicateCrewGroups (array-in, DuplicateCrewGroup[]-out —
@@ -4246,6 +4251,32 @@ rejected as stale-shape, forcing (and succeeding at, on retry past a
 transient sandbox network outage — recurred three separate times this
 session, always resolved within seconds to low tens of seconds) a live
 refetch that returned the new field.
+
+**Same-day bug report + fix: Polestar icons invisible (white-on-white).**
+The Polestar icon art is white/light line-art on a transparent PNG
+background (confirmed via alpha-channel inspection, `alpha extrema:
+(0, 255)`) — fine in-game against the real client's own colored badge
+art, but invisible against this table's plain white background. User
+supplied a real in-game reference screenshot; requested a colored
+circular badge behind each icon, colored by type (rarity red, trait
+purple, skill blue — the user's own simplification of the in-game
+scheme, which datacore's data only distinguishes at that 3-way
+granularity anyway; the real client's UI apparently colors a couple of
+individual *traits* differently, e.g. species traits black, which isn't
+information datacore exposes). `Thumbnail.tsx` gained an additive,
+opt-in `circleBackgroundColor?: string` prop (undefined = byte-identical
+behavior for every other consumer — crew portraits, ship icons, etc.);
+`RetrievableCrewTable.tsx`'s `PolestarCell` now passes it, driven by a
+new `getPolestarTypeColor(filterType)` in `polestars/getters.ts`
+(`#B71C1C`/`#6A1B9A`/`#1565C0`). One immediate same-day follow-up: the
+badge and its short-name caption were touching with no visual
+separation — fixed by switching the flex column's spacing from a
+Typography-side margin to a container `gap: '2px'`. Both fixes verified
+live (real screenshots, all three color variants spot-checked via a
+temporary swap of the seed row's Polestars, reverted before commit) and
+merged same-session, no formal spec/plan (a small, fully-specified
+bug-fix + polish pair, not new functionality). Commits `dc24d48`
+(colors) and `bcbf5bc` (spacing).
 
 **Spec/plan:** `docs/superpowers/specs/2026-08-19-retrievable-crew-design.md`,
 `docs/superpowers/plans/2026-08-19-retrievable-crew.md`.
