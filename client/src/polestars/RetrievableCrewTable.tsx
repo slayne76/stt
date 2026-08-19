@@ -1,4 +1,4 @@
-import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import { Checkbox, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import type { PolestarCatalogEntry } from '../types/polestarCatalogEntry';
 import type { RetrievableCrewRow } from './getters';
 import { resolvePolestarSlot } from './getters';
@@ -11,6 +11,8 @@ import TablePaginationFooter from '../components/TablePaginationFooter';
 export interface RetrievableCrewTableProps {
   rows: RetrievableCrewRow[];
   polestarCatalogMap: Map<number, PolestarCatalogEntry>;
+  selectedArchetypeId: number | null;
+  onSelect: (archetypeId: number | null) => void;
 }
 
 function EmDash() {
@@ -31,7 +33,7 @@ function PolestarCell({
   return <PolestarBadge entry={entry} selected />;
 }
 
-function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTableProps) {
+function RetrievableCrewTable({ rows, polestarCatalogMap, selectedArchetypeId, onSelect }: RetrievableCrewTableProps) {
   const { pageItems, page, pageSize, showPagination, handlePageChange, handlePageSizeChange } = usePagination(rows);
 
   return (
@@ -39,6 +41,7 @@ function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTable
       <Table>
         <TableHead>
           <TableRow>
+            <TableCell padding="checkbox" />
             <TableCell>#</TableCell>
             <TableCell>Image</TableCell>
             <TableCell>Stars</TableCell>
@@ -55,6 +58,13 @@ function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTable
         <TableBody>
           {pageItems.map((row, index) => (
             <TableRow key={row.archetypeId}>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  checked={row.archetypeId === selectedArchetypeId}
+                  onChange={() => onSelect(row.archetypeId === selectedArchetypeId ? null : row.archetypeId)}
+                  inputProps={{ 'aria-label': `Select ${row.name}` }}
+                />
+              </TableCell>
               <TableCell>{page * pageSize + index + 1}</TableCell>
               <TableCell>
                 <Thumbnail url={row.portraitUrl} />
@@ -81,7 +91,7 @@ function RetrievableCrewTable({ rows, polestarCatalogMap }: RetrievableCrewTable
           pageSize={pageSize}
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
-          colSpan={11}
+          colSpan={12}
         />
       </Table>
     </TableContainer>
