@@ -9,4 +9,5 @@ export interface CatalogEntry {
   traits_hidden: string[];
   uniquely_retrievable: boolean;
   gauntlet_rank: number;
+  polestarFilterKeys: string[];
 }
