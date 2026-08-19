@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { useCrewCatalog } from '../hooks/useCrewCatalog';
 import { useShipCatalog } from '../hooks/useShipCatalog';
+import { usePolestarCatalog } from '../hooks/usePolestarCatalog';
 import { refreshAssets } from '../api/assetsApi';
 import { NAV_ITEMS, isNavGroup } from '../routes';
 import NavGroupItem from './NavGroupItem';
@@ -26,6 +27,10 @@ function AppLayout() {
   const { refresh: refreshShipCatalog, loading: shipCatalogRefreshing, error: shipCatalogError } = useShipCatalog();
   const [shipCatalogErrorSnackbarOpen, setShipCatalogErrorSnackbarOpen] = useState(false);
 
+  const { refresh: refreshPolestarCatalog, loading: polestarCatalogRefreshing, error: polestarCatalogError } =
+    usePolestarCatalog();
+  const [polestarCatalogErrorSnackbarOpen, setPolestarCatalogErrorSnackbarOpen] = useState(false);
+
   useEffect(() => {
     if (catalogError) setCatalogErrorSnackbarOpen(true);
   }, [catalogError]);
@@ -33,6 +38,10 @@ function AppLayout() {
   useEffect(() => {
     if (shipCatalogError) setShipCatalogErrorSnackbarOpen(true);
   }, [shipCatalogError]);
+
+  useEffect(() => {
+    if (polestarCatalogError) setPolestarCatalogErrorSnackbarOpen(true);
+  }, [polestarCatalogError]);
 
   async function handleRefreshAssets() {
     setRefreshingAssets(true);
@@ -64,6 +73,8 @@ function AppLayout() {
             onRefreshCatalog={refreshCatalog}
             shipCatalogRefreshing={shipCatalogRefreshing}
             onRefreshShipCatalog={refreshShipCatalog}
+            polestarCatalogRefreshing={polestarCatalogRefreshing}
+            onRefreshPolestarCatalog={refreshPolestarCatalog}
           />
         </Toolbar>
       </AppBar>
@@ -127,6 +138,16 @@ function AppLayout() {
       >
         <Alert severity="error" onClose={() => setShipCatalogErrorSnackbarOpen(false)}>
           {shipCatalogError}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={polestarCatalogErrorSnackbarOpen && polestarCatalogError !== null}
+        autoHideDuration={6000}
+        onClose={() => setPolestarCatalogErrorSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="error" onClose={() => setPolestarCatalogErrorSnackbarOpen(false)}>
+          {polestarCatalogError}
         </Alert>
       </Snackbar>
     </Box>

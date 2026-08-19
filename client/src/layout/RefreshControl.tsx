@@ -12,6 +12,8 @@ interface RefreshControlProps {
   onRefreshCatalog: () => Promise<void>;
   shipCatalogRefreshing: boolean;
   onRefreshShipCatalog: () => Promise<void>;
+  polestarCatalogRefreshing: boolean;
+  onRefreshPolestarCatalog: () => Promise<void>;
 }
 
 const OPTIONS: { value: RefreshOption; label: string }[] = [
@@ -30,17 +32,19 @@ function RefreshControl({
   onRefreshCatalog,
   shipCatalogRefreshing,
   onRefreshShipCatalog,
+  polestarCatalogRefreshing,
+  onRefreshPolestarCatalog,
 }: RefreshControlProps) {
   const [selected, setSelected] = useState<RefreshOption>('player');
 
   const isRefreshing =
     selected === 'all'
-      ? playerLoading || assetsRefreshing || catalogRefreshing || shipCatalogRefreshing
+      ? playerLoading || assetsRefreshing || catalogRefreshing || shipCatalogRefreshing || polestarCatalogRefreshing
       : selected === 'player'
         ? playerLoading
         : selected === 'assets'
           ? assetsRefreshing
-          : catalogRefreshing || shipCatalogRefreshing;
+          : catalogRefreshing || shipCatalogRefreshing || polestarCatalogRefreshing;
 
   function handleChange(event: SelectChangeEvent<RefreshOption>) {
     setSelected(event.target.value as RefreshOption);
@@ -52,9 +56,15 @@ function RefreshControl({
     } else if (selected === 'assets') {
       await onRefreshAssets();
     } else if (selected === 'catalog') {
-      await Promise.allSettled([onRefreshCatalog(), onRefreshShipCatalog()]);
+      await Promise.allSettled([onRefreshCatalog(), onRefreshShipCatalog(), onRefreshPolestarCatalog()]);
     } else {
-      await Promise.allSettled([onRefreshPlayer(), onRefreshAssets(), onRefreshCatalog(), onRefreshShipCatalog()]);
+      await Promise.allSettled([
+        onRefreshPlayer(),
+        onRefreshAssets(),
+        onRefreshCatalog(),
+        onRefreshShipCatalog(),
+        onRefreshPolestarCatalog(),
+      ]);
     }
   }
 
