@@ -23,6 +23,24 @@ export function buildPolestarCatalogMap(catalog: PolestarCatalogEntry[]): Map<nu
   return new Map(catalog.map((p) => [p.id, p]));
 }
 
+// Autocomplete SUGGESTION pool for the Add/Edit dialog: catalog crew with at
+// least 1 eligible Polestar (so the picker below a suggestion is never
+// empty/a dead end), excluding crew already tracked by ANOTHER row (the row
+// currently being edited, if any, stays suggestable — excludeArchetypeId).
+// NOT used for resolving/validating whatever the user actually typed — see
+// RetrievableCrewFormDialog's separate, broader `eligiblePool`, which
+// deliberately includes already-tracked crew so a genuine duplicate can
+// still be resolved and reported with its own specific error message.
+export function getEligibleRetrievableCandidates(
+  catalog: CatalogEntry[],
+  trackedArchetypeIds: Set<number>,
+  excludeArchetypeId: number | null
+): CatalogEntry[] {
+  return catalog.filter(
+    (c) => c.polestarFilterKeys.length > 0 && (!trackedArchetypeIds.has(c.archetype_id) || c.archetype_id === excludeArchetypeId)
+  );
+}
+
 // Polestar icon art is white/light on a transparent background (matches
 // the in-game style) — invisible against this app's light table
 // background without a colored badge behind it. Color follows the

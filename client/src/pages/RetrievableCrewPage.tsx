@@ -10,8 +10,11 @@ import { buildRetrievableCrewRows, buildPolestarCatalogMap } from '../polestars/
 import type { RetrievableCrewEntry } from '../types/retrievableCrew';
 import RetrievableCrewTable from '../polestars/RetrievableCrewTable';
 import RetrievableCrewActions from '../polestars/RetrievableCrewActions';
+import RetrievableCrewFormDialog from '../polestars/RetrievableCrewFormDialog';
 import DeleteConfirmDialog from '../polestars/DeleteConfirmDialog';
 import PageShell from '../layout/PageShell';
+
+type DialogMode = 'add' | 'edit' | null;
 
 function RetrievableCrewPage() {
   const { data: playerData, loading: playerLoading } = usePlayerData();
@@ -22,10 +25,14 @@ function RetrievableCrewPage() {
     loading: retrievableCrewLoading,
     error,
     refresh,
+    addEntry,
+    updateEntry,
     deleteEntry,
   } = useRetrievableCrew();
 
   const [selectedArchetypeId, setSelectedArchetypeId] = useState<number | null>(null);
+  const [dialogMode, setDialogMode] = useState<DialogMode>(null);
+  const [formInitialEntry, setFormInitialEntry] = useState<RetrievableCrewEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RetrievableCrewEntry | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [snackbar, setSnackbar] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
@@ -37,15 +44,48 @@ function RetrievableCrewPage() {
   const collections = playerData ? getCollectionsList(playerData) : [];
   const rows = loaded ? buildRetrievableCrewRows(retrievableCrew, catalog ?? [], crewList, collections) : [];
   const polestarCatalogMap = buildPolestarCatalogMap(polestarCatalog ?? []);
+  const trackedArchetypeIds = new Set((retrievableCrew ?? []).map((e) => e.archetypeId));
 
   function crewLabel(archetypeId: number): string {
     return catalog?.find((c) => c.archetype_id === archetypeId)?.name ?? `archetype ${archetypeId}`;
   }
 
-  // Real Add/Edit dialog wiring lands in the next task (RetrievableCrewFormDialog).
-  // This task's scope is selection + the Delete flow only.
-  function handleAddClick() {}
-  function handleEditClick() {}
+  function handleAddClick() {
+    setFormInitialEntry(null);
+    setDialogMode('add');
+  }
+
+  function handleEditClick() {
+    const entry = retrievableCrew?.find((e) => e.archetypeId === selectedArchetypeId) ?? null;
+    if (!entry) return;
+    setFormInitialEntry(entry);
+    setDialogMode('edit');
+  }
+
+  function handleDialogClose() {
+    setDialogMode(null);
+    setFormInitialEntry(null);
+  }
+
+  async function handleFormSubmit(entry: RetrievableCrewEntry) {
+    const label = crewLabel(entry.archetypeId);
+    try {
+      if (dialogMode === 'edit' && formInitialEntry) {
+        await updateEntry(formInitialEntry.archetypeId, entry);
+        setSnackbar({ severity: 'success', message: `Updated ${label}.` });
+      } else {
+        await addEntry(entry);
+        setSnackbar({ severity: 'success', message: `Added ${label}.` });
+      }
+      setSelectedArchetypeId(null);
+    } catch (err) {
+      setSnackbar({
+        severity: 'error',
+        message: err instanceof Error ? err.message : 'Failed to save retrievable crew',
+      });
+      throw err;
+    }
+  }
 
   function handleDeleteClick() {
     const entry = retrievableCrew?.find((e) => e.archetypeId === selectedArchetypeId) ?? null;
@@ -95,6 +135,16 @@ function RetrievableCrewPage() {
           onSelect={setSelectedArchetypeId}
         />
       </PageShell>
+      <RetrievableCrewFormDialog
+        open={dialogMode !== null}
+        mode={dialogMode ?? 'add'}
+        initialEntry={formInitialEntry}
+        catalog={catalog ?? []}
+        polestarCatalog={polestarCatalog ?? []}
+        trackedArchetypeIds={trackedArchetypeIds}
+        onClose={handleDialogClose}
+        onSubmit={handleFormSubmit}
+      />
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         crewName={deleteTarget ? crewLabel(deleteTarget.archetypeId) : ''}
