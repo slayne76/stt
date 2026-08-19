@@ -4278,6 +4278,23 @@ merged same-session, no formal spec/plan (a small, fully-specified
 bug-fix + polish pair, not new functionality). Commits `dc24d48`
 (colors) and `bcbf5bc` (spacing).
 
+**Same-day follow-up: Polestar column centering.** User asked for the
+Polestar #1-4 column content centered; both header cells and body cells
+gained `align="center"`, and `PolestarCell`'s inner wrapper (a
+fixed-width-56px flex block — `text-align` alone doesn't center a
+block-level box with its own explicit width) also gained `mx: 'auto'`.
+**One real verification miss along the way:** the controller measured
+the live DOM in its own worktree instance (bounding-box math confirmed
+box and caption genuinely centered under the matching header) and
+declared it fixed, but the user's own screenshot — taken against their
+own already-running main-checkout client — still showed the pre-fix,
+left-biased layout, because the fix was still sitting unmerged on the
+worktree branch at that point. Not a code defect; a
+verification-scope gap (verified the code was correct, but not that the
+user was looking at that same code) — resolved by merging immediately
+so the user's own instance picked it up, which they then independently
+confirmed themselves. Commit `e0ad25a`.
+
 **Spec/plan:** `docs/superpowers/specs/2026-08-19-retrievable-crew-design.md`,
 `docs/superpowers/plans/2026-08-19-retrievable-crew.md`.
 
