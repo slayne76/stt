@@ -99,13 +99,17 @@ function RetrievableCrewFormDialog({
   // Changing to a genuinely different crew than the one the dialog started
   // with invalidates the old Polestar selections (a different crew's
   // eligible pool almost certainly doesn't overlap) — reset rather than try
-  // to partially preserve them.
+  // to partially preserve them. We deliberately do NOT null resolvedArchetypeId
+  // when resolvedCrew is transiently null (e.g. mid-edit while the typed name
+  // doesn't currently match any crew): doing so would make retyping the exact
+  // original name look like "a genuinely different crew" and wipe selections
+  // that were never actually invalidated. Keeping the last-resolved id means a
+  // real change to a different crew still resets correctly, while a transient
+  // invalid state followed by restoring the original name does not.
   useEffect(() => {
     if (resolvedCrew && resolvedCrew.archetype_id !== resolvedArchetypeId) {
       setSelectedPolestarIds([]);
       setResolvedArchetypeId(resolvedCrew.archetype_id);
-    } else if (!resolvedCrew) {
-      setResolvedArchetypeId(null);
     }
   }, [resolvedCrew, resolvedArchetypeId]);
 

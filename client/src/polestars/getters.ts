@@ -70,9 +70,9 @@ const RARITY_KEY_PATTERN = /^crew_max_rarity_(\d)$/;
 // Resolves one raw polestarFilterKey (from CatalogEntry.polestarFilterKeys)
 // to its catalog entry: a "crew_max_rarity_N" key is a rarity Polestar, one
 // of the 6 known "*_skill" keys is a skill Polestar, anything else is a
-// trait Polestar. Unused by RetrievableCrewTable this phase (the table only
-// renders the 4 chosen slots) — this is plumbing for the next phase's
-// "choose up to 4 from the eligible pool" picker.
+// trait Polestar. Used by RetrievableCrewFormDialog's "choose up to 4 from
+// the eligible pool" Polestar picker (RetrievableCrewTable itself only
+// renders the 4 chosen slots and doesn't need this resolution).
 export function resolvePolestarFilterKey(
   key: string,
   polestarCatalog: PolestarCatalogEntry[]
@@ -88,7 +88,7 @@ export function resolvePolestarFilterKey(
   return polestarCatalog.find((p) => p.filter.type === 'trait' && p.filter.trait === key) ?? null;
 }
 
-// Same "unused this phase, plumbing for the next" note as above.
+// Used by RetrievableCrewFormDialog's Polestar picker (see resolvePolestarFilterKey above).
 export function resolveEligiblePolestars(
   filterKeys: string[],
   polestarCatalog: PolestarCatalogEntry[]
