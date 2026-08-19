@@ -111,7 +111,10 @@ export function buildRetrievableCrewRows(
       level: owned?.level ?? null,
       itemsToEquip: owned ? getEquipmentSlotsRemaining(owned) : null,
       totalCollections: getCrewCollections(catalogEntry, collections).length,
-      polestarIds: entry.polestars,
+      // Normalize to exactly 4 slots — retrievable-crew.json is hand-edited with no schema
+      // validation this phase, and a malformed/missing/wrong-length polestars array must not
+      // crash the table or misalign its fixed 11-column header.
+      polestarIds: Array.from({ length: 4 }, (_, i) => entry.polestars?.[i] ?? null),
     });
   }
   return rows;
