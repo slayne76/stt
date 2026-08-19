@@ -13,6 +13,7 @@ export interface CatalogEntry {
   traits_hidden: string[];
   uniquely_retrievable: boolean;
   gauntlet_rank: number;
+  polestarFilterKeys: string[];
 }
 
 interface RawCatalogEntry {
@@ -25,7 +26,26 @@ interface RawCatalogEntry {
   traits_hidden?: string[];
   ranks?: { scores?: { overall?: number }; gauntletRank?: number };
   unique_polestar_combos?: string[][];
+  unique_polestar_combos_later?: string[][];
   [key: string]: unknown;
+}
+
+// The eligible-Polestar pool for a crew, as raw filter keys (e.g.
+// "crew_max_rarity_5", "communicator", "command_skill") — datacore splits
+// this across two fields that must BOTH be unioned; neither is sufficient
+// alone (confirmed on real data: unique_polestar_combos alone is missing
+// "human"-type trait keys that only appear in unique_polestar_combos_later,
+// and vice versa for some skill keys). Deduplicated and sorted for a
+// deterministic response.
+function flattenPolestarFilterKeys(e: RawCatalogEntry): string[] {
+  const keys = new Set<string>();
+  for (const combo of e.unique_polestar_combos ?? []) {
+    for (const key of combo) keys.add(key);
+  }
+  for (const combo of e.unique_polestar_combos_later ?? []) {
+    for (const key of combo) keys.add(key);
+  }
+  return [...keys].sort();
 }
 
 export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
@@ -56,5 +76,6 @@ export async function fetchCrewCatalog(): Promise<CatalogEntry[]> {
     // best) — a 0 fallback would make a missing/malformed rank look better
     // than #1. Fail safe: sink it to the bottom instead.
     gauntlet_rank: e.ranks?.gauntletRank ?? Number.MAX_SAFE_INTEGER,
+    polestarFilterKeys: flattenPolestarFilterKeys(e),
   }));
 }
